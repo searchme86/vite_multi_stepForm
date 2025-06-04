@@ -1,0 +1,38 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# 환경 설정 파일
+.env
+.env.*
+
+# 빌드 출력물
+dist/
+build/
+coverage/
+out/
+
+# IDE 및 에디터 관련
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# macOS 시스템 파일
+.DS_Store
+
+# 로그 파일
+*.log
+
+# OS별 임시파일
+Thumbs.db
+desktop.ini
+
+# 기타
+*.local
+.npmrc
