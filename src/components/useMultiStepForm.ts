@@ -1,6 +1,6 @@
 import React from 'react';
 
-//====여기부터 수정됨====
+//====핵심 수정====
 // ✅ 추가: Context 관련 타입 및 인터페이스 정의
 // 이유: 타입 안전성 확보 및 컴포넌트 간 일관성 유지
 interface ToastOptions {
@@ -10,7 +10,7 @@ interface ToastOptions {
   hideCloseButton?: boolean;
 }
 
-// Form Values 타입 정의 (MultiStepForm에서 import하여 사용)
+// ✅ 수정: Form Values 타입 정의 - 실시간 동기화를 위한 안전한 타입 정의
 export interface FormValues {
   userImage?: string;
   nickname: string;
@@ -23,7 +23,7 @@ export interface FormValues {
   content: string;
   media?: string[];
   mainImage?: string | null;
-  sliderImages?: string[];
+  sliderImages?: string[]; // ✅ 핵심: 슬라이더 이미지 배열 타입
 }
 
 // ✅ 수정: 이미지 뷰 설정 타입 정의 (간소화된 버전으로 업데이트)
@@ -51,11 +51,11 @@ export interface CustomGalleryView {
   title?: string; // 갤러리 제목 (선택사항)
 }
 
-// ✅ 수정: MultiStepForm Context 타입 정의 (CustomGalleryView 기능 추가)
+// ✅ 수정: MultiStepForm Context 타입 정의 - 강화된 타입 안전성
 export interface MultiStepFormContextType {
   // 기존 기능들
   addToast: (options: ToastOptions) => void;
-  formValues: FormValues;
+  formValues: FormValues; // ✅ 핵심: 실시간 form 값들
 
   // PreviewPanel 제어를 위한 속성들
   isPreviewPanelOpen: boolean;
@@ -232,4 +232,87 @@ export const convertImageViewConfigToCustomGalleryView = (
     title
   );
 };
-//====여기까지 수정됨====
+
+//====핵심 추가====
+// ✅ 새로 추가: FormValues 유효성 검사 함수
+// 이유: 실시간 동기화 과정에서 데이터 무결성 보장
+export const validateFormValues = (values: Partial<FormValues>): FormValues => {
+  return {
+    userImage: typeof values.userImage === 'string' ? values.userImage : '',
+    nickname: typeof values.nickname === 'string' ? values.nickname : '',
+    emailPrefix:
+      typeof values.emailPrefix === 'string' ? values.emailPrefix : '',
+    emailDomain:
+      typeof values.emailDomain === 'string' ? values.emailDomain : '',
+    bio: typeof values.bio === 'string' ? values.bio : '',
+    title: typeof values.title === 'string' ? values.title : '',
+    description:
+      typeof values.description === 'string' ? values.description : '',
+    tags: typeof values.tags === 'string' ? values.tags : '',
+    content: typeof values.content === 'string' ? values.content : '',
+    media: Array.isArray(values.media) ? values.media : [],
+    mainImage: values.mainImage || null,
+    sliderImages: Array.isArray(values.sliderImages) ? values.sliderImages : [],
+  };
+};
+
+// ✅ 새로 추가: 슬라이더 이미지 관련 유틸리티 함수들
+// 이유: BlogMediaStep과 PreviewPanel 간의 일관된 슬라이더 관리
+
+/**
+ * 슬라이더 이미지 배열이 유효한지 검사하는 함수
+ * @param sliderImages - 검사할 슬라이더 이미지 배열
+ * @returns 유효성 검사 결과 (boolean)
+ */
+export const validateSliderImages = (
+  sliderImages: any
+): sliderImages is string[] => {
+  return (
+    Array.isArray(sliderImages) &&
+    sliderImages.every((img) => typeof img === 'string' && img.length > 0)
+  );
+};
+
+/**
+ * 중복된 슬라이더 이미지를 제거하는 함수
+ * @param sliderImages - 정리할 슬라이더 이미지 배열
+ * @returns 중복이 제거된 슬라이더 이미지 배열
+ */
+export const deduplicateSliderImages = (sliderImages: string[]): string[] => {
+  return [...new Set(sliderImages)];
+};
+
+/**
+ * 슬라이더 이미지 순서를 변경하는 함수
+ * @param sliderImages - 현재 슬라이더 이미지 배열
+ * @param fromIndex - 이동할 이미지의 현재 인덱스
+ * @param toIndex - 이동할 목표 인덱스
+ * @returns 순서가 변경된 슬라이더 이미지 배열
+ */
+export const reorderSliderImages = (
+  sliderImages: string[],
+  fromIndex: number,
+  toIndex: number
+): string[] => {
+  const result = [...sliderImages];
+  const [removed] = result.splice(fromIndex, 1);
+  result.splice(toIndex, 0, removed);
+  return result;
+};
+
+/**
+ * 슬라이더 이미지 상태 정보를 생성하는 함수
+ * @param sliderImages - 슬라이더 이미지 배열
+ * @returns 슬라이더 상태 정보 객체
+ */
+export const getSliderImageInfo = (sliderImages: string[]) => {
+  return {
+    count: sliderImages.length,
+    isEmpty: sliderImages.length === 0,
+    hasImages: sliderImages.length > 0,
+    isMultiple: sliderImages.length > 1,
+    firstImage: sliderImages[0] || null,
+    lastImage: sliderImages[sliderImages.length - 1] || null,
+  };
+};
+//====핵심 추가 끝====
