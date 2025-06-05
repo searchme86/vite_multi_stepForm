@@ -320,26 +320,26 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
   return (
     <>
-      <div className="relative p-4 mb-6 rounded-lg bg-default-50">
+      {/* ✅ 수정: 모바일에서만 표시되는 버튼 - bottom-sheet 스타일로 변경 */}
+      <button
+        type="button"
+        className={`absolute top-0 right-0 bg-primary text-white px-4 py-2 rounded-full shadow-lg transition-all hover:bg-primary-600 active:scale-95 flex items-center gap-2 ${
+          isMobile ? 'block' : 'hidden'
+        }`}
+        onClick={togglePreviewPanel}
+        aria-label="미리보기 패널 토글"
+      >
+        <Icon icon="lucide:eye" />
+        <span className="text-sm font-medium">미리보기</span>
+      </button>
+
+      <div className="relative p-4 mb-6 mt-[46px] rounded-lg bg-default-50">
         <h3 className="mb-2 text-lg font-medium">블로그 미디어 입력 안내</h3>
         <p className="text-default-600">
           블로그에 첨부할 이미지를 업로드해주세요. 파일을 드래그하여
           업로드하거나 파일 선택 버튼을 클릭하여 업로드할 수 있습니다. 지원
           형식: JPG, PNG, SVG (최대 10MB).
         </p>
-
-        {/* ✅ 수정: 모바일에서만 표시되는 버튼 - bottom-sheet 스타일로 변경 */}
-        <button
-          type="button"
-          className={`absolute bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-full shadow-lg transition-all hover:bg-primary-600 active:scale-95 flex items-center gap-2 ${
-            isMobile ? 'block' : 'hidden'
-          }`}
-          onClick={togglePreviewPanel}
-          aria-label="미리보기 패널 토글"
-        >
-          <Icon icon="lucide:eye" />
-          <span className="text-sm font-medium">미리보기</span>
-        </button>
       </div>
 
       {/* 미디어 업로드 섹션 */}
