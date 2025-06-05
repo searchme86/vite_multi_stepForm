@@ -44,12 +44,17 @@ import DynamicImageLayout from './DynamicImageLayout';
 import { useMultiStepForm } from './useMultiStepForm';
 
 function PreviewPanel(): ReactNode {
+  //====여기부터 수정됨====
+  // ✅ 수정: customGalleryViews 추가 - 누락된 Context 값 가져오기
+  // 이유: CustomImageGallery에서 사용할 customGalleryViews가 Context에서 제대로 가져와지지 않았음
   const {
     formValues,
     isPreviewPanelOpen,
     setIsPreviewPanelOpen,
     imageViewConfig, // ✅ 사용자 정의 이미지 뷰 설정
+    customGalleryViews, // ✅ 추가: 사용자가 생성한 갤러리 뷰들
   } = useMultiStepForm();
+  //====여기까지 수정됨====
 
   // ✅ 추가: 모바일 사이즈 감지
   const [isMobile, setIsMobile] = useState(false);
@@ -587,47 +592,72 @@ function PreviewPanel(): ReactNode {
     ]
   );
 
-  // ✅ 핵심 기능: 간소화된 사용자 정의 이미지 갤러리 컴포넌트
+  //====여기부터 수정됨====
+  // ✅ 수정: 사용자 정의 이미지 갤러리 컴포넌트 - 훅 사용 제거 및 props 방식으로 변경
+  // 이유: useCallback 내부에서 다른 훅을 호출하는 것은 React Hook 규칙 위반
   const CustomImageGallery = useCallback(() => {
-    // imageViewConfig가 없거나 선택된 이미지가 없으면 렌더링하지 않음
-    if (
-      !imageViewConfig ||
-      !imageViewConfig.selectedImages ||
-      imageViewConfig.selectedImages.length === 0
-    ) {
+    // ✅ 수정: useMultiStepForm() 호출 제거하고 상위에서 전달받은 customGalleryViews 사용
+    // 이유: useCallback 내부에서는 다른 훅을 호출할 수 없음 (Hook 규칙 위반)
+
+    // 안전한 기본값 제공
+    const safeCustomGalleryViews = Array.isArray(customGalleryViews)
+      ? customGalleryViews
+      : [];
+
+    // 추가된 갤러리 뷰들이 없으면 렌더링하지 않음
+    if (safeCustomGalleryViews.length === 0) {
       return null;
     }
 
     return (
-      <div className="my-8 not-prose">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <Icon icon="lucide:layout-grid" className="text-primary" />
-            사용자 정의 갤러리
-          </h3>
-          <div className="flex items-center gap-2">
-            <Chip size="sm" color="primary" variant="flat">
-              {imageViewConfig.selectedImages.length}개 이미지
-            </Chip>
-            <Chip size="sm" color="secondary" variant="flat">
-              {imageViewConfig.layout.columns}열 그리드
-            </Chip>
+      <div className="my-8 not-prose space-y-8">
+        {safeCustomGalleryViews.map((galleryView, galleryIndex) => (
+          <div key={galleryView.id || galleryIndex}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Icon icon="lucide:layout-grid" className="text-primary" />
+                사용자 정의 갤러리 {galleryIndex + 1}
+              </h3>
+              <div className="flex items-center gap-2">
+                <Chip size="sm" color="primary" variant="flat">
+                  {galleryView.selectedImages?.length || 0}개 이미지
+                </Chip>
+                <Chip size="sm" color="secondary" variant="flat">
+                  {galleryView.layout?.columns || 3}열 그리드
+                </Chip>
+                <Chip size="sm" color="warning" variant="flat">
+                  {galleryView.layout?.gridType === 'masonry'
+                    ? '매스너리'
+                    : '균등 그리드'}
+                </Chip>
+              </div>
+            </div>
+
+            {/* ✅ DynamicImageLayout 컴포넌트 사용 - 안전한 config 전달 */}
+            <DynamicImageLayout
+              config={{
+                selectedImages: galleryView.selectedImages || [],
+                clickOrder: galleryView.clickOrder || [],
+                layout: galleryView.layout || { columns: 3, gridType: 'grid' },
+                filter: 'available',
+              }}
+              showNumbers={false}
+              className="bg-default-50 p-4 rounded-lg border border-default-200"
+            />
+
+            <div className="mt-3 text-sm text-default-500 text-center">
+              {galleryView.createdAt
+                ? `${new Date(
+                    galleryView.createdAt
+                  ).toLocaleString()}에 추가된 갤러리`
+                : '이미지 뷰 빌더에서 추가한 갤러리입니다'}
+            </div>
           </div>
-        </div>
-
-        {/* ✅ 간소화된 DynamicImageLayout 컴포넌트 사용 */}
-        <DynamicImageLayout
-          config={imageViewConfig}
-          showNumbers={false}
-          className="bg-default-50 p-4 rounded-lg border border-default-200"
-        />
-
-        <div className="mt-3 text-sm text-default-500 text-center">
-          이미지 뷰 빌더에서 선택한 이미지들이 여기에 표시됩니다
-        </div>
+        ))}
       </div>
     );
-  }, [imageViewConfig]);
+  }, [customGalleryViews]); // ✅ 수정: customGalleryViews를 의존성 배열에 추가
+  //====여기까지 수정됨====
 
   // 모바일 전용 컨텐츠 컴포넌트
   const MobileContent = useCallback(() => {
@@ -1078,15 +1108,14 @@ function PreviewPanel(): ReactNode {
           )}
 
           {/* ✅ 핵심: 이미지 뷰 빌더 상태 표시 */}
-          {imageViewConfig && imageViewConfig.selectedImages.length > 0 && (
+          {customGalleryViews && customGalleryViews.length > 0 && (
             <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-success-50 border-success-200">
               <Icon
                 icon="lucide:check-circle"
                 className="flex-shrink-0 text-success"
               />
               <p className="text-xs text-success-700">
-                사용자 정의 갤러리에 {imageViewConfig.selectedImages.length}개
-                이미지가 {imageViewConfig.layout.columns}열 그리드로 표시됩니다.
+                사용자 정의 갤러리 {customGalleryViews.length}개가 표시됩니다.
               </p>
             </div>
           )}

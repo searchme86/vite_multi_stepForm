@@ -27,7 +27,12 @@ function ImageViewBuilder({
   mainImage,
   sliderImages,
 }: ImageViewBuilderProps) {
-  const { imageViewConfig, setImageViewConfig, addToast } = useMultiStepForm();
+  const {
+    imageViewConfig,
+    setImageViewConfig,
+    addToast,
+    addCustomGalleryView,
+  } = useMultiStepForm();
 
   // ✅ 안전한 기본값 설정
   const safeImageViewConfig = useMemo(() => {
@@ -37,19 +42,19 @@ function ImageViewBuilder({
         clickOrder: [],
         layout: {
           columns: 3,
-          gridType: 'grid', // ✅ 추가: 그리드 타입
+          gridType: 'grid',
         },
         filter: 'available',
       }
     );
   }, [imageViewConfig]);
 
-  // ✅ 새로 추가: 레이아웃 타입 상태
+  // ✅ 레이아웃 타입 상태
   const [view, setView] = useState<'grid' | 'masonry'>('grid');
   const [sortBy, setSortBy] = useState<'index' | 'name' | 'size'>('index');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // ✅ 매스너리를 위한 아이템 크기 정의 (GalleryView에서 가져옴)
+  // ✅ 매스너리를 위한 아이템 크기 정의
   const itemSizes = [
     { colSpan: 1, rowSpan: 1 }, // Small square
     { colSpan: 1, rowSpan: 2 }, // Tall
@@ -57,9 +62,8 @@ function ImageViewBuilder({
     { colSpan: 2, rowSpan: 2 }, // Large square
   ];
 
-  // ✅ 인덱스 기반 크기 할당 알고리즘 (GalleryView에서 가져옴)
+  // ✅ 인덱스 기반 크기 할당 알고리즘
   const getItemSize = useCallback((index: number) => {
-    // Create a predictable pattern based on file index
     if (index % 6 === 0) return itemSizes[3]; // Large square
     if (index % 5 === 0) return itemSizes[2]; // Wide
     if (index % 3 === 0) return itemSizes[1]; // Tall
@@ -89,7 +93,7 @@ function ImageViewBuilder({
     return Math.abs(hash % 5000000) + 500000;
   }, []);
 
-  // ✅ 필터링 및 정렬된 이미지 목록
+  // ✅ 수정: 사용 중인 이미지는 아예 제외하고 필터링
   const filteredAndSortedImages = useMemo(() => {
     const safeMediaFiles = Array.isArray(mediaFiles) ? mediaFiles : [];
 
@@ -100,7 +104,7 @@ function ImageViewBuilder({
       size: getFileSize(img),
     }));
 
-    // 사용 가능한 이미지만 필터링
+    // ✅ 핵심 수정: 메인 이미지나 슬라이더 이미지는 아예 보이지 않도록 완전 제외
     images = images.filter(
       (img) =>
         (!mainImage || mainImage !== img.url) &&
@@ -139,24 +143,6 @@ function ImageViewBuilder({
   // ✅ 핵심 기능: 이미지 클릭 핸들러
   const handleImageClick = useCallback(
     (imageUrl: string) => {
-      if (mainImage === imageUrl) {
-        addToast({
-          title: '선택 불가',
-          description: '이미 메인 이미지로 사용된 이미지입니다.',
-          color: 'warning',
-        });
-        return;
-      }
-
-      if (Array.isArray(sliderImages) && sliderImages.includes(imageUrl)) {
-        addToast({
-          title: '선택 불가',
-          description: '이미 슬라이더로 사용된 이미지입니다.',
-          color: 'warning',
-        });
-        return;
-      }
-
       if (!setImageViewConfig) return;
 
       setImageViewConfig((prev) => {
@@ -199,7 +185,7 @@ function ImageViewBuilder({
         }
       });
     },
-    [mainImage, sliderImages, setImageViewConfig, addToast]
+    [setImageViewConfig]
   );
 
   // ✅ 선택 초기화
@@ -219,7 +205,7 @@ function ImageViewBuilder({
     });
   }, [setImageViewConfig, addToast]);
 
-  // ✅ 열 개수 업데이트
+  // ✅ 수정: 열 개수 업데이트 (실제 그리드에 반영되도록)
   const updateColumns = useCallback(
     (columns: number) => {
       if (!setImageViewConfig) return;
@@ -236,22 +222,6 @@ function ImageViewBuilder({
       });
     },
     [setImageViewConfig, safeImageViewConfig]
-  );
-
-  // 이미지 사용 상태 확인
-  const getImageStatus = useCallback(
-    (imageUrl: string) => {
-      if (mainImage === imageUrl)
-        return { type: 'main', label: '메인 이미지', color: 'danger' as const };
-      if (Array.isArray(sliderImages) && sliderImages.includes(imageUrl))
-        return {
-          type: 'slider',
-          label: '슬라이더',
-          color: 'secondary' as const,
-        };
-      return null;
-    },
-    [mainImage, sliderImages]
   );
 
   // 선택된 이미지의 순서 번호 가져오기
@@ -271,6 +241,54 @@ function ImageViewBuilder({
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }, []);
+
+  // ✅ 새로 추가: "해당 뷰로 추가" 기능
+  const handleAddToPreview = useCallback(() => {
+    if (safeImageViewConfig.selectedImages.length === 0) {
+      addToast({
+        title: '이미지를 선택해주세요',
+        description: '미리보기에 추가할 이미지를 먼저 선택해주세요.',
+        color: 'warning',
+      });
+      return;
+    }
+
+    // 현재 설정을 PreviewPanel에 추가
+    const galleryConfig = {
+      id: Date.now().toString(),
+      selectedImages: [...safeImageViewConfig.selectedImages],
+      clickOrder: [...safeImageViewConfig.clickOrder],
+      layout: {
+        columns: safeImageViewConfig.layout.columns,
+        gridType: view, // 현재 선택된 뷰 타입
+      },
+      createdAt: new Date(),
+    };
+
+    // useMultiStepForm의 addCustomGalleryView 함수 호출
+    if (addCustomGalleryView) {
+      addCustomGalleryView(galleryConfig);
+    }
+
+    addToast({
+      title: '갤러리 뷰 추가 완료',
+      description: `${
+        safeImageViewConfig.selectedImages.length
+      }개 이미지로 구성된 ${
+        view === 'grid' ? '균등 그리드' : '매스너리'
+      } 갤러리가 미리보기에 추가되었습니다.`,
+      color: 'success',
+    });
+
+    // 선택 초기화
+    resetSelection();
+  }, [
+    safeImageViewConfig,
+    view,
+    addCustomGalleryView,
+    addToast,
+    resetSelection,
+  ]);
 
   // 애니메이션 variants
   const container = {
@@ -298,23 +316,39 @@ function ImageViewBuilder({
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="flex items-center gap-2">
               {safeImageViewConfig.selectedImages.length > 0 && (
-                <Button
-                  color="warning"
-                  size="sm"
-                  variant="flat"
-                  startContent={
-                    <Icon icon="lucide:refresh-cw" className="text-sm" />
-                  }
-                  onPress={resetSelection}
-                  type="button"
-                >
-                  선택 초기화
-                </Button>
+                <>
+                  <Button
+                    color="warning"
+                    size="sm"
+                    variant="flat"
+                    startContent={
+                      <Icon icon="lucide:refresh-cw" className="text-sm" />
+                    }
+                    onPress={resetSelection}
+                    type="button"
+                  >
+                    선택 초기화
+                  </Button>
+
+                  {/* ✅ 새로 추가: "해당 뷰로 추가" 버튼 */}
+                  <Button
+                    color="primary"
+                    size="sm"
+                    variant="solid"
+                    startContent={
+                      <Icon icon="lucide:plus-circle" className="text-sm" />
+                    }
+                    onPress={handleAddToPreview}
+                    type="button"
+                  >
+                    해당 뷰로 추가
+                  </Button>
+                </>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              {/* ✅ 새로 추가: 레이아웃 타입 전환 (ButtonGroup) */}
+              {/* ✅ 레이아웃 타입 전환 (ButtonGroup) */}
               <ButtonGroup>
                 <Button
                   size="sm"
@@ -400,7 +434,7 @@ function ImageViewBuilder({
                 </DropdownMenu>
               </Dropdown>
 
-              {/* 열 개수 선택 */}
+              {/* ✅ 수정: 열 개수 선택 (실제 작동하도록) */}
               <Dropdown>
                 <DropdownTrigger>
                   <Button
@@ -435,6 +469,9 @@ function ImageViewBuilder({
             <Chip size="sm" variant="flat" color="secondary">
               {view === 'grid' ? '균등 그리드' : '매스너리 레이아웃'}
             </Chip>
+            <Chip size="sm" variant="flat" color="primary">
+              {safeImageViewConfig.layout.columns}열
+            </Chip>
           </div>
         </div>
 
@@ -444,7 +481,7 @@ function ImageViewBuilder({
             className="grid gap-4"
             style={{
               gridTemplateColumns: `repeat(${safeImageViewConfig.layout.columns}, 1fr)`,
-              gridAutoRows: '120px', // ✅ 매스너리를 위한 기본 행 높이
+              gridAutoRows: '120px',
             }}
             variants={container}
             initial="hidden"
@@ -452,27 +489,25 @@ function ImageViewBuilder({
           >
             <AnimatePresence>
               {filteredAndSortedImages.map((image, index) => {
-                const imageStatus = getImageStatus(image.url);
                 const orderNumber = getImageOrder(image.url);
                 const isSelected = safeImageViewConfig.selectedImages.includes(
                   image.url
                 );
-                const isDisabled = !!imageStatus;
 
-                // ✅ 핵심: 조건부 크기 적용 (매스너리 vs 일반 그리드)
+                // ✅ 조건부 크기 적용 (매스너리 vs 일반 그리드)
                 const { colSpan, rowSpan } =
                   view === 'masonry'
-                    ? getItemSize(index) // 매스너리: 다양한 크기
-                    : { colSpan: 1, rowSpan: 1 }; // 일반 그리드: 모두 동일 크기
+                    ? getItemSize(index)
+                    : { colSpan: 1, rowSpan: 1 };
 
                 return (
                   <motion.div
                     key={image.url}
                     layout
                     variants={item}
-                    className={`relative group cursor-pointer transition-all duration-200 ${
-                      isDisabled ? 'opacity-60' : 'hover:scale-105'
-                    } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                    className={`relative group cursor-pointer transition-all duration-200 hover:scale-105 ${
+                      isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
+                    }`}
                     style={{
                       gridColumn: `span ${
                         colSpan > safeImageViewConfig.layout.columns
@@ -488,9 +523,7 @@ function ImageViewBuilder({
                         src={image.url}
                         alt={image.name}
                         className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
-                        onClick={() =>
-                          !isDisabled && handleImageClick(image.url)
-                        }
+                        onClick={() => handleImageClick(image.url)}
                       />
 
                       {/* ✅ 선택 순서 번호 (이미지 중앙에 표시) */}
@@ -502,19 +535,7 @@ function ImageViewBuilder({
                         </div>
                       )}
 
-                      {/* 사용 상태 표시 (상단) */}
-                      {imageStatus && (
-                        <div className="absolute top-2 left-2 right-2">
-                          <Badge
-                            content={imageStatus.label}
-                            color={imageStatus.color}
-                          >
-                            <div className="w-full h-6" />
-                          </Badge>
-                        </div>
-                      )}
-
-                      {/* 파일 정보 (하단) */}
+                      {/* ✅ 수정: + 버튼 제거, 파일 정보만 유지 (하단) */}
                       <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-white translate-y-full group-hover:translate-y-0 transition-transform duration-300">
                         <p className="text-xs font-medium truncate">
                           {image.name}
@@ -524,19 +545,7 @@ function ImageViewBuilder({
                         </p>
                       </div>
 
-                      {/* 선택 가능 상태 오버레이 */}
-                      {!isDisabled && !isSelected && (
-                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                            <Icon
-                              icon="lucide:plus"
-                              className="text-white text-2xl"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 선택됨 오버레이 */}
+                      {/* ✅ 선택됨 오버레이 */}
                       {isSelected && (
                         <div className="absolute inset-0 bg-primary bg-opacity-20"></div>
                       )}
@@ -592,12 +601,11 @@ function ImageViewBuilder({
                     safeImageViewConfig.layout.columns,
                     safeImageViewConfig.selectedImages.length
                   )}, 1fr)`,
-                  gridAutoRows: '120px', // 미리보기에서도 매스너리 적용
+                  gridAutoRows: '120px',
                 }}
               >
                 <AnimatePresence>
                   {safeImageViewConfig.selectedImages.map((imageUrl, index) => {
-                    // ✅ 미리보기에서도 매스너리 적용
                     const { colSpan, rowSpan } =
                       view === 'masonry'
                         ? getItemSize(index)
@@ -645,7 +653,7 @@ function ImageViewBuilder({
               </div>
 
               <p className="text-xs text-default-500 mt-3 text-center">
-                이 레이아웃이 미리보기에 적용됩니다 (
+                이 레이아웃이 미리보기에 추가됩니다 (
                 {view === 'grid' ? '균등 그리드' : '매스너리 레이아웃'})
               </p>
             </CardBody>

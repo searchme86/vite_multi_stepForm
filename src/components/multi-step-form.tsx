@@ -11,7 +11,13 @@ import BlogContentStep from './blog-content-step';
 import BlogMediaStep from './blog-media-step';
 import PreviewPanel from './preview-panel';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MultiStepFormContext } from './useMultiStepForm';
+import {
+  MultiStepFormContext,
+  FormValues,
+  ImageViewConfig,
+  CustomGalleryView,
+  createDefaultImageViewConfig,
+} from './useMultiStepForm';
 
 // Form validation schema
 const formSchema = z.object({
@@ -39,7 +45,7 @@ const formSchema = z.object({
   sliderImages: z.array(z.string()).optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type FormSchemaValues = z.infer<typeof formSchema>;
 
 interface ToastOptions {
   title: string;
@@ -53,28 +59,96 @@ function MultiStepForm(): React.ReactNode {
   const [showPreview, setShowPreview] = React.useState(false);
   const [progressWidth, setProgressWidth] = React.useState(0);
 
-  // ✅ 추가: PreviewPanel 상태 관리
+  //====여기부터 수정됨====
+  // ✅ 수정: PreviewPanel 상태 관리
+  // 이유: Context에서 정의한 타입에 맞게 상태 관리
   const [isPreviewPanelOpen, setIsPreviewPanelOpen] = React.useState(false);
 
-  // ✅ 추가: 토글 함수
-  const togglePreviewPanel = React.useCallback(() => {
-    setIsPreviewPanelOpen((prev) => !prev);
-  }, []);
+  // ✅ 추가: ImageViewConfig 상태 관리
+  // 이유: Context에서 정의한 이미지 뷰 설정 기능을 구현하기 위함
+  const [imageViewConfig, setImageViewConfig] = React.useState<ImageViewConfig>(
+    createDefaultImageViewConfig() // Context에서 제공하는 기본값 생성 함수 사용
+  );
+
+  // ✅ 추가: CustomGalleryView 상태 관리
+  // 이유: 사용자가 생성한 갤러리 뷰들을 저장하고 관리하기 위함
+  const [customGalleryViews, setCustomGalleryViews] = React.useState<
+    CustomGalleryView[]
+  >([]);
 
   // ✅ 추가: 모바일 사이즈 감지
+  // 이유: 반응형 UI 처리를 위해 화면 크기를 감지
   const [isMobile, setIsMobile] = React.useState(false);
 
+  // ✅ 수정: 모바일 감지 useEffect
+  // 이유: 창 크기 변경 시 실시간으로 모바일 여부를 감지하여 UI 적응
   React.useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 판단
     };
 
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    checkMobile(); // 초기 실행
+    window.addEventListener('resize', checkMobile); // 리사이즈 이벤트 리스너 등록
+    return () => window.removeEventListener('resize', checkMobile); // 클린업 함수
   }, []);
 
-  const methods = useForm<FormValues>({
+  // ✅ 수정: PreviewPanel 토글 함수
+  // 이유: Context에서 정의한 함수 시그니처에 맞게 구현
+  const togglePreviewPanel = React.useCallback(() => {
+    setIsPreviewPanelOpen((prev) => !prev); // 이전 상태의 반대값으로 설정
+  }, []);
+
+  // ✅ 추가: CustomGalleryView 추가 함수
+  // 이유: Context에서 정의한 addCustomGalleryView 함수 구현
+  const addCustomGalleryView = React.useCallback((view: CustomGalleryView) => {
+    setCustomGalleryViews((prev) => {
+      // 중복 ID 체크
+      const existingIndex = prev.findIndex(
+        (existing) => existing.id === view.id
+      );
+      if (existingIndex !== -1) {
+        // 동일한 ID가 있으면 업데이트
+        const updated = [...prev];
+        updated[existingIndex] = view;
+        return updated;
+      }
+      // 새로운 갤러리 뷰 추가 (최신순으로 정렬)
+      return [view, ...prev];
+    });
+  }, []);
+
+  // ✅ 추가: CustomGalleryView 제거 함수
+  // 이유: Context에서 정의한 removeCustomGalleryView 함수 구현
+  const removeCustomGalleryView = React.useCallback((id: string) => {
+    setCustomGalleryViews(
+      (prev) => prev.filter((view) => view.id !== id) // 해당 ID가 아닌 것들만 필터링
+    );
+  }, []);
+
+  // ✅ 추가: 모든 CustomGalleryView 제거 함수
+  // 이유: Context에서 정의한 clearCustomGalleryViews 함수 구현
+  const clearCustomGalleryViews = React.useCallback(() => {
+    setCustomGalleryViews([]); // 빈 배열로 초기화
+  }, []);
+
+  // ✅ 추가: CustomGalleryView 업데이트 함수
+  // 이유: Context에서 정의한 updateCustomGalleryView 함수 구현
+  const updateCustomGalleryView = React.useCallback(
+    (id: string, updates: Partial<CustomGalleryView>) => {
+      setCustomGalleryViews((prev) =>
+        prev.map(
+          (view) =>
+            view.id === id
+              ? { ...view, ...updates } // 해당 ID의 갤러리 뷰를 업데이트
+              : view // 다른 갤러리 뷰는 그대로 유지
+        )
+      );
+    },
+    []
+  );
+  //====여기까지 수정됨====
+
+  const methods = useForm<FormSchemaValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       userImage: '',
@@ -100,9 +174,12 @@ function MultiStepForm(): React.ReactNode {
     watch,
   } = methods;
 
+  //====여기부터 수정됨====
+  // ✅ 수정: formValues를 Context의 FormValues 타입에 맞게 변환
+  // 이유: Context에서 정의한 FormValues 인터페이스와 일치시키기 위함
   const formValues = React.useMemo(() => {
     const values = watch();
-    // 안전한 기본값 제공
+    // 안전한 기본값 제공 및 타입 변환
     return {
       userImage: values.userImage || '',
       nickname: values.nickname || '',
@@ -118,8 +195,9 @@ function MultiStepForm(): React.ReactNode {
       sliderImages: Array.isArray(values.sliderImages)
         ? values.sliderImages
         : [],
-    } as FormValues;
-  }, [watch()]);
+    } as FormValues; // Context에서 정의한 FormValues 타입으로 캐스팅
+  }, [watch]);
+  //====여기까지 수정됨====
 
   const addToast = React.useCallback((options: ToastOptions) => {
     // HeroUI의 toast 시스템이 없다면 console.log로 대체
@@ -154,20 +232,49 @@ function MultiStepForm(): React.ReactNode {
     }
   }, []);
 
-  // ✅ 수정: Context value에 PreviewPanel 상태 및 모바일 감지 추가
+  //====여기부터 수정됨====
+  // ✅ 수정: Context value에 모든 정의된 함수와 상태 추가
+  // 이유: Context에서 정의한 모든 기능을 Provider에서 제공하기 위함
   const contextValue = React.useMemo(
     () => ({
+      // 기존 기능들
       addToast,
       formValues,
-      // PreviewPanel 관련 추가
+
+      // PreviewPanel 관련 기능
       isPreviewPanelOpen,
       setIsPreviewPanelOpen,
       togglePreviewPanel,
-      // 모바일 상태 추가
-      isMobile,
+
+      // ImageViewConfig 관련 기능 (새로 추가)
+      // 이유: ImageViewBuilder 컴포넌트에서 사용할 이미지 뷰 설정 관리
+      imageViewConfig,
+      setImageViewConfig,
+
+      // CustomGalleryView 관련 기능들 (새로 추가)
+      // 이유: 사용자가 생성한 갤러리 뷰들을 관리하고 PreviewPanel에서 표시하기 위함
+      customGalleryViews,
+      addCustomGalleryView,
+      removeCustomGalleryView,
+      clearCustomGalleryViews,
+      updateCustomGalleryView,
     }),
-    [addToast, formValues, isPreviewPanelOpen, togglePreviewPanel, isMobile]
+    [
+      addToast,
+      formValues,
+      isPreviewPanelOpen,
+      setIsPreviewPanelOpen,
+      togglePreviewPanel,
+      imageViewConfig,
+      setImageViewConfig,
+      customGalleryViews,
+      addCustomGalleryView,
+      removeCustomGalleryView,
+      clearCustomGalleryViews,
+      updateCustomGalleryView,
+    ]
   );
+  //====여기까지 수정됨====
 
   React.useEffect(() => {
     // Calculate progress based on current step
@@ -186,7 +293,7 @@ function MultiStepForm(): React.ReactNode {
   }, []);
 
   const validateCurrentStep = React.useCallback(async () => {
-    let fieldsToValidate: (keyof FormValues)[] = [];
+    let fieldsToValidate: (keyof FormSchemaValues)[] = [];
 
     switch (currentStep) {
       case 1:
@@ -207,7 +314,9 @@ function MultiStepForm(): React.ReactNode {
 
     if (!isValid) {
       const errorMessages = Object.entries(errors)
-        .filter(([key]) => fieldsToValidate.includes(key as keyof FormValues))
+        .filter(([key]) =>
+          fieldsToValidate.includes(key as keyof FormSchemaValues)
+        )
         .map(([_, value]) => value.message);
 
       if (errorMessages.length > 0) {
@@ -249,7 +358,7 @@ function MultiStepForm(): React.ReactNode {
   );
 
   const onSubmit = React.useCallback(
-    (data: FormValues) => {
+    (data: FormSchemaValues) => {
       console.log('Form submitted:', data);
       addToast({
         title: '폼 제출 성공',
@@ -276,7 +385,7 @@ function MultiStepForm(): React.ReactNode {
   }, [currentStep]);
 
   return (
-    // ✅ Context Provider로 감싸기
+    // ✅ Context Provider로 감싸기 - 모든 기능이 구현된 contextValue 제공
     <MultiStepFormContext.Provider value={contextValue}>
       <div className="p-2 mx-auto max-w-7xl sm:p-4 md:p-8">
         <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
