@@ -22,6 +22,11 @@ import {
   ModalBody,
   ModalFooter,
   useDisclosure,
+  Checkbox,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { useFormContext } from 'react-hook-form';
@@ -37,12 +42,17 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
   // ✅ 추가: 모바일 사이즈 감지
   const [isMobile, setIsMobile] = useState(false);
 
-  // ✅ 수정: 더보기 기능을 위한 상태 (점진적 로딩)
+  // ✅ 수정: 더보기 기능을 위한 상태 (점진적 로딩 + 토글)
   const INITIAL_VISIBLE_FILES = 5; // 처음에 보여줄 파일 개수
   const LOAD_MORE_COUNT = 3; // 더보기 클릭시 추가로 보여줄 파일 개수
   const [visibleFilesCount, setVisibleFilesCount] = useState(
     INITIAL_VISIBLE_FILES
   );
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // ✅ 추가: 체크박스 선택 관리
+  const [selectedFiles, setSelectedFiles] = useState<number[]>([]);
+  const [sortBy, setSortBy] = useState<'index' | 'name' | 'size'>('index');
 
   // ✅ 추가: 이미지 모달을 위한 상태
   const {
@@ -98,7 +108,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
   const [uploadStatus, setUploadStatus] = useState<
     Record<string, 'uploading' | 'success' | 'error'>
   >({});
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   const [sliderImages, setSliderImages] = useState<string[]>([]);
   const [localMediaFiles, setLocalMediaFiles] = useState<string[]>([]);
 
@@ -129,22 +139,147 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     );
   }, []);
 
-  // ✅ 수정: 표시할 파일 목록 계산 (점진적 로딩)
-  const displayFiles = useMemo(() => {
-    return mediaFiles.slice(0, visibleFilesCount);
-  }, [mediaFiles, visibleFilesCount]);
+  // ✅ 수정: 정렬된 파일 목록
+  const sortedMediaFiles = useMemo(() => {
+    const filesWithIndex = mediaFiles.map((file, index) => ({
+      file,
+      index,
+      name: selectedFileNames[index] || `이미지 ${index + 1}`,
+      size: 1024 * 1024 * (Math.random() * 5 + 1), // 임시 파일 사이즈
+    }));
 
-  // ✅ 수정: 더보기 버튼 관련 계산
-  const remainingFiles = mediaFiles.length - visibleFilesCount;
+    return filesWithIndex.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'size':
+          return b.size - a.size;
+        case 'index':
+        default:
+          return a.index - b.index;
+      }
+    });
+  }, [mediaFiles, selectedFileNames, sortBy]);
+
+  // ✅ 수정: 표시할 파일 목록 계산 (정렬 적용)
+  const displayFiles = useMemo(() => {
+    return sortedMediaFiles.slice(0, visibleFilesCount);
+  }, [sortedMediaFiles, visibleFilesCount]);
+
+  // ✅ 수정: 더보기/접기 버튼 관련 계산
+  const remainingFiles = sortedMediaFiles.length - visibleFilesCount;
   const hasMoreFiles = remainingFiles > 0;
   const showMoreCount = Math.min(LOAD_MORE_COUNT, remainingFiles);
+  const canExpand = sortedMediaFiles.length > INITIAL_VISIBLE_FILES;
 
-  // ✅ 수정: 더보기 버튼 클릭 함수
-  const handleLoadMore = useCallback(() => {
-    setVisibleFilesCount((prev) =>
-      Math.min(prev + LOAD_MORE_COUNT, mediaFiles.length)
-    );
-  }, [mediaFiles.length, LOAD_MORE_COUNT]);
+  // ✅ 수정: 더보기/접기 버튼 클릭 함수
+  const handleLoadMoreToggle = useCallback(() => {
+    if (isExpanded) {
+      // 접기
+      setVisibleFilesCount(INITIAL_VISIBLE_FILES);
+      setIsExpanded(false);
+    } else if (hasMoreFiles) {
+      // 더보기
+      const newCount = Math.min(
+        visibleFilesCount + LOAD_MORE_COUNT,
+        sortedMediaFiles.length
+      );
+      setVisibleFilesCount(newCount);
+      if (newCount >= sortedMediaFiles.length) {
+        setIsExpanded(true);
+      }
+    }
+  }, [
+    isExpanded,
+    hasMoreFiles,
+    visibleFilesCount,
+    sortedMediaFiles.length,
+    LOAD_MORE_COUNT,
+    INITIAL_VISIBLE_FILES,
+  ]);
+
+  // ✅ 추가: 체크박스 관련 함수들
+  const handleSelectFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => {
+      if (prev.includes(index)) {
+        return prev.filter((i) => i !== index);
+      } else {
+        return [...prev, index];
+      }
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedFiles.length === displayFiles.length) {
+      setSelectedFiles([]);
+    } else {
+      setSelectedFiles(displayFiles.map((item) => item.index));
+    }
+  }, [selectedFiles.length, displayFiles]);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedFiles.length === 0) return;
+
+    // 인덱스를 역순으로 정렬하여 삭제 (배열 인덱스 변경 방지)
+    const sortedIndices = [...selectedFiles].sort((a, b) => b - a);
+
+    setLocalMediaFiles((prev) => {
+      let newFiles = [...prev];
+      let removedMainImage = false;
+
+      sortedIndices.forEach((index) => {
+        // 메인 이미지 체크
+        if (mainImage === newFiles[index]) {
+          removedMainImage = true;
+        }
+        newFiles.splice(index, 1);
+      });
+
+      setTimeout(() => {
+        setMediaValue(newFiles);
+        // ✅ 메인 이미지가 삭제된 경우 초기화
+        if (removedMainImage) {
+          setMainImageValue('');
+        }
+      }, 0);
+
+      return newFiles;
+    });
+
+    setSelectedFileNames((prev) => {
+      let newNames = [...prev];
+      sortedIndices.forEach((index) => {
+        newNames.splice(index, 1);
+      });
+      return newNames;
+    });
+
+    // 선택 상태 초기화
+    setSelectedFiles([]);
+
+    // 파일 개수가 줄어들면 visibleFilesCount 조정
+    const newLength = mediaFiles.length - selectedFiles.length;
+    if (visibleFilesCount > newLength) {
+      setVisibleFilesCount(Math.max(INITIAL_VISIBLE_FILES, newLength));
+      setIsExpanded(newLength <= INITIAL_VISIBLE_FILES ? false : isExpanded);
+    }
+
+    addToast({
+      title: '파일 삭제 완료',
+      description: `${selectedFiles.length}개의 파일이 삭제되었습니다.`,
+      color: 'success',
+    });
+  }, [
+    selectedFiles,
+    mediaFiles,
+    mainImage,
+    visibleFilesCount,
+    isExpanded,
+    INITIAL_VISIBLE_FILES,
+    setMediaValue,
+    setMainImageValue,
+    addToast,
+  ]);
 
   // ✅ 추가: 이미지 모달 열기 함수
   const openImageModal = useCallback(
@@ -250,7 +385,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                 return newFiles;
               });
 
-              setSelectedFiles((prev) => [...prev, fileName]);
+              setSelectedFileNames((prev) => [...prev, fileName]);
               setUploadStatus((prev) => ({ ...prev, [fileName]: 'success' }));
               setUploading((prev) => {
                 const newState = { ...prev };
@@ -297,18 +432,24 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
   const removeMedia = useCallback(
     (index: number) => {
+      const fileToRemove = mediaFiles[index];
+
       setLocalMediaFiles((prev) => {
         const newFiles = [...prev];
         newFiles.splice(index, 1);
 
         setTimeout(() => {
           setMediaValue(newFiles);
+          // ✅ 메인 이미지가 삭제된 경우 초기화
+          if (mainImage === fileToRemove) {
+            setMainImageValue('');
+          }
         }, 0);
 
         return newFiles;
       });
 
-      setSelectedFiles((prev) => {
+      setSelectedFileNames((prev) => {
         const newFiles = [...prev];
         newFiles.splice(index, 1);
         return newFiles;
@@ -321,7 +462,14 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         );
       }
     },
-    [setMediaValue, visibleFilesCount, mediaFiles.length, INITIAL_VISIBLE_FILES]
+    [
+      setMediaValue,
+      setMainImageValue,
+      mainImage,
+      mediaFiles,
+      visibleFilesCount,
+      INITIAL_VISIBLE_FILES,
+    ]
   );
 
   const setAsMainImage = useCallback(
@@ -512,7 +660,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         </div>
       </AccordionField>
 
-      {/* ✅ 수정: 통합된 이미지 테이블 섹션 - 반응형 및 개선사항 적용 */}
+      {/* ✅ 수정: 통합된 이미지 테이블 섹션 - 체크박스 및 정렬 기능 추가 */}
       <AccordionField
         title="업로드된 이미지"
         description={
@@ -524,6 +672,60 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
       >
         {mediaFiles.length > 0 ? (
           <div className="space-y-4">
+            {/* ✅ 추가: 테이블 상단 컨트롤 */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div className="flex items-center gap-2">
+                {selectedFiles.length > 0 && (
+                  <Button
+                    color="danger"
+                    size="sm"
+                    variant="flat"
+                    startContent={
+                      <Icon icon="lucide:trash-2" className="text-sm" />
+                    }
+                    onPress={handleDeleteSelected}
+                  >
+                    {selectedFiles.length}개 삭제
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Dropdown>
+                  <DropdownTrigger>
+                    <Button
+                      variant="flat"
+                      size="sm"
+                      startContent={
+                        <Icon icon="lucide:arrow-down-up" className="text-sm" />
+                      }
+                    >
+                      정렬:{' '}
+                      {sortBy === 'index'
+                        ? '순서'
+                        : sortBy === 'name'
+                        ? '이름'
+                        : '크기'}
+                    </Button>
+                  </DropdownTrigger>
+                  <DropdownMenu aria-label="정렬 옵션">
+                    <DropdownItem
+                      key="index"
+                      onPress={() => setSortBy('index')}
+                    >
+                      순서
+                    </DropdownItem>
+                    <DropdownItem key="name" onPress={() => setSortBy('name')}>
+                      이름
+                    </DropdownItem>
+                    <DropdownItem key="size" onPress={() => setSortBy('size')}>
+                      크기
+                    </DropdownItem>
+                  </DropdownMenu>
+                </Dropdown>
+              </div>
+            </div>
+
             {/* ✅ 반응형 파일 테이블 */}
             <div className="overflow-hidden">
               {/* 데스크톱 테이블 뷰 */}
@@ -537,6 +739,19 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                   }}
                 >
                   <TableHeader>
+                    <TableColumn scope="col" className="w-10">
+                      <Checkbox
+                        isSelected={
+                          selectedFiles.length === displayFiles.length &&
+                          displayFiles.length > 0
+                        }
+                        isIndeterminate={
+                          selectedFiles.length > 0 &&
+                          selectedFiles.length < displayFiles.length
+                        }
+                        onValueChange={handleSelectAll}
+                      />
+                    </TableColumn>
                     <TableColumn scope="col">파일</TableColumn>
                     <TableColumn scope="col">진행률</TableColumn>
                     <TableColumn scope="col">크기</TableColumn>
@@ -545,13 +760,11 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                     </TableColumn>
                   </TableHeader>
                   <TableBody>
-                    {displayFiles.map((file, index) => {
-                      const fileName =
-                        selectedFiles[index] || `이미지 ${index + 1}`;
-                      const fileSize = 1024 * 1024 * (Math.random() * 5 + 1); // 임시 파일 사이즈
+                    {displayFiles.map((fileItem) => {
+                      const { file, index, name, size } = fileItem;
                       const uploadProgress = Object.values(uploading)[0] || 100;
                       const isUploaded =
-                        uploadStatus[fileName] === 'success' ||
+                        uploadStatus[name] === 'success' ||
                         uploadProgress === 100;
                       const isMain = isMainImage(file);
 
@@ -563,13 +776,23 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                           }`}
                         >
                           <TableCell>
+                            <Checkbox
+                              isSelected={selectedFiles.includes(index)}
+                              onValueChange={() => handleSelectFile(index)}
+                            />
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="relative w-18 h-18 group cursor-pointer">
+                                {/* ✅ 추가: 이미지 순서 번호 */}
+                                <div className="absolute -top-2 -left-2 bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10 shadow-lg">
+                                  {index + 1}
+                                </div>
                                 <img
                                   src={file}
                                   alt={`업로드 이미지 ${index + 1}`}
                                   className="object-cover w-full h-full rounded-md"
-                                  onClick={() => openImageModal(file, fileName)}
+                                  onClick={() => openImageModal(file, name)}
                                 />
                                 {/* 호버 효과 유지 */}
                                 <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
@@ -591,9 +814,9 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                               <div className="min-w-0 flex-1">
                                 <span
                                   className="text-sm font-medium block max-w-[100px] truncate"
-                                  title={fileName}
+                                  title={name}
                                 >
-                                  {fileName}
+                                  {name}
                                 </span>
                               </div>
                             </div>
@@ -625,7 +848,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-default-500">
-                              {formatFileSize(fileSize)}
+                              {formatFileSize(size)}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -679,7 +902,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                                 variant="light"
                                 color="danger"
                                 onPress={() => removeMedia(index)}
-                                aria-label={`파일 ${fileName} 삭제`}
+                                aria-label={`파일 ${name} 삭제`}
                                 title={tooltipTexts.delete}
                               >
                                 <Icon
@@ -698,14 +921,11 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
               {/* ✅ 모바일 카드 뷰 */}
               <div className="md:hidden space-y-3">
-                {displayFiles.map((file, index) => {
-                  const fileName =
-                    selectedFiles[index] || `이미지 ${index + 1}`;
-                  const fileSize = 1024 * 1024 * (Math.random() * 5 + 1);
+                {displayFiles.map((fileItem) => {
+                  const { file, index, name, size } = fileItem;
                   const uploadProgress = Object.values(uploading)[0] || 100;
                   const isUploaded =
-                    uploadStatus[fileName] === 'success' ||
-                    uploadProgress === 100;
+                    uploadStatus[name] === 'success' || uploadProgress === 100;
                   const isMain = isMainImage(file);
 
                   return (
@@ -717,12 +937,22 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                     >
                       <CardBody className="p-4">
                         <div className="flex items-center gap-3">
+                          <Checkbox
+                            isSelected={selectedFiles.includes(index)}
+                            onValueChange={() => handleSelectFile(index)}
+                            className="flex-shrink-0"
+                          />
+
                           <div className="relative w-18 h-18 group cursor-pointer flex-shrink-0">
+                            {/* ✅ 추가: 이미지 순서 번호 */}
+                            <div className="absolute -top-2 -left-2 bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10 shadow-lg">
+                              {index + 1}
+                            </div>
                             <img
                               src={file}
                               alt={`업로드 이미지 ${index + 1}`}
                               className="object-cover w-full h-full rounded-md"
-                              onClick={() => openImageModal(file, fileName)}
+                              onClick={() => openImageModal(file, name)}
                             />
                             <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
                               <Icon
@@ -741,12 +971,12 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                             <div className="flex justify-between items-start mb-2">
                               <span
                                 className="text-sm font-medium block max-w-[120px] truncate"
-                                title={fileName}
+                                title={name}
                               >
-                                {fileName}
+                                {name}
                               </span>
                               <span className="text-xs text-default-500">
-                                {formatFileSize(fileSize)}
+                                {formatFileSize(size)}
                               </span>
                             </div>
 
@@ -832,21 +1062,35 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
               </div>
             </div>
 
-            {/* ✅ 수정: 점진적 더보기 버튼 */}
-            {hasMoreFiles && (
+            {/* ✅ 수정: 더보기/접기 토글 버튼 */}
+            {canExpand && (
               <div className="text-center pt-2">
                 <Button
                   variant="flat"
                   color="primary"
                   size="sm"
-                  onPress={handleLoadMore}
+                  onPress={handleLoadMoreToggle}
                   className="transition-all hover:bg-primary-50 relative"
                 >
                   <span className="flex items-center gap-2">
-                    더보기
-                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-primary-600 bg-primary-100 rounded-full">
-                      {showMoreCount}
-                    </span>
+                    {isExpanded ? (
+                      <>
+                        접기
+                        <Icon icon="lucide:chevron-up" className="text-sm" />
+                      </>
+                    ) : hasMoreFiles ? (
+                      <>
+                        더보기
+                        <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-primary-600 bg-primary-100 rounded-full">
+                          {showMoreCount}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        접기
+                        <Icon icon="lucide:chevron-up" className="text-sm" />
+                      </>
+                    )}
                   </span>
                 </Button>
               </div>
