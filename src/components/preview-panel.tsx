@@ -798,7 +798,7 @@ function PreviewPanel(): React.ReactNode {
         {/* 모바일 영역 (md 이하에서만 표시) */}
         <div className="md:hidden">
           {/* 기존 HTML 구조를 위한 단순 768px 뷰 (탭 기능 없음) */}
-          <div className="w-[768px] mx-auto">
+          <div className="w-[100%] mx-auto">
             {/* 모바일 커버 이미지 */}
             <div className="relative">
               <img
