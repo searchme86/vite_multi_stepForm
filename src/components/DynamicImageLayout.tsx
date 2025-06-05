@@ -5,8 +5,6 @@ interface ImageViewConfig {
   clickOrder: number[];
   layout: {
     columns: number;
-    spacing: 'small' | 'medium' | 'large';
-    gridType?: 'grid' | 'masonry' | 'list';
   };
   filter: string;
 }
@@ -22,20 +20,6 @@ function DynamicImageLayout({
   showNumbers = false,
   className = '',
 }: DynamicImageLayoutProps) {
-  // 간격 클래스 매핑
-  const spacingClass = useMemo(() => {
-    switch (config.layout.spacing) {
-      case 'small':
-        return 'gap-2';
-      case 'medium':
-        return 'gap-4';
-      case 'large':
-        return 'gap-6';
-      default:
-        return 'gap-4';
-    }
-  }, [config.layout.spacing]);
-
   // 선택된 이미지가 없는 경우
   if (!config.selectedImages || config.selectedImages.length === 0) {
     return null;
@@ -43,9 +27,12 @@ function DynamicImageLayout({
 
   return (
     <div className={`my-8 not-prose ${className}`}>
-      <h3 className="mb-4 text-xl font-bold">사용자 정의 이미지 갤러리</h3>
+      <h3 className="mb-4 text-xl font-bold flex items-center gap-2">
+        <span className="text-primary">📷</span>
+        사용자 정의 이미지 갤러리
+      </h3>
       <div
-        className={`grid ${spacingClass}`}
+        className="grid gap-4"
         style={{
           gridTemplateColumns: `repeat(${config.layout.columns}, 1fr)`,
         }}
@@ -82,15 +69,6 @@ function DynamicImageLayout({
         <span>{config.selectedImages.length}개 이미지</span>
         <span>•</span>
         <span>{config.layout.columns}열 그리드</span>
-        <span>•</span>
-        <span>
-          {config.layout.spacing === 'small'
-            ? '좁은'
-            : config.layout.spacing === 'medium'
-            ? '보통'
-            : '넓은'}{' '}
-          간격
-        </span>
       </div>
     </div>
   );

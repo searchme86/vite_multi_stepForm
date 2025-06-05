@@ -1,5 +1,5 @@
 //====최신 PreviewPanel 컴포넌트====
-// ✅ ImageViewBuilder 기능이 완전히 통합된 최신 버전
+// ✅ 간소화된 ImageViewBuilder 기능이 완전히 통합된 최신 버전
 
 import React, {
   useState,
@@ -37,7 +37,7 @@ import 'swiper/css/pagination';
 import 'swiper/css/autoplay';
 import 'swiper/css/effect-fade';
 
-// ✅ 추가: DynamicImageLayout import
+// ✅ 수정: 간소화된 DynamicImageLayout import
 import DynamicImageLayout from './DynamicImageLayout';
 
 // MultiStepForm Context 사용
@@ -587,7 +587,7 @@ function PreviewPanel(): ReactNode {
     ]
   );
 
-  // ✅ 핵심 기능: 사용자 정의 이미지 갤러리 컴포넌트
+  // ✅ 핵심 기능: 간소화된 사용자 정의 이미지 갤러리 컴포넌트
   const CustomImageGallery = useCallback(() => {
     // imageViewConfig가 없거나 선택된 이미지가 없으면 렌더링하지 않음
     if (
@@ -615,7 +615,7 @@ function PreviewPanel(): ReactNode {
           </div>
         </div>
 
-        {/* DynamicImageLayout 컴포넌트 사용 */}
+        {/* ✅ 간소화된 DynamicImageLayout 컴포넌트 사용 */}
         <DynamicImageLayout
           config={imageViewConfig}
           showNumbers={false}
@@ -749,7 +749,7 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -856,7 +856,7 @@ function PreviewPanel(): ReactNode {
                 </p>
               )}
 
-              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -963,7 +963,7 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -1077,7 +1077,7 @@ function PreviewPanel(): ReactNode {
             </div>
           )}
 
-          {/* ✅ 추가: 이미지 뷰 빌더 상태 표시 */}
+          {/* ✅ 핵심: 이미지 뷰 빌더 상태 표시 */}
           {imageViewConfig && imageViewConfig.selectedImages.length > 0 && (
             <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-success-50 border-success-200">
               <Icon
@@ -1086,8 +1086,7 @@ function PreviewPanel(): ReactNode {
               />
               <p className="text-xs text-success-700">
                 사용자 정의 갤러리에 {imageViewConfig.selectedImages.length}개
-                이미지가
-                {imageViewConfig.layout.columns}열 그리드로 표시됩니다.
+                이미지가 {imageViewConfig.layout.columns}열 그리드로 표시됩니다.
               </p>
             </div>
           )}
