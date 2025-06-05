@@ -16,6 +16,12 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { useFormContext } from 'react-hook-form';
@@ -31,9 +37,29 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
   // ✅ 추가: 모바일 사이즈 감지
   const [isMobile, setIsMobile] = useState(false);
 
-  // ✅ 추가: 더보기 기능을 위한 상태
-  const [showAllFiles, setShowAllFiles] = useState(false);
-  const MAX_VISIBLE_FILES = 5; // 기본적으로 보여줄 파일 개수
+  // ✅ 수정: 더보기 기능을 위한 상태 (점진적 로딩)
+  const INITIAL_VISIBLE_FILES = 5; // 처음에 보여줄 파일 개수
+  const LOAD_MORE_COUNT = 3; // 더보기 클릭시 추가로 보여줄 파일 개수
+  const [visibleFilesCount, setVisibleFilesCount] = useState(
+    INITIAL_VISIBLE_FILES
+  );
+
+  // ✅ 추가: 이미지 모달을 위한 상태
+  const {
+    isOpen: isImageModalOpen,
+    onOpen: onImageModalOpen,
+    onClose: onImageModalClose,
+  } = useDisclosure();
+  const [selectedModalImage, setSelectedModalImage] = useState<string>('');
+  const [selectedModalImageName, setSelectedModalImageName] =
+    useState<string>('');
+
+  // ✅ 추가: 툴팁 텍스트 설정 (나중에 변경 가능)
+  const tooltipTexts = {
+    mainImage: '메인 이미지로 설정',
+    slider: '슬라이더에 추가/제거',
+    delete: '이미지 삭제',
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -103,21 +129,32 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     );
   }, []);
 
-  // ✅ 추가: 표시할 파일 목록 계산
+  // ✅ 수정: 표시할 파일 목록 계산 (점진적 로딩)
   const displayFiles = useMemo(() => {
-    if (showAllFiles || mediaFiles.length <= MAX_VISIBLE_FILES) {
-      return mediaFiles;
-    }
-    return mediaFiles.slice(0, MAX_VISIBLE_FILES);
-  }, [mediaFiles, showAllFiles, MAX_VISIBLE_FILES]);
+    return mediaFiles.slice(0, visibleFilesCount);
+  }, [mediaFiles, visibleFilesCount]);
 
-  // ✅ 추가: 더보기 버튼 표시 여부
-  const hasMoreFiles = mediaFiles.length > MAX_VISIBLE_FILES;
+  // ✅ 수정: 더보기 버튼 관련 계산
+  const remainingFiles = mediaFiles.length - visibleFilesCount;
+  const hasMoreFiles = remainingFiles > 0;
+  const showMoreCount = Math.min(LOAD_MORE_COUNT, remainingFiles);
 
-  // ✅ 추가: 더보기 버튼 토글 함수
-  const toggleShowAllFiles = useCallback(() => {
-    setShowAllFiles((prev) => !prev);
-  }, []);
+  // ✅ 수정: 더보기 버튼 클릭 함수
+  const handleLoadMore = useCallback(() => {
+    setVisibleFilesCount((prev) =>
+      Math.min(prev + LOAD_MORE_COUNT, mediaFiles.length)
+    );
+  }, [mediaFiles.length, LOAD_MORE_COUNT]);
+
+  // ✅ 추가: 이미지 모달 열기 함수
+  const openImageModal = useCallback(
+    (imageUrl: string, imageName: string) => {
+      setSelectedModalImage(imageUrl);
+      setSelectedModalImageName(imageName);
+      onImageModalOpen();
+    },
+    [onImageModalOpen]
+  );
 
   const getFileIcon = useCallback((fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase() || '';
@@ -276,8 +313,15 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         newFiles.splice(index, 1);
         return newFiles;
       });
+
+      // 파일이 삭제되면 visibleFilesCount도 조정
+      if (visibleFilesCount > mediaFiles.length - 1) {
+        setVisibleFilesCount(
+          Math.max(INITIAL_VISIBLE_FILES, mediaFiles.length - 1)
+        );
+      }
     },
-    [setMediaValue]
+    [setMediaValue, visibleFilesCount, mediaFiles.length, INITIAL_VISIBLE_FILES]
   );
 
   const setAsMainImage = useCallback(
@@ -468,7 +512,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         </div>
       </AccordionField>
 
-      {/* ✅ 수정: 통합된 이미지 테이블 섹션 */}
+      {/* ✅ 수정: 통합된 이미지 테이블 섹션 - 반응형 및 개선사항 적용 */}
       <AccordionField
         title="업로드된 이미지"
         description={
@@ -480,165 +524,330 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
       >
         {mediaFiles.length > 0 ? (
           <div className="space-y-4">
-            {/* ✅ 파일 테이블 */}
+            {/* ✅ 반응형 파일 테이블 */}
             <div className="overflow-hidden">
-              <Table
-                aria-label="업로드된 이미지 목록"
-                removeWrapper
-                classNames={{
-                  table: 'min-h-[200px]',
-                  tbody: 'divide-y divide-default-200',
-                }}
-              >
-                <TableHeader>
-                  <TableColumn scope="col">파일</TableColumn>
-                  <TableColumn scope="col">진행률</TableColumn>
-                  <TableColumn scope="col">크기</TableColumn>
-                  <TableColumn scope="col">액션</TableColumn>
-                </TableHeader>
-                <TableBody>
-                  {displayFiles.map((file, index) => {
-                    const fileName =
-                      selectedFiles[index] || `이미지 ${index + 1}`;
-                    const fileSize = 1024 * 1024 * (Math.random() * 5 + 1); // 임시 파일 사이즈
-                    const uploadProgress = Object.values(uploading)[0] || 100;
-                    const isUploaded =
-                      uploadStatus[fileName] === 'success' ||
-                      uploadProgress === 100;
+              {/* 데스크톱 테이블 뷰 */}
+              <div className="hidden md:block">
+                <Table
+                  aria-label="업로드된 이미지 목록"
+                  removeWrapper
+                  classNames={{
+                    table: 'min-h-[200px]',
+                    tbody: 'divide-y divide-default-200',
+                  }}
+                >
+                  <TableHeader>
+                    <TableColumn scope="col">파일</TableColumn>
+                    <TableColumn scope="col">진행률</TableColumn>
+                    <TableColumn scope="col">크기</TableColumn>
+                    <TableColumn scope="col" className="text-center">
+                      액션
+                    </TableColumn>
+                  </TableHeader>
+                  <TableBody>
+                    {displayFiles.map((file, index) => {
+                      const fileName =
+                        selectedFiles[index] || `이미지 ${index + 1}`;
+                      const fileSize = 1024 * 1024 * (Math.random() * 5 + 1); // 임시 파일 사이즈
+                      const uploadProgress = Object.values(uploading)[0] || 100;
+                      const isUploaded =
+                        uploadStatus[fileName] === 'success' ||
+                        uploadProgress === 100;
+                      const isMain = isMainImage(file);
 
-                    return (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="relative w-12 h-12 group">
-                              <img
-                                src={file}
-                                alt={`업로드 이미지 ${index + 1}`}
-                                className="object-cover w-full h-full rounded-md"
-                              />
-                              {/* 호버 효과 유지 */}
-                              <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
-                                <Icon
-                                  icon="lucide:zoom-in"
-                                  className="text-white text-sm"
+                      return (
+                        <TableRow
+                          key={index}
+                          className={`${
+                            isMain ? 'bg-primary-50 border-primary-200' : ''
+                          }`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-18 h-18 group cursor-pointer">
+                                <img
+                                  src={file}
+                                  alt={`업로드 이미지 ${index + 1}`}
+                                  className="object-cover w-full h-full rounded-md"
+                                  onClick={() => openImageModal(file, fileName)}
                                 />
+                                {/* 호버 효과 유지 */}
+                                <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
+                                  <Icon
+                                    icon="lucide:zoom-in"
+                                    className="text-white text-sm"
+                                  />
+                                </div>
+                                {/* ✅ 메인 이미지 표시 */}
+                                {isMain && (
+                                  <div className="absolute -top-1 -right-1 bg-primary text-white rounded-full p-1">
+                                    <Icon
+                                      icon="lucide:crown"
+                                      className="text-xs"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <span
+                                  className="text-sm font-medium block max-w-[100px] truncate"
+                                  title={fileName}
+                                >
+                                  {fileName}
+                                </span>
                               </div>
                             </div>
-                            <div className="truncate max-w-[200px]">
-                              <span className="text-sm font-medium">
+                          </TableCell>
+                          <TableCell>
+                            {!isUploaded ? (
+                              <div className="w-full max-w-[100px]">
+                                <Progress
+                                  aria-label="업로드 중..."
+                                  value={uploadProgress}
+                                  size="sm"
+                                  color="primary"
+                                />
+                                <span className="text-xs text-default-500">
+                                  {Math.round(uploadProgress)}%
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Icon
+                                  icon="lucide:check-circle"
+                                  className="text-success text-sm"
+                                />
+                                <span className="text-success text-sm">
+                                  완료
+                                </span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-default-500">
+                              {formatFileSize(fileSize)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              {/* ✅ 수정: 홈 아이콘으로 변경 및 툴팁 추가 */}
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color={isMain ? 'primary' : 'default'}
+                                onPress={() => preSelectImage(file)}
+                                aria-label={`이미지 ${
+                                  index + 1
+                                } 메인 이미지로 선택`}
+                                title={tooltipTexts.mainImage}
+                                className={isMain ? 'bg-primary-100' : ''}
+                              >
+                                <Icon icon="lucide:home" className="text-sm" />
+                              </Button>
+
+                              {/* 슬라이더 추가/제거 버튼 */}
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color={
+                                  sliderImages.includes(file)
+                                    ? 'success'
+                                    : 'default'
+                                }
+                                onPress={() => toggleSliderSelection(file)}
+                                aria-label={`이미지 ${index + 1} 슬라이더에 ${
+                                  sliderImages.includes(file) ? '제거' : '추가'
+                                }`}
+                                title={tooltipTexts.slider}
+                              >
+                                <Icon
+                                  icon={
+                                    sliderImages.includes(file)
+                                      ? 'lucide:check'
+                                      : 'lucide:plus'
+                                  }
+                                  className="text-sm"
+                                />
+                              </Button>
+
+                              {/* 삭제 버튼 */}
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color="danger"
+                                onPress={() => removeMedia(index)}
+                                aria-label={`파일 ${fileName} 삭제`}
+                                title={tooltipTexts.delete}
+                              >
+                                <Icon
+                                  icon="lucide:trash-2"
+                                  className="text-sm"
+                                />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* ✅ 모바일 카드 뷰 */}
+              <div className="md:hidden space-y-3">
+                {displayFiles.map((file, index) => {
+                  const fileName =
+                    selectedFiles[index] || `이미지 ${index + 1}`;
+                  const fileSize = 1024 * 1024 * (Math.random() * 5 + 1);
+                  const uploadProgress = Object.values(uploading)[0] || 100;
+                  const isUploaded =
+                    uploadStatus[fileName] === 'success' ||
+                    uploadProgress === 100;
+                  const isMain = isMainImage(file);
+
+                  return (
+                    <Card
+                      key={index}
+                      className={`${
+                        isMain ? 'border-primary-200 bg-primary-50' : ''
+                      }`}
+                    >
+                      <CardBody className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-18 h-18 group cursor-pointer flex-shrink-0">
+                            <img
+                              src={file}
+                              alt={`업로드 이미지 ${index + 1}`}
+                              className="object-cover w-full h-full rounded-md"
+                              onClick={() => openImageModal(file, fileName)}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
+                              <Icon
+                                icon="lucide:zoom-in"
+                                className="text-white text-sm"
+                              />
+                            </div>
+                            {isMain && (
+                              <div className="absolute -top-1 -right-1 bg-primary text-white rounded-full p-1">
+                                <Icon icon="lucide:crown" className="text-xs" />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start mb-2">
+                              <span
+                                className="text-sm font-medium block max-w-[120px] truncate"
+                                title={fileName}
+                              >
                                 {fileName}
                               </span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {!isUploaded ? (
-                            <div className="w-full max-w-[100px]">
-                              <Progress
-                                aria-label="업로드 중..."
-                                value={uploadProgress}
-                                size="sm"
-                                color="primary"
-                              />
                               <span className="text-xs text-default-500">
-                                {Math.round(uploadProgress)}%
+                                {formatFileSize(fileSize)}
                               </span>
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Icon
-                                icon="lucide:check-circle"
-                                className="text-success text-sm"
-                              />
-                              <span className="text-success text-sm">완료</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-default-500">
-                            {formatFileSize(fileSize)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {/* 메인 이미지 설정 버튼 */}
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="light"
-                              color="primary"
-                              onPress={() => preSelectImage(file)}
-                              aria-label={`이미지 ${
-                                index + 1
-                              } 메인 이미지로 선택`}
-                              title="메인 이미지로 설정"
-                            >
-                              <Icon icon="lucide:star" className="text-sm" />
-                            </Button>
 
-                            {/* 슬라이더 추가/제거 버튼 */}
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="light"
-                              color={
-                                sliderImages.includes(file)
-                                  ? 'success'
-                                  : 'default'
-                              }
-                              onPress={() => toggleSliderSelection(file)}
-                              aria-label={`이미지 ${index + 1} 슬라이더에 ${
-                                sliderImages.includes(file) ? '제거' : '추가'
-                              }`}
-                              title={`슬라이더에 ${
-                                sliderImages.includes(file) ? '제거' : '추가'
-                              }`}
-                            >
-                              <Icon
-                                icon={
+                            {!isUploaded ? (
+                              <div className="mb-3">
+                                <Progress
+                                  aria-label="업로드 중..."
+                                  value={uploadProgress}
+                                  size="sm"
+                                  color="primary"
+                                />
+                                <span className="text-xs text-default-500">
+                                  {Math.round(uploadProgress)}%
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 mb-3">
+                                <Icon
+                                  icon="lucide:check-circle"
+                                  className="text-success text-sm"
+                                />
+                                <span className="text-success text-sm">
+                                  완료
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color={isMain ? 'primary' : 'default'}
+                                onPress={() => preSelectImage(file)}
+                                title={tooltipTexts.mainImage}
+                                className={isMain ? 'bg-primary-100' : ''}
+                              >
+                                <Icon icon="lucide:home" className="text-sm" />
+                              </Button>
+
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color={
                                   sliderImages.includes(file)
-                                    ? 'lucide:check'
-                                    : 'lucide:plus'
+                                    ? 'success'
+                                    : 'default'
                                 }
-                                className="text-sm"
-                              />
-                            </Button>
+                                onPress={() => toggleSliderSelection(file)}
+                                title={tooltipTexts.slider}
+                              >
+                                <Icon
+                                  icon={
+                                    sliderImages.includes(file)
+                                      ? 'lucide:check'
+                                      : 'lucide:plus'
+                                  }
+                                  className="text-sm"
+                                />
+                              </Button>
 
-                            {/* 삭제 버튼 */}
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="light"
-                              color="danger"
-                              onPress={() => removeMedia(index)}
-                              aria-label={`파일 ${fileName} 삭제`}
-                              title="파일 삭제"
-                            >
-                              <Icon icon="lucide:trash-2" className="text-sm" />
-                            </Button>
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color="danger"
+                                onPress={() => removeMedia(index)}
+                                title={tooltipTexts.delete}
+                              >
+                                <Icon
+                                  icon="lucide:trash-2"
+                                  className="text-sm"
+                                />
+                              </Button>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </div>
+                      </CardBody>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* ✅ 더보기 버튼 */}
+            {/* ✅ 수정: 점진적 더보기 버튼 */}
             {hasMoreFiles && (
               <div className="text-center pt-2">
                 <Button
                   variant="flat"
                   color="primary"
                   size="sm"
-                  onPress={toggleShowAllFiles}
-                  onClick={toggleShowAllFiles} // 마우스 클릭 지원
-                  className="transition-all hover:bg-primary-50"
+                  onPress={handleLoadMore}
+                  className="transition-all hover:bg-primary-50 relative"
                 >
-                  {showAllFiles
-                    ? '접기'
-                    : `더보기 (${mediaFiles.length - MAX_VISIBLE_FILES})`}
+                  <span className="flex items-center gap-2">
+                    더보기
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-primary-600 bg-primary-100 rounded-full">
+                      {showMoreCount}
+                    </span>
+                  </span>
                 </Button>
               </div>
             )}
@@ -705,6 +914,45 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         )}
       </AccordionField>
 
+      {/* ✅ 추가: 이미지 모달 */}
+      <Modal
+        isOpen={isImageModalOpen}
+        onClose={onImageModalClose}
+        size={isMobile ? 'full' : '2xl'}
+        scrollBehavior="inside"
+        backdrop="blur"
+        classNames={{
+          base: isMobile ? 'm-0 rounded-none' : '',
+          body: 'p-6',
+        }}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold">이미지 미리보기</h2>
+            <p
+              className="text-sm text-default-600 truncate"
+              title={selectedModalImageName}
+            >
+              {selectedModalImageName}
+            </p>
+          </ModalHeader>
+          <ModalBody>
+            <div className="flex justify-center">
+              <img
+                src={selectedModalImage}
+                alt={selectedModalImageName}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="default" variant="light" onPress={onImageModalClose}>
+              닫기
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
       {/* 블로그 메인 이미지 선택 섹션 - 기존 유지 */}
       <AccordionField
         title="블로그 메인 이미지 선택"
@@ -736,7 +984,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                         type="button"
                         aria-label={`이미지 ${index + 1} 메인 이미지로 선택`}
                       >
-                        <Icon icon="lucide:star" />
+                        <Icon icon="lucide:home" />
                       </Button>
                     </div>
                   </CardBody>
