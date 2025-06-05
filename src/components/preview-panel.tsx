@@ -1,5 +1,5 @@
-//====최신 PreviewPanel 컴포넌트====
-// ✅ 간소화된 ImageViewBuilder 기능이 완전히 통합된 최신 버전
+//====PreviewPanel 컴포넌트 - useFormContext null 에러 수정====
+// ✅ 안전한 useFormContext 처리 및 fallback 로직 추가
 
 import React, {
   useState,
@@ -37,23 +37,113 @@ import 'swiper/css/pagination';
 import 'swiper/css/autoplay';
 import 'swiper/css/effect-fade';
 
-// ✅ 수정: 간소화된 DynamicImageLayout import
+// ✅ 간소화된 DynamicImageLayout import
 import DynamicImageLayout from './DynamicImageLayout';
 
 // MultiStepForm Context 사용
 import { useMultiStepForm } from './useMultiStepForm';
 
+//====여기부터 수정됨====
+// ✅ 수정: useFormContext 안전한 import 및 사용
+// 이유: FormProvider 범위 밖에서 사용될 때 null 에러 방지
+import { useFormContext } from 'react-hook-form';
+//====여기까지 수정됨====
+
 function PreviewPanel(): ReactNode {
   //====여기부터 수정됨====
-  // ✅ 수정: customGalleryViews 추가 - 누락된 Context 값 가져오기
-  // 이유: CustomImageGallery에서 사용할 customGalleryViews가 Context에서 제대로 가져와지지 않았음
+  // ✅ 수정: 안전한 useFormContext 사용 및 fallback 처리
+  // 이유: FormProvider가 없을 때 null을 반환하므로 안전하게 처리
+  let formContextData = null;
+  let isFormContextAvailable = false;
+
+  try {
+    formContextData = useFormContext();
+    isFormContextAvailable = !!formContextData;
+  } catch (error) {
+    // FormProvider 범위 밖에서는 에러가 발생할 수 있음
+    console.warn('useFormContext not available, using fallback');
+    isFormContextAvailable = false;
+  }
+
+  // ✅ 수정: Context에서 formValues와 기타 필요한 값들 가져오기
   const {
     formValues,
     isPreviewPanelOpen,
     setIsPreviewPanelOpen,
-    imageViewConfig, // ✅ 사용자 정의 이미지 뷰 설정
-    customGalleryViews, // ✅ 추가: 사용자가 생성한 갤러리 뷰들
+    imageViewConfig,
+    customGalleryViews,
   } = useMultiStepForm();
+
+  // ✅ 수정: 안전한 form 값 가져오기 (formContext 우선, fallback으로 Context 사용)
+  const getFormValues = useCallback(() => {
+    if (isFormContextAvailable && formContextData?.watch) {
+      // FormContext가 사용 가능할 때: 실시간 watch 사용
+      try {
+        const watchFn = formContextData.watch;
+        return {
+          media: watchFn('media') || [],
+          mainImage: watchFn('mainImage') || null,
+          sliderImages: watchFn('sliderImages') || [],
+          title: watchFn('title') || '',
+          description: watchFn('description') || '',
+          content: watchFn('content') || '',
+          tags: watchFn('tags') || '',
+          nickname: watchFn('nickname') || '',
+          userImage: watchFn('userImage') || '',
+          emailPrefix: watchFn('emailPrefix') || '',
+          emailDomain: watchFn('emailDomain') || '',
+        };
+      } catch (error) {
+        console.warn(
+          'Error using formContext.watch, falling back to formValues'
+        );
+        return getFallbackFormValues();
+      }
+    } else {
+      // FormContext가 사용 불가능할 때: Context의 formValues 사용
+      return getFallbackFormValues();
+    }
+  }, [isFormContextAvailable, formContextData, formValues]);
+
+  // ✅ 추가: Fallback용 formValues 처리 함수
+  const getFallbackFormValues = useCallback(() => {
+    if (!formValues) {
+      return {
+        media: [],
+        mainImage: null,
+        sliderImages: [],
+        title: '',
+        description: '',
+        content: '',
+        tags: '',
+        nickname: '',
+        userImage: '',
+        emailPrefix: '',
+        emailDomain: '',
+      };
+    }
+
+    return {
+      media: Array.isArray(formValues.media) ? formValues.media : [],
+      mainImage: formValues.mainImage || null,
+      sliderImages: Array.isArray(formValues.sliderImages)
+        ? formValues.sliderImages
+        : [],
+      title: formValues.title || '',
+      description: formValues.description || '',
+      content: formValues.content || '',
+      tags: formValues.tags || '',
+      nickname: formValues.nickname || '',
+      userImage: formValues.userImage || '',
+      emailPrefix: formValues.emailPrefix || '',
+      emailDomain: formValues.emailDomain || '',
+    };
+  }, [formValues]);
+
+  // ✅ 수정: 최종 form 값들을 안전하게 가져오기
+  const currentFormValues = useMemo(() => {
+    return getFormValues();
+  }, [getFormValues, formValues, isFormContextAvailable]);
   //====여기까지 수정됨====
 
   // ✅ 추가: 모바일 사이즈 감지
@@ -216,53 +306,8 @@ function PreviewPanel(): ReactNode {
     };
   }, []);
 
-  // formValues 안정화
-  const stableFormValues = useMemo(() => {
-    if (!formValues) {
-      return {
-        mainImage: null,
-        media: [],
-        sliderImages: [],
-        title: '',
-        description: '',
-        content: '',
-        tags: '',
-        nickname: '',
-        userImage: '',
-        emailPrefix: '',
-        emailDomain: '',
-      };
-    }
-
-    return {
-      mainImage: formValues.mainImage || null,
-      media: Array.isArray(formValues.media) ? formValues.media : [],
-      sliderImages: Array.isArray(formValues.sliderImages)
-        ? formValues.sliderImages
-        : [],
-      title: formValues.title || '',
-      description: formValues.description || '',
-      content: formValues.content || '',
-      tags: formValues.tags || '',
-      nickname: formValues.nickname || '',
-      userImage: formValues.userImage || '',
-      emailPrefix: formValues.emailPrefix || '',
-      emailDomain: formValues.emailDomain || '',
-    };
-  }, [
-    formValues?.mainImage,
-    formValues?.media,
-    formValues?.sliderImages,
-    formValues?.title,
-    formValues?.description,
-    formValues?.content,
-    formValues?.tags,
-    formValues?.nickname,
-    formValues?.userImage,
-    formValues?.emailPrefix,
-    formValues?.emailDomain,
-  ]);
-
+  //====여기부터 수정됨====
+  // ✅ 수정: 안전하게 처리된 form 값들 사용
   const {
     mainImage,
     media,
@@ -275,7 +320,8 @@ function PreviewPanel(): ReactNode {
     userImage,
     emailPrefix,
     emailDomain,
-  } = stableFormValues;
+  } = currentFormValues;
+  //====여기까지 수정됨====
 
   // Swiper 상태 관리
   const [swiperRef, setSwiperRef] = useState<any>(null);
@@ -592,13 +638,8 @@ function PreviewPanel(): ReactNode {
     ]
   );
 
-  //====여기부터 수정됨====
-  // ✅ 수정: 사용자 정의 이미지 갤러리 컴포넌트 - 훅 사용 제거 및 props 방식으로 변경
-  // 이유: useCallback 내부에서 다른 훅을 호출하는 것은 React Hook 규칙 위반
+  // ✅ 사용자 정의 이미지 갤러리 컴포넌트
   const CustomImageGallery = useCallback(() => {
-    // ✅ 수정: useMultiStepForm() 호출 제거하고 상위에서 전달받은 customGalleryViews 사용
-    // 이유: useCallback 내부에서는 다른 훅을 호출할 수 없음 (Hook 규칙 위반)
-
     // 안전한 기본값 제공
     const safeCustomGalleryViews = Array.isArray(customGalleryViews)
       ? customGalleryViews
@@ -610,11 +651,11 @@ function PreviewPanel(): ReactNode {
     }
 
     return (
-      <div className="my-8 not-prose space-y-8">
+      <div className="my-8 space-y-8 not-prose">
         {safeCustomGalleryViews.map((galleryView, galleryIndex) => (
           <div key={galleryView.id || galleryIndex}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold flex items-center gap-2">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="flex items-center gap-2 text-xl font-bold">
                 <Icon icon="lucide:layout-grid" className="text-primary" />
                 사용자 정의 갤러리 {galleryIndex + 1}
               </h3>
@@ -633,7 +674,6 @@ function PreviewPanel(): ReactNode {
               </div>
             </div>
 
-            {/* ✅ DynamicImageLayout 컴포넌트 사용 - 안전한 config 전달 */}
             <DynamicImageLayout
               config={{
                 selectedImages: galleryView.selectedImages || [],
@@ -642,10 +682,10 @@ function PreviewPanel(): ReactNode {
                 filter: 'available',
               }}
               showNumbers={false}
-              className="bg-default-50 p-4 rounded-lg border border-default-200"
+              className="p-4 border rounded-lg bg-default-50 border-default-200"
             />
 
-            <div className="mt-3 text-sm text-default-500 text-center">
+            <div className="mt-3 text-sm text-center text-default-500">
               {galleryView.createdAt
                 ? `${new Date(
                     galleryView.createdAt
@@ -656,8 +696,7 @@ function PreviewPanel(): ReactNode {
         ))}
       </div>
     );
-  }, [customGalleryViews]); // ✅ 수정: customGalleryViews를 의존성 배열에 추가
-  //====여기까지 수정됨====
+  }, [customGalleryViews]);
 
   // 모바일 전용 컨텐츠 컴포넌트
   const MobileContent = useCallback(() => {
@@ -779,7 +818,7 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
+              {/* 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -809,7 +848,7 @@ function PreviewPanel(): ReactNode {
     content,
     renderMarkdown,
     media,
-    CustomImageGallery, // ✅ 핵심 기능 포함
+    CustomImageGallery,
     SwiperGallery,
     setHasTabChanged,
   ]);
@@ -835,9 +874,9 @@ function PreviewPanel(): ReactNode {
               </Badge>
               <span className="text-sm text-white/80">• 4 Min</span>
             </div>
-            <strong className="mb-3 text-4xl font-bold text-white">
+            <h1 className="mb-3 text-4xl font-bold text-white">
               {title || '블로그 제목이 여기에 표시됩니다'}
-            </strong>
+            </h1>
 
             {/* 데스크탑 태그 표시 */}
             {tagArray.length > 0 && (
@@ -886,7 +925,7 @@ function PreviewPanel(): ReactNode {
                 </p>
               )}
 
-              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
+              {/* 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -905,7 +944,7 @@ function PreviewPanel(): ReactNode {
       description,
       content,
       renderMarkdown,
-      CustomImageGallery, // ✅ 핵심 기능 포함
+      CustomImageGallery,
       SwiperGallery,
     ]
   );
@@ -993,7 +1032,7 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* ✅ 핵심: 간소화된 사용자 정의 이미지 갤러리 */}
+              {/* 사용자 정의 이미지 갤러리 */}
               <CustomImageGallery />
 
               {/* 기존 슬라이더 갤러리 */}
@@ -1018,18 +1057,40 @@ function PreviewPanel(): ReactNode {
       content,
       renderMarkdown,
       media,
-      CustomImageGallery, // ✅ 핵심 기능 포함
+      CustomImageGallery,
       SwiperGallery,
       DesktopContent,
     ]
   );
+
+  //====여기부터 수정됨====
+  // ✅ 수정: 메인 이미지 상태 디버깅을 위한 useEffect - 안전하게 처리
+  useEffect(() => {
+    console.log('🖼️ PreviewPanel 상태 변경 감지:', {
+      isFormContextAvailable,
+      mainImage,
+      heroImage,
+      isUsingFallbackImage,
+      mediaLength: media?.length || 0,
+      formValuesSource: isFormContextAvailable
+        ? 'FormContext'
+        : 'useMultiStepForm',
+    });
+  }, [
+    isFormContextAvailable,
+    mainImage,
+    heroImage,
+    isUsingFallbackImage,
+    media,
+  ]);
+  //====여기까지 수정됨====
 
   return (
     <>
       {/* ✅ 수정: 모바일 오버레이 - bottom-sheet용 */}
       {isMobile && isPreviewPanelOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setIsPreviewPanelOpen(false)}
         />
       )}
@@ -1061,12 +1122,12 @@ function PreviewPanel(): ReactNode {
               className="flex justify-center pt-3 pb-2 cursor-pointer header-clickable"
               onClick={handleHeaderClick}
             >
-              <div className="w-12 h-1 bg-gray-300 rounded-full transition-all hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
+              <div className="w-12 h-1 transition-all bg-gray-300 rounded-full hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
             </div>
 
             {/* 헤더 컨텐츠 - 클릭 가능 */}
             <div
-              className="flex items-center justify-between p-4 border-b cursor-pointer header-clickable transition-colors"
+              className="flex items-center justify-between p-4 transition-colors border-b cursor-pointer header-clickable"
               onClick={handleHeaderClick}
             >
               <div className="flex items-center gap-2">
@@ -1107,7 +1168,21 @@ function PreviewPanel(): ReactNode {
             </div>
           )}
 
-          {/* ✅ 핵심: 이미지 뷰 빌더 상태 표시 */}
+          {/* 메인 이미지 상태 표시 */}
+          {mainImage && (
+            <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-success-50 border-success-200">
+              <Icon
+                icon="lucide:check-circle"
+                className="flex-shrink-0 text-success"
+              />
+              <p className="text-xs text-success-700">
+                메인 이미지가 설정되어 미리보기에 표시됩니다.
+                {isFormContextAvailable ? ' (실시간 연동)' : ' (Context 연동)'}
+              </p>
+            </div>
+          )}
+
+          {/* 이미지 뷰 빌더 상태 표시 */}
           {customGalleryViews && customGalleryViews.length > 0 && (
             <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-success-50 border-success-200">
               <Icon

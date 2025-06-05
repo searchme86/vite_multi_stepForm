@@ -68,6 +68,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
   // ✅ 추가: 툴팁 텍스트 설정 (나중에 변경 가능)
   const tooltipTexts = {
     mainImage: '메인 이미지로 설정',
+    cancelMainImage: '메인 이미지 해제', // ✅ 추가: 메인 이미지 취소 툴팁
     slider: '슬라이더에 추가/제거',
     delete: '이미지 삭제',
   };
@@ -127,7 +128,10 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
   const { media: mediaFiles, mainImage } = formValues;
 
-  const [preSelectedImage, setPreSelectedImage] = useState<string | null>(null);
+  //====여기부터 수정됨====
+  // ✅ 수정: preSelectedImage 상태 제거 - 바로 메인 이미지로 설정하도록 변경
+  // 이유: 사용자가 홈 아이콘 클릭시 바로 메인 이미지로 설정되기를 원함
+  //====여기까지 수정됨====
 
   // ✅ 추가: 파일 크기 포맷팅 함수
   const formatFileSize = useCallback((sizeInBytes: number) => {
@@ -309,28 +313,40 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     }
   }, []);
 
-  const preSelectImage = useCallback((imageUrl: string) => {
-    setPreSelectedImage(imageUrl);
-  }, []);
+  //====여기부터 수정됨====
+  // ✅ 수정: 바로 메인 이미지로 설정하는 함수로 변경
+  // 이유: preSelectedImage 단계를 거치지 않고 바로 메인 이미지로 설정
+  const setAsMainImageDirect = useCallback(
+    (index: number) => {
+      const selectedImage = mediaFiles[index];
+      if (selectedImage) {
+        setMainImageValue(selectedImage);
 
-  const confirmMainImage = useCallback(() => {
-    if (preSelectedImage) {
-      setMainImageValue(preSelectedImage);
-      setPreSelectedImage(null);
+        addToast({
+          title: '메인 이미지 설정 완료',
+          description:
+            '블로그 메인 페이지에 표시될 대표 이미지가 선택되었습니다.',
+          color: 'success',
+          hideCloseButton: false,
+        });
+      }
+    },
+    [mediaFiles, setMainImageValue, addToast]
+  );
 
-      addToast({
-        title: '메인 이미지 설정 완료',
-        description:
-          '블로그 메인 페이지에 표시될 대표 이미지가 선택되었습니다.',
-        color: 'success',
-        hideCloseButton: false,
-      });
-    }
-  }, [preSelectedImage, setMainImageValue, addToast]);
+  // ✅ 추가: 메인 이미지 해제 함수
+  // 이유: 사용자가 메인 이미지를 취소할 수 있는 기능 제공
+  const cancelMainImage = useCallback(() => {
+    setMainImageValue('');
 
-  const cancelPreSelection = useCallback(() => {
-    setPreSelectedImage(null);
-  }, []);
+    addToast({
+      title: '메인 이미지 해제 완료',
+      description: '메인 이미지 설정이 해제되었습니다.',
+      color: 'warning',
+      hideCloseButton: false,
+    });
+  }, [setMainImageValue, addToast]);
+  //====여기까지 수정됨====
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -674,7 +690,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         {mediaFiles.length > 0 ? (
           <div className="space-y-4">
             {/* ✅ 추가: 테이블 상단 컨트롤 */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2">
                 {selectedFiles.length > 0 && (
                   <Button
@@ -784,9 +800,12 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <div className="relative w-18 h-18 group cursor-pointer">
+                              {/*====여기부터 수정됨====*/}
+                              {/* ✅ 수정: 이미지 크기 고정 - w-16 h-16으로 고정하여 레이아웃 안정화 */}
+                              {/* 이유: 큰 이미지가 들어와도 테이블 레이아웃이 깨지지 않도록 */}
+                              <div className="relative flex-shrink-0 w-16 h-16 cursor-pointer group">
                                 {/* ✅ 추가: 이미지 순서 번호 */}
-                                <div className="absolute -top-2 -left-2 bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10 shadow-lg">
+                                <div className="absolute z-10 flex items-center justify-center w-6 h-6 text-xs font-bold text-white rounded-full shadow-lg -top-2 -left-2 bg-primary">
                                   {index + 1}
                                 </div>
                                 <img
@@ -796,15 +815,15 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                                   onClick={() => openImageModal(file, name)}
                                 />
                                 {/* 호버 효과 유지 */}
-                                <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
+                                <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 rounded-md opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100">
                                   <Icon
                                     icon="lucide:zoom-in"
-                                    className="text-white text-sm"
+                                    className="text-sm text-white"
                                   />
                                 </div>
                                 {/* ✅ 메인 이미지 표시 */}
                                 {isMain && (
-                                  <div className="absolute -top-1 -right-1 bg-primary text-white rounded-full p-1">
+                                  <div className="absolute p-1 text-white rounded-full -top-1 -right-1 bg-primary">
                                     <Icon
                                       icon="lucide:crown"
                                       className="text-xs"
@@ -812,7 +831,8 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                                   </div>
                                 )}
                               </div>
-                              <div className="min-w-0 flex-1">
+                              {/*====여기까지 수정됨====*/}
+                              <div className="flex-1 min-w-0">
                                 <span
                                   className="text-sm font-medium block max-w-[100px] truncate"
                                   title={name}
@@ -839,9 +859,9 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                               <div className="flex items-center gap-1">
                                 <Icon
                                   icon="lucide:check-circle"
-                                  className="text-success text-sm"
+                                  className="text-sm text-success"
                                 />
-                                <span className="text-success text-sm">
+                                <span className="text-sm text-success">
                                   완료
                                 </span>
                               </div>
@@ -854,21 +874,59 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center gap-1">
-                              {/* ✅ 수정: 홈 아이콘으로 변경 및 툴팁 추가 */}
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="light"
-                                color={isMain ? 'primary' : 'default'}
-                                onPress={() => preSelectImage(file)}
-                                aria-label={`이미지 ${
-                                  index + 1
-                                } 메인 이미지로 선택`}
-                                title={tooltipTexts.mainImage}
-                                className={isMain ? 'bg-primary-100' : ''}
-                              >
-                                <Icon icon="lucide:home" className="text-sm" />
-                              </Button>
+                              {/*====여기부터 수정됨====*/}
+                              {/* ✅ 수정: 메인 이미지 설정/해제 버튼 로직 변경 */}
+                              {/* 이유: 홈 아이콘 클릭시 바로 메인 이미지 설정, 메인 이미지인 경우 취소 버튼 추가 */}
+                              {!isMain ? (
+                                // 메인 이미지가 아닌 경우: 홈 아이콘으로 메인 이미지 설정
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="light"
+                                  color="default"
+                                  onPress={() => setAsMainImageDirect(index)}
+                                  aria-label={`이미지 ${
+                                    index + 1
+                                  } 메인 이미지로 선택`}
+                                  title={tooltipTexts.mainImage}
+                                >
+                                  <Icon
+                                    icon="lucide:home"
+                                    className="text-sm"
+                                  />
+                                </Button>
+                              ) : (
+                                // 메인 이미지인 경우: 홈 아이콘 + 취소 버튼
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="light"
+                                    color="primary"
+                                    className="cursor-default bg-primary-100"
+                                    aria-label="현재 메인 이미지"
+                                    title="현재 메인 이미지"
+                                    isDisabled
+                                  >
+                                    <Icon
+                                      icon="lucide:home"
+                                      className="text-sm"
+                                    />
+                                  </Button>
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="light"
+                                    color="warning"
+                                    onPress={cancelMainImage}
+                                    aria-label="메인 이미지 해제"
+                                    title={tooltipTexts.cancelMainImage}
+                                  >
+                                    <Icon icon="lucide:x" className="text-sm" />
+                                  </Button>
+                                </div>
+                              )}
+                              {/*====여기까지 수정됨====*/}
 
                               {/* 슬라이더 추가/제거 버튼 */}
                               <Button
@@ -921,7 +979,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
               </div>
 
               {/* ✅ 모바일 카드 뷰 */}
-              <div className="md:hidden space-y-3">
+              <div className="space-y-3 md:hidden">
                 {displayFiles.map((fileItem) => {
                   const { file, index, name, size } = fileItem;
                   const uploadProgress = Object.values(uploading)[0] || 100;
@@ -944,9 +1002,12 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                             className="flex-shrink-0"
                           />
 
-                          <div className="relative w-18 h-18 group cursor-pointer flex-shrink-0">
+                          {/*====여기부터 수정됨====*/}
+                          {/* ✅ 수정: 모바일 카드뷰에서도 이미지 크기 고정 */}
+                          {/* 이유: 일관된 레이아웃 유지 */}
+                          <div className="relative flex-shrink-0 w-16 h-16 cursor-pointer group">
                             {/* ✅ 추가: 이미지 순서 번호 */}
-                            <div className="absolute -top-2 -left-2 bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10 shadow-lg">
+                            <div className="absolute z-10 flex items-center justify-center w-6 h-6 text-xs font-bold text-white rounded-full shadow-lg -top-2 -left-2 bg-primary">
                               {index + 1}
                             </div>
                             <img
@@ -955,21 +1016,22 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                               className="object-cover w-full h-full rounded-md"
                               onClick={() => openImageModal(file, name)}
                             />
-                            <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100 rounded-md">
+                            <div className="absolute inset-0 flex items-center justify-center transition-all bg-black bg-opacity-0 rounded-md opacity-0 group-hover:bg-opacity-30 group-hover:opacity-100">
                               <Icon
                                 icon="lucide:zoom-in"
-                                className="text-white text-sm"
+                                className="text-sm text-white"
                               />
                             </div>
                             {isMain && (
-                              <div className="absolute -top-1 -right-1 bg-primary text-white rounded-full p-1">
+                              <div className="absolute p-1 text-white rounded-full -top-1 -right-1 bg-primary">
                                 <Icon icon="lucide:crown" className="text-xs" />
                               </div>
                             )}
                           </div>
+                          {/*====여기까지 수정됨====*/}
 
                           <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-start justify-between mb-2">
                               <span
                                 className="text-sm font-medium block max-w-[120px] truncate"
                                 title={name}
@@ -997,26 +1059,61 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                               <div className="flex items-center gap-1 mb-3">
                                 <Icon
                                   icon="lucide:check-circle"
-                                  className="text-success text-sm"
+                                  className="text-sm text-success"
                                 />
-                                <span className="text-success text-sm">
+                                <span className="text-sm text-success">
                                   완료
                                 </span>
                               </div>
                             )}
 
                             <div className="flex items-center gap-2">
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="light"
-                                color={isMain ? 'primary' : 'default'}
-                                onPress={() => preSelectImage(file)}
-                                title={tooltipTexts.mainImage}
-                                className={isMain ? 'bg-primary-100' : ''}
-                              >
-                                <Icon icon="lucide:home" className="text-sm" />
-                              </Button>
+                              {/*====여기부터 수정됨====*/}
+                              {/* ✅ 수정: 모바일에서도 메인 이미지 설정/해제 로직 적용 */}
+                              {/* 이유: 데스크톱과 동일한 UX 제공 */}
+                              {!isMain ? (
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="light"
+                                  color="default"
+                                  onPress={() => setAsMainImageDirect(index)}
+                                  title={tooltipTexts.mainImage}
+                                >
+                                  <Icon
+                                    icon="lucide:home"
+                                    className="text-sm"
+                                  />
+                                </Button>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="light"
+                                    color="primary"
+                                    className="cursor-default bg-primary-100"
+                                    title="현재 메인 이미지"
+                                    isDisabled
+                                  >
+                                    <Icon
+                                      icon="lucide:home"
+                                      className="text-sm"
+                                    />
+                                  </Button>
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="light"
+                                    color="warning"
+                                    onPress={cancelMainImage}
+                                    title={tooltipTexts.cancelMainImage}
+                                  >
+                                    <Icon icon="lucide:x" className="text-sm" />
+                                  </Button>
+                                </div>
+                              )}
+                              {/*====여기까지 수정됨====*/}
 
                               <Button
                                 isIconOnly
@@ -1065,13 +1162,13 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
             {/* ✅ 수정: 더보기/접기 토글 버튼 */}
             {canExpand && (
-              <div className="text-center pt-2">
+              <div className="pt-2 text-center">
                 <Button
                   variant="flat"
                   color="primary"
                   size="sm"
                   onPress={handleLoadMoreToggle}
-                  className="transition-all hover:bg-primary-50 relative"
+                  className="relative transition-all hover:bg-primary-50"
                 >
                   <span className="flex items-center gap-2">
                     {isExpanded ? (
@@ -1082,7 +1179,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                     ) : hasMoreFiles ? (
                       <>
                         더보기
-                        <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-primary-600 bg-primary-100 rounded-full">
+                        <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium rounded-full text-primary-600 bg-primary-100">
                           {showMoreCount}
                         </span>
                       </>
@@ -1097,41 +1194,10 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
               </div>
             )}
 
-            {/* ✅ 메인 이미지 미리 선택 확인 UI */}
-            {preSelectedImage && (
-              <div className="flex items-center gap-4 p-4 rounded-lg bg-default-100 border border-default-200">
-                <img
-                  src={preSelectedImage}
-                  alt="미리 선택된 메인 이미지"
-                  className="object-cover w-16 h-16 rounded-md"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">미리 선택된 메인 이미지</p>
-                  <p className="text-xs text-default-600">
-                    확인 버튼을 눌러 메인 이미지를 설정하세요.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    color="primary"
-                    size="sm"
-                    onPress={confirmMainImage}
-                    aria-label="메인 이미지 확인"
-                  >
-                    확인
-                  </Button>
-                  <Button
-                    color="danger"
-                    variant="light"
-                    size="sm"
-                    onPress={cancelPreSelection}
-                    aria-label="선택 취소"
-                  >
-                    취소
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/*====여기부터 수정됨====*/}
+            {/* ✅ 수정: 메인 이미지 미리 선택 확인 UI 제거 */}
+            {/* 이유: 바로 메인 이미지로 설정하므로 미리 선택 단계가 불필요 */}
+            {/*====여기까지 수정됨====*/}
           </div>
         ) : (
           <div className="p-8 text-center rounded-lg bg-default-100">
@@ -1140,7 +1206,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
               className="w-12 h-12 mx-auto mb-3 text-default-400"
               aria-hidden="true"
             />
-            <p className="text-default-600 mb-3">업로드된 이미지가 없습니다.</p>
+            <p className="mb-3 text-default-600">업로드된 이미지가 없습니다.</p>
             <Button
               color="primary"
               variant="flat"
@@ -1184,7 +1250,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
           <ModalHeader className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold">이미지 미리보기</h2>
             <p
-              className="text-sm text-default-600 truncate"
+              className="text-sm truncate text-default-600"
               title={selectedModalImageName}
             >
               {selectedModalImageName}
@@ -1207,7 +1273,10 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         </ModalContent>
       </Modal>
 
-      {/* 블로그 메인 이미지 선택 섹션 - 기존 유지 */}
+      {/*====여기부터 수정됨====*/}
+      {/* ✅ 수정: 블로그 메인 이미지 선택 섹션에서도 바로 설정 로직 적용 */}
+      {/* 이유: 일관된 UX 제공 */}
+      {/* 블로그 메인 이미지 선택 섹션 - 기존 유지하되 함수만 변경 */}
       <AccordionField
         title="블로그 메인 이미지 선택"
         description={
@@ -1234,7 +1303,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
                         color="primary"
                         variant="solid"
                         size="sm"
-                        onPress={() => preSelectImage(file)}
+                        onPress={() => setAsMainImageDirect(index)}
                         type="button"
                         aria-label={`이미지 ${index + 1} 메인 이미지로 선택`}
                       >
@@ -1259,6 +1328,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
           </div>
         )}
       </AccordionField>
+      {/*====여기까지 수정됨====*/}
 
       {/* 이미지 슬라이더 섹션 - 기존 유지 */}
       <AccordionField
