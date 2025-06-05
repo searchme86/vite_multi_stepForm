@@ -31,6 +31,7 @@ import {
 import { Icon } from '@iconify/react';
 import { useFormContext } from 'react-hook-form';
 import AccordionField from './accordion-field';
+import ImageViewBuilder from './ImageViewBuilder'; // ✅ 추가: ImageViewBuilder import
 import { useMultiStepForm } from './useMultiStepForm';
 
 type BlogMediaStepProps = {};
@@ -1157,6 +1158,15 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
           </div>
         )}
       </AccordionField>
+
+      {/* ✅ 추가: 이미지 뷰 빌더 섹션 */}
+      {mediaFiles.length > 0 && (
+        <ImageViewBuilder
+          mediaFiles={mediaFiles}
+          mainImage={mainImage}
+          sliderImages={sliderImages}
+        />
+      )}
 
       {/* ✅ 추가: 이미지 모달 */}
       <Modal

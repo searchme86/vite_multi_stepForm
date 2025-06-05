@@ -26,6 +26,18 @@ export interface FormValues {
   sliderImages?: string[];
 }
 
+// ✅ 추가: 이미지 뷰 설정 타입 정의
+export interface ImageViewConfig {
+  selectedImages: string[];
+  clickOrder: number[];
+  layout: {
+    columns: number;
+    spacing: 'small' | 'medium' | 'large';
+    gridType: 'grid' | 'masonry' | 'list';
+  };
+  filter: string;
+}
+
 // MultiStepForm Context 타입 정의
 export interface MultiStepFormContextType {
   addToast: (options: ToastOptions) => void;
@@ -34,6 +46,9 @@ export interface MultiStepFormContextType {
   isPreviewPanelOpen: boolean;
   setIsPreviewPanelOpen: (isOpen: boolean) => void;
   togglePreviewPanel: () => void;
+  // ✅ 추가: 이미지 뷰 설정 관련 상태
+  imageViewConfig: ImageViewConfig;
+  setImageViewConfig: React.Dispatch<React.SetStateAction<ImageViewConfig>>;
 }
 
 // Context 생성

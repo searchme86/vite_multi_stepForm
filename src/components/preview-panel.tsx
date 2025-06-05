@@ -1,5 +1,5 @@
-//====여기부터 수정됨====
-// ✅ 수정: 모바일 Bottom Sheet 패널 및 스와이프 제스처 지원
+//====최신 PreviewPanel 컴포넌트====
+// ✅ ImageViewBuilder 기능이 완전히 통합된 최신 버전
 
 import React, {
   useState,
@@ -37,12 +37,19 @@ import 'swiper/css/pagination';
 import 'swiper/css/autoplay';
 import 'swiper/css/effect-fade';
 
+// ✅ 추가: DynamicImageLayout import
+import DynamicImageLayout from './DynamicImageLayout';
+
 // MultiStepForm Context 사용
 import { useMultiStepForm } from './useMultiStepForm';
 
 function PreviewPanel(): ReactNode {
-  const { formValues, isPreviewPanelOpen, setIsPreviewPanelOpen } =
-    useMultiStepForm();
+  const {
+    formValues,
+    isPreviewPanelOpen,
+    setIsPreviewPanelOpen,
+    imageViewConfig, // ✅ 사용자 정의 이미지 뷰 설정
+  } = useMultiStepForm();
 
   // ✅ 추가: 모바일 사이즈 감지
   const [isMobile, setIsMobile] = useState(false);
@@ -459,7 +466,7 @@ function PreviewPanel(): ReactNode {
     () =>
       sliderImages && sliderImages.length > 0 ? (
         <div className="my-8 not-prose">
-          <h3 className="mb-4 text-xl font-bold">갤러리</h3>
+          <h3 className="mb-4 text-xl font-bold">슬라이더 갤러리</h3>
           <div className="relative">
             <div className="w-full h-[400px] rounded-lg overflow-hidden bg-default-100">
               <Swiper
@@ -580,6 +587,48 @@ function PreviewPanel(): ReactNode {
     ]
   );
 
+  // ✅ 핵심 기능: 사용자 정의 이미지 갤러리 컴포넌트
+  const CustomImageGallery = useCallback(() => {
+    // imageViewConfig가 없거나 선택된 이미지가 없으면 렌더링하지 않음
+    if (
+      !imageViewConfig ||
+      !imageViewConfig.selectedImages ||
+      imageViewConfig.selectedImages.length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="my-8 not-prose">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            <Icon icon="lucide:layout-grid" className="text-primary" />
+            사용자 정의 갤러리
+          </h3>
+          <div className="flex items-center gap-2">
+            <Chip size="sm" color="primary" variant="flat">
+              {imageViewConfig.selectedImages.length}개 이미지
+            </Chip>
+            <Chip size="sm" color="secondary" variant="flat">
+              {imageViewConfig.layout.columns}열 그리드
+            </Chip>
+          </div>
+        </div>
+
+        {/* DynamicImageLayout 컴포넌트 사용 */}
+        <DynamicImageLayout
+          config={imageViewConfig}
+          showNumbers={false}
+          className="bg-default-50 p-4 rounded-lg border border-default-200"
+        />
+
+        <div className="mt-3 text-sm text-default-500 text-center">
+          이미지 뷰 빌더에서 선택한 이미지들이 여기에 표시됩니다
+        </div>
+      </div>
+    );
+  }, [imageViewConfig]);
+
   // 모바일 전용 컨텐츠 컴포넌트
   const MobileContent = useCallback(() => {
     const [selectedMobileSize, setSelectedMobileSize] = useState('360');
@@ -601,8 +650,8 @@ function PreviewPanel(): ReactNode {
             selectedKey={selectedMobileSize}
             onSelectionChange={handleTabChange}
           >
-            <Tab key="360" title="360" />
-            <Tab key="768" title="768" />
+            <Tab key="360" title="360px" />
+            <Tab key="768" title="768px" />
           </Tabs>
         </div>
 
@@ -700,7 +749,10 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* Swiper 갤러리 */}
+              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              <CustomImageGallery />
+
+              {/* 기존 슬라이더 갤러리 */}
               <SwiperGallery />
 
               {/* 추가 컨텐츠 */}
@@ -727,6 +779,7 @@ function PreviewPanel(): ReactNode {
     content,
     renderMarkdown,
     media,
+    CustomImageGallery, // ✅ 핵심 기능 포함
     SwiperGallery,
     setHasTabChanged,
   ]);
@@ -803,7 +856,10 @@ function PreviewPanel(): ReactNode {
                 </p>
               )}
 
-              {/* Swiper 갤러리 */}
+              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              <CustomImageGallery />
+
+              {/* 기존 슬라이더 갤러리 */}
               <SwiperGallery />
             </div>
           </div>
@@ -819,6 +875,7 @@ function PreviewPanel(): ReactNode {
       description,
       content,
       renderMarkdown,
+      CustomImageGallery, // ✅ 핵심 기능 포함
       SwiperGallery,
     ]
   );
@@ -906,7 +963,10 @@ function PreviewPanel(): ReactNode {
                 </div>
               )}
 
-              {/* Swiper 갤러리 */}
+              {/* ✅ 핵심: 사용자 정의 이미지 갤러리 */}
+              <CustomImageGallery />
+
+              {/* 기존 슬라이더 갤러리 */}
               <SwiperGallery />
             </div>
           </div>
@@ -928,6 +988,7 @@ function PreviewPanel(): ReactNode {
       content,
       renderMarkdown,
       media,
+      CustomImageGallery, // ✅ 핵심 기능 포함
       SwiperGallery,
       DesktopContent,
     ]
@@ -1012,6 +1073,21 @@ function PreviewPanel(): ReactNode {
               <p className="text-xs text-warning-700">
                 메인 이미지가 선택되지 않아 첫 번째 이미지가 자동으로
                 사용됩니다.
+              </p>
+            </div>
+          )}
+
+          {/* ✅ 추가: 이미지 뷰 빌더 상태 표시 */}
+          {imageViewConfig && imageViewConfig.selectedImages.length > 0 && (
+            <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-success-50 border-success-200">
+              <Icon
+                icon="lucide:check-circle"
+                className="flex-shrink-0 text-success"
+              />
+              <p className="text-xs text-success-700">
+                사용자 정의 갤러리에 {imageViewConfig.selectedImages.length}개
+                이미지가
+                {imageViewConfig.layout.columns}열 그리드로 표시됩니다.
               </p>
             </div>
           )}
@@ -1150,4 +1226,3 @@ function PreviewPanel(): ReactNode {
 }
 
 export default PreviewPanel;
-//====여기까지 수정됨====
