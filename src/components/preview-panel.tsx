@@ -809,17 +809,16 @@ function PreviewPanel(): ReactNode {
     ]
   );
 
-  // ✅ 사용자 정의 이미지 갤러리 컴포넌트
-
+  //====여기부터 수정됨====
+  // ✅ 수정: 사용자 정의 이미지 갤러리 컴포넌트 - 모든 헤더와 정보 삭제
+  // 이유: 사용자 요청에 따라 순수하게 이미지 레이아웃만 표시
   const CustomImageGallery = useCallback(() => {
     // 안전한 기본값 제공
-
     const safeCustomGalleryViews = Array.isArray(customGalleryViews)
       ? customGalleryViews
       : [];
 
     // 추가된 갤러리 뷰들이 없으면 렌더링하지 않음
-
     if (safeCustomGalleryViews.length === 0) {
       return null;
     }
@@ -828,55 +827,29 @@ function PreviewPanel(): ReactNode {
       <div className="my-8 space-y-8 not-prose">
         {safeCustomGalleryViews.map((galleryView, galleryIndex) => (
           <div key={galleryView.id || galleryIndex}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="flex items-center gap-2 text-xl font-bold">
-                <Icon icon="lucide:layout-grid" className="text-primary" />
-                사용자 정의 갤러리 {galleryIndex + 1}
-              </h3>
+            {/* ✅ 수정: 모든 헤더, 타이틀, 정보 칩, 날짜 정보 완전 삭제 */}
+            {/* 이유: 사용자 요청에 따라 깔끔한 이미지 레이아웃만 표시 */}
 
-              <div className="flex items-center gap-2">
-                <Chip size="sm" color="primary" variant="flat">
-                  {galleryView.selectedImages?.length || 0}개 이미지
-                </Chip>
-
-                <Chip size="sm" color="secondary" variant="flat">
-                  {galleryView.layout?.columns || 3}열 그리드
-                </Chip>
-
-                <Chip size="sm" color="warning" variant="flat">
-                  {galleryView.layout?.gridType === 'masonry'
-                    ? '매스너리'
-                    : '균등 그리드'}
-                </Chip>
-              </div>
-            </div>
-
+            {/* ✅ 수정: DynamicImageLayout만 렌더링 (모든 추가 정보 제거) */}
             <DynamicImageLayout
               config={{
                 selectedImages: galleryView.selectedImages || [],
-
                 clickOrder: galleryView.clickOrder || [],
-
                 layout: galleryView.layout || { columns: 3, gridType: 'grid' },
-
                 filter: 'available',
               }}
               showNumbers={false}
-              className="p-4 border rounded-lg bg-default-50 border-default-200"
+              className="rounded-lg"
             />
 
-            <div className="mt-3 text-sm text-center text-default-500">
-              {galleryView.createdAt
-                ? `${new Date(
-                    galleryView.createdAt
-                  ).toLocaleString()}에 추가된 갤러리`
-                : '이미지 뷰 빌더에서 추가한 갤러리입니다'}
-            </div>
+            {/* ✅ 수정: 갤러리 설명, 날짜 정보 등 모든 메타데이터 제거 */}
+            {/* 이유: 순수하게 이미지 그리드만 표시하여 깔끔한 UI 구현 */}
           </div>
         ))}
       </div>
     );
   }, [customGalleryViews]);
+  //====여기까지 수정됨====
 
   // 모바일 전용 컨텐츠 컴포넌트
 
