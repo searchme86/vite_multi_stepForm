@@ -129,110 +129,37 @@ function PreviewPanel(): React.ReactNode {
   // 탭 변경 상태 추적
   const [hasTabChanged, setHasTabChanged] = React.useState(false);
 
-  // 디버깅 정보를 useRef로 관리
-  const debugInfoRef = React.useRef({
-    buttonClickCount: 0,
-    modalOpenCount: 0,
-    modalCloseCount: 0,
-    tabChangeCount: 0,
-    criticalPathActive: false,
-  });
-
-  // 탭 히스토리 관리
-  const tabHistoryRef = React.useRef<string[]>([]);
-
-  // 렌더링 카운터
-  const renderCountRef = React.useRef(0);
-  renderCountRef.current += 1;
-
-  // 디버깅 함수
-  const logTabInteraction = (action: string, tab?: string) => {
-    const entry = `${action}${tab ? `-${tab}` : ''}`;
-    tabHistoryRef.current = [...tabHistoryRef.current.slice(-5), entry];
-
-    console.log(`📱 [TAB TRACK] ${action}:`, {
-      tab,
-      modalOpen: isMobileModalOpen,
-      criticalPath: debugInfoRef.current.criticalPathActive,
-      history: tabHistoryRef.current,
-      timestamp: new Date().toISOString(),
-    });
-
-    // 크리티컬 패스 감지
-    if (action === 'tab_change' && isMobileModalOpen) {
-      debugInfoRef.current.criticalPathActive = true;
-      debugInfoRef.current.tabChangeCount += 1;
-      console.warn('🚨 [CRITICAL] 탭 변경 후 모달 닫기 패턴 시작!');
-    }
-  };
-
   // 모바일 모달 열기 함수
   const handleMobileModalOpen = React.useCallback(() => {
     if (isMobileModalOpen) {
-      console.log('⚠️ [DEBUG] 모바일 모달 이미 열려있음');
       return;
     }
 
-    debugInfoRef.current.buttonClickCount += 1;
-    debugInfoRef.current.modalOpenCount += 1;
-    debugInfoRef.current.criticalPathActive = false;
     setHasTabChanged(false);
-
-    logTabInteraction('modal_open');
-
-    console.log('🟢 [DEBUG] 모바일 뷰 버튼 클릭됨:', {
-      clickCount: debugInfoRef.current.buttonClickCount,
-      currentModalState: isMobileModalOpen,
-      renderCount: renderCountRef.current,
-      timestamp: new Date().toISOString(),
-    });
 
     try {
       onMobileModalOpen();
-      console.log('✅ [DEBUG] 모바일 모달 열기 성공');
     } catch (error) {
-      console.error('❌ [DEBUG] 모바일 모달 열기 실패:', error);
+      console.error('모바일 모달 열기 실패:', error);
     }
   }, [isMobileModalOpen, onMobileModalOpen]);
 
   // 모바일 모달 닫기 함수
   const handleMobileModalClose = React.useCallback(() => {
-    debugInfoRef.current.modalCloseCount += 1;
-    const isCriticalPath =
-      debugInfoRef.current.criticalPathActive || hasTabChanged;
-
-    logTabInteraction('modal_close_start');
-
-    console.log('🔴 [DEBUG] 모바일 모달 닫기 시작:', {
-      closeCount: debugInfoRef.current.modalCloseCount,
-      currentModalState: isMobileModalOpen,
-      criticalPathActive: isCriticalPath,
-      hasTabChanged,
-      timestamp: new Date().toISOString(),
-    });
-
     try {
       onMobileModalClose();
-
-      debugInfoRef.current.criticalPathActive = false;
-      debugInfoRef.current.tabChangeCount = 0;
       setHasTabChanged(false);
-
-      logTabInteraction('modal_close_complete');
-      console.log('✅ [DEBUG] 모바일 모달 닫기 완료');
     } catch (error) {
-      console.error('❌ [DEBUG] 모바일 모달 닫기 실패:', error);
+      console.error('모바일 모달 닫기 실패:', error);
     }
-  }, [isMobileModalOpen, onMobileModalClose, hasTabChanged]);
+  }, [onMobileModalClose]);
 
   // 데스크탑 모달 함수들
   const handleDesktopModalOpen = React.useCallback(() => {
-    console.log('🟡 [DEBUG] 데스크탑 뷰 버튼 클릭됨');
     onDesktopModalOpen();
   }, [onDesktopModalOpen]);
 
   const handleDesktopModalClose = React.useCallback(() => {
-    console.log('🟠 [DEBUG] 데스크탑 모달 닫기');
     onDesktopModalClose();
   }, [onDesktopModalClose]);
 
@@ -240,34 +167,10 @@ function PreviewPanel(): React.ReactNode {
   const isMountedRef = React.useRef(true);
 
   React.useEffect(() => {
-    console.log('🚀 [DEBUG] PreviewPanel 컴포넌트 마운트됨:', {
-      renderCount: renderCountRef.current,
-      timestamp: new Date().toISOString(),
-    });
-
     return () => {
       isMountedRef.current = false;
-      console.log('🏁 [DEBUG] PreviewPanel 컴포넌트 언마운트됨');
     };
   }, []);
-
-  // 모달 상태 변화 감지
-  React.useEffect(() => {
-    console.log('🔍 [DEBUG] 모바일 모달 상태 변화:', {
-      isOpen: isMobileModalOpen,
-      hasTabChanged,
-      criticalPathActive: debugInfoRef.current.criticalPathActive,
-      renderCount: renderCountRef.current,
-      timestamp: new Date().toISOString(),
-    });
-  }, [isMobileModalOpen, hasTabChanged]);
-
-  React.useEffect(() => {
-    console.log('🔍 [DEBUG] 데스크탑 모달 상태 변화:', {
-      isOpen: isDesktopModalOpen,
-      timestamp: new Date().toISOString(),
-    });
-  }, [isDesktopModalOpen]);
 
   // formValues 안정화
   const stableFormValues = React.useMemo(() => {
@@ -652,14 +555,6 @@ function PreviewPanel(): React.ReactNode {
     // 탭 변경 핸들러
     const handleTabChange = React.useCallback(
       (key: string) => {
-        console.log('📱 [DEBUG] 모바일 탭 변경:', {
-          previousTab: selectedMobileSize,
-          newTab: key,
-          modalState: isMobileModalOpen,
-          timestamp: new Date().toISOString(),
-        });
-
-        logTabInteraction('tab_change', key);
         setSelectedMobileSize(key);
         setHasTabChanged(true);
       },
@@ -1006,8 +901,6 @@ function PreviewPanel(): React.ReactNode {
     ]
   );
 
-  console.log('sliderImages', sliderImages);
-
   return (
     <>
       {/* ✅ 수정: 모바일 오버레이 - bottom-sheet용 */}
@@ -1073,18 +966,6 @@ function PreviewPanel(): React.ReactNode {
                 메인 이미지가 선택되지 않아 첫 번째 이미지가 자동으로
                 사용됩니다.
               </p>
-            </div>
-          )}
-
-          {/* 디버깅 정보 패널 */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="p-2 mb-4 text-xs border rounded bg-gray-50">
-              <strong>🔧 디버깅:</strong>
-              크리티컬패스:
-              {debugInfoRef.current.criticalPathActive ? '활성' : '비활성'} |
-              탭변경:{debugInfoRef.current.tabChangeCount} | 탭변경상태:
-              {hasTabChanged ? 'O' : 'X'} | 히스토리:
-              {tabHistoryRef.current.slice(-3).join('→')}
             </div>
           )}
 
@@ -1161,17 +1042,7 @@ function PreviewPanel(): React.ReactNode {
                           variant="flat"
                           size="sm"
                           className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                          onPress={() => {
-                            logTabInteraction('x_button_click');
-                            console.log('🔒 [DEBUG] X 버튼 클릭됨:', {
-                              criticalPath:
-                                debugInfoRef.current.criticalPathActive,
-                              tabChangeCount:
-                                debugInfoRef.current.tabChangeCount,
-                              hasTabChanged,
-                            });
-                            handleMobileModalClose();
-                          }}
+                          onPress={handleMobileModalClose}
                           type="button"
                         >
                           <Icon icon="lucide:x" />
