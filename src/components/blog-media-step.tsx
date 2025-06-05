@@ -3,22 +3,26 @@ import { Button, Card, CardBody, Progress } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { useFormContext } from 'react-hook-form';
 import AccordionField from './accordion-field';
-//====여기부터 수정됨====
-// ✅ 수정: MultiStepForm Context 사용 (경로 수정)
-// 이유: addToast 함수를 Context에서 가져와 일관성 유지
 import { useMultiStepForm } from './useMultiStepForm';
-//====여기까지 수정됨====
 
 type BlogMediaStepProps = {};
 
 function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
-  //====여기부터 수정됨====
-  // ✅ 수정: Context에서 addToast 함수 가져오기
-  // 이유: @heroui/react에는 addToast가 없으므로 Context에서 가져옴
-  const { addToast } = useMultiStepForm();
-  //====여기까지 수정됨====
-
+  const { addToast, togglePreviewPanel } = useMultiStepForm();
   const { setValue, watch } = useFormContext();
+
+  // ✅ 추가: 모바일 사이즈 감지
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md 브레이크포인트
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 안정화된 setValue 함수들 생성
   const setMediaValue = useCallback(
@@ -53,9 +57,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: useMemo로 안정화된 값 사용 및 타입 안전성 개선
-  // 이유: watch() 호출을 최소화하고 불필요한 리렌더링 방지
   const formValues = React.useMemo(() => {
     const mediaFromForm = watch('media');
     const mainImageFromForm = watch('mainImage');
@@ -67,13 +68,9 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
   }, [watch('media'), watch('mainImage'), localMediaFiles]);
 
   const { media: mediaFiles, mainImage } = formValues;
-  //====여기까지 수정됨====
 
   const [preSelectedImage, setPreSelectedImage] = useState<string | null>(null);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: getFileIcon 함수를 useCallback으로 최적화
-  // 이유: 함수 재생성 방지
   const getFileIcon = useCallback((fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase() || '';
     switch (extension) {
@@ -90,7 +87,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         return 'lucide:file';
     }
   }, []);
-  //====여기까지 수정됨====
 
   const preSelectImage = useCallback((imageUrl: string) => {
     setPreSelectedImage(imageUrl);
@@ -115,9 +111,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     setPreSelectedImage(null);
   }, []);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: 드래그 핸들러 최적화
-  // 이유: useCallback으로 함수 안정화
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -128,7 +121,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     }
   }, []);
 
-  // 파일 처리 로직에서 setValue 호출 최적화
   const handleFiles = useCallback(
     (files: FileList) => {
       Array.from(files).forEach((file, fileIndex) => {
@@ -163,11 +155,9 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
 
           setTimeout(() => {
             try {
-              // 로컬 상태 업데이트
               setLocalMediaFiles((prev) => {
                 const newFiles = [...prev, result];
 
-                // 상태 업데이트 완료 후 form에 반영 (비동기로 처리)
                 setTimeout(() => {
                   setMediaValue(newFiles);
                 }, 0);
@@ -217,88 +207,15 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
         handleFiles(e.target.files);
       }
     },
-    []
+    [handleFiles]
   );
-  //====여기까지 수정됨====
 
-  // // 파일 처리 로직에서 setValue 호출 최적화
-  // const handleFiles = useCallback(
-  //   (files: FileList) => {
-  //     Array.from(files).forEach((file, fileIndex) => {
-  //       const reader = new FileReader();
-  //       const fileId = `file-${Date.now()}-${Math.random()
-  //         .toString(36)
-  //         .substring(2, 9)}`;
-  //       const fileName = file.name;
-
-  //       if (file.size > 10 * 1024 * 1024) {
-  //         setUploadStatus((prev) => ({ ...prev, [fileName]: 'error' }));
-  //         addToast({
-  //           title: '업로드 실패',
-  //           description: `${fileName} 파일이 10MB 제한을 초과합니다.`,
-  //           color: 'danger',
-  //         });
-  //         return;
-  //       }
-
-  //       setUploading((prev) => ({ ...prev, [fileId]: 0 }));
-  //       setUploadStatus((prev) => ({ ...prev, [fileName]: 'uploading' }));
-
-  //       reader.onprogress = (event) => {
-  //         if (event.lengthComputable) {
-  //           const progress = Math.round((event.loaded / event.total) * 100);
-  //           setUploading((prev) => ({ ...prev, [fileId]: progress }));
-  //         }
-  //       };
-
-  //       reader.onload = (e) => {
-  //         const result = e.target?.result as string;
-
-  //         setTimeout(() => {
-  //           try {
-  //             // 로컬 상태 업데이트
-  //             setLocalMediaFiles((prev) => {
-  //               const newFiles = [...prev, result];
-
-  //               // 상태 업데이트 완료 후 form에 반영 (비동기로 처리)
-  //               setTimeout(() => {
-  //                 setMediaValue(newFiles);
-  //               }, 0);
-
-  //               return newFiles;
-  //             });
-
-  //             setSelectedFiles((prev) => [...prev, fileName]);
-  //             setUploadStatus((prev) => ({ ...prev, [fileName]: 'success' }));
-  //             setUploading((prev) => {
-  //               const newState = { ...prev };
-  //               delete newState[fileId];
-  //               return newState;
-  //             });
-  //           } catch (error) {
-  //             console.error('상태 업데이트 에러:', error);
-  //           }
-  //         }, 1500);
-  //       };
-
-  //       reader.onerror = (error) => {
-  //         console.error('FileReader 에러:', fileName, error);
-  //       };
-
-  //       reader.readAsDataURL(file);
-  //     });
-  //   },
-  //   [setMediaValue, addToast]
-  // );
-
-  // useCallback으로 안정화된 미디어 제거 함수
   const removeMedia = useCallback(
     (index: number) => {
       setLocalMediaFiles((prev) => {
         const newFiles = [...prev];
         newFiles.splice(index, 1);
 
-        // 비동기로 form 상태 업데이트
         setTimeout(() => {
           setMediaValue(newFiles);
         }, 0);
@@ -341,7 +258,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
           ? prev.filter((img) => img !== imageUrl)
           : [...prev, imageUrl];
 
-        // 비동기로 form 상태 업데이트
         setTimeout(() => {
           setSliderImagesValue(newImages);
         }, 0);
@@ -357,7 +273,6 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
       setSliderImages((prev) => {
         const newImages = prev.filter((img) => img !== imageUrl);
 
-        // 비동기로 form 상태 업데이트
         setTimeout(() => {
           setSliderImagesValue(newImages);
         }, 0);
@@ -392,28 +307,39 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
     [mediaFiles, setMainImageValue, addToast]
   );
 
-  // useEffect 의존성 최적화 및 디버깅 로그 제거
   useEffect(() => {
     const formMedia = watch('media');
     if (Array.isArray(formMedia) && formMedia.length > 0) {
       setLocalMediaFiles(formMedia);
     }
-  }, []); // 마운트 시에만 실행
+  }, []);
 
-  // sliderImages 변경 시에만 form 업데이트
   useEffect(() => {
     setSliderImagesValue(sliderImages);
   }, [sliderImages, setSliderImagesValue]);
 
   return (
-    <div className="space-y-6">
-      <div className="p-4 mb-6 rounded-lg bg-default-50">
+    <>
+      <div className="relative p-4 mb-6 rounded-lg bg-default-50">
         <h3 className="mb-2 text-lg font-medium">블로그 미디어 입력 안내</h3>
         <p className="text-default-600">
           블로그에 첨부할 이미지를 업로드해주세요. 파일을 드래그하여
           업로드하거나 파일 선택 버튼을 클릭하여 업로드할 수 있습니다. 지원
           형식: JPG, PNG, SVG (최대 10MB).
         </p>
+
+        {/* ✅ 수정: 모바일에서만 표시되는 버튼 - bottom-sheet 스타일로 변경 */}
+        <button
+          type="button"
+          className={`absolute bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-full shadow-lg transition-all hover:bg-primary-600 active:scale-95 flex items-center gap-2 ${
+            isMobile ? 'block' : 'hidden'
+          }`}
+          onClick={togglePreviewPanel}
+          aria-label="미리보기 패널 토글"
+        >
+          <Icon icon="lucide:eye" />
+          <span className="text-sm font-medium">미리보기</span>
+        </button>
       </div>
 
       {/* 미디어 업로드 섹션 */}
@@ -824,7 +750,7 @@ function BlogMediaStep(props: BlogMediaStepProps): React.ReactNode {
           )}
         </div>
       </AccordionField>
-    </div>
+    </>
   );
 }
 

@@ -1,3 +1,291 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* globals.css 또는 해당 컴포넌트 스타일 파일에 추가 */
+
+/* 모바일 bottom-sheet 패널 애니메이션 개선 */
+@media (max-width: 767px) {
+  /* 바디 스크롤 방지 (패널 열렸을 때) */
+  body.preview-panel-open {
+    overflow: hidden;
+  }
+
+  /* bottom-sheet 그림자 효과 */
+  .preview-panel-bottom-sheet {
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 드래그 핸들 호버 효과 */
+  .preview-panel-bottom-sheet .drag-handle:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+  }
+
+  /* 모바일 패널 bottom-sheet 트랜지션 */
+  .preview-panel-bottom-sheet {
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+      box-shadow 0.3s ease-in-out;
+    will-change: transform;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+
+  /* 모바일 오버레이 트랜지션 */
+  .preview-panel-overlay {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* bottom-sheet 스와이프 힌트 (상단 드래그 바) */
+  .preview-panel-bottom-sheet::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 48px;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    z-index: 1000;
+  }
+
+  /* bottom-sheet가 열렸을 때 추가 스타일링 */
+  .preview-panel-bottom-sheet.open {
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
+  }
+
+  /* 스와이프 저항감 추가 */
+  .preview-panel-bottom-sheet.swiping {
+    transition: none;
+  }
+
+  /* 스냅 애니메이션 */
+  .preview-panel-bottom-sheet.snapping {
+    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+}
+
+/* 데스크탑에서 PreviewPanel 스티키 포지션 */
+@media (min-width: 768px) {
+  .preview-panel-desktop {
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+
+  /* 데스크탑 스크롤 성능 최적화 */
+  .preview-panel-desktop {
+    will-change: scroll-position;
+  }
+}
+
+/* 스크롤바 스타일링 (모바일 & 데스크탑) */
+.preview-panel-bottom-sheet::-webkit-scrollbar,
+.preview-panel-desktop::-webkit-scrollbar {
+  width: 6px;
+}
+
+.preview-panel-bottom-sheet::-webkit-scrollbar-track,
+.preview-panel-desktop::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.preview-panel-bottom-sheet::-webkit-scrollbar-thumb,
+.preview-panel-desktop::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.preview-panel-bottom-sheet::-webkit-scrollbar-thumb:hover,
+.preview-panel-desktop::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* 세로 쓰기 버튼 스타일 개선 (BlogMediaStep.tsx의 미리보기 버튼용) */
+button[writing-mode='vertical-rl'] {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 2px;
+  transition: all 0.2s ease-in-out;
+}
+
+/* 미리보기 토글 버튼 호버 효과 개선 */
+button[aria-label='미리보기 패널 토글']:hover {
+  transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 미리보기 토글 버튼 액티브 효과 */
+button[aria-label='미리보기 패널 토글']:active {
+  transform: translateX(-2px) scale(0.98);
+}
+
+/* 모바일 헤더 고정 - bottom-sheet용 */
+@media (max-width: 767px) {
+  .preview-panel-bottom-sheet .sticky {
+    backdrop-filter: blur(10px);
+    background-color: rgba(255, 255, 255, 0.95);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+}
+
+/* 부드러운 페이드 효과 */
+.preview-panel-content {
+  animation: slideUpIn 0.4s ease-out;
+}
+
+@keyframes slideUpIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* bottom-sheet 전용 키프레임 애니메이션 */
+@keyframes bottomSheetSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bottomSheetSlideDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* bottom-sheet 패널 진입/퇴장 애니메이션 */
+.preview-panel-bottom-sheet.entering {
+  animation: bottomSheetSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.preview-panel-bottom-sheet.leaving {
+  animation: bottomSheetSlideDown 0.25s cubic-bezier(0.55, 0.06, 0.68, 0.19);
+}
+
+/* 반응형 브레이크포인트 조정 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* 태블릿 최적화 */
+  .preview-panel-desktop {
+    max-width: 450px;
+  }
+}
+
+/* 접근성 개선 */
+@media (prefers-reduced-motion: reduce) {
+  .preview-panel-bottom-sheet,
+  .preview-panel-desktop,
+  .preview-panel-content {
+    animation: none;
+    transition: none;
+  }
+
+  .preview-panel-bottom-sheet {
+    transition: transform 0.1s linear;
+  }
+}
+
+/* 다크모드 지원 (선택사항) */
+@media (prefers-color-scheme: dark) {
+  .preview-panel-bottom-sheet {
+    background-color: #1a1a1a;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .preview-panel-bottom-sheet::before {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .preview-panel-bottom-sheet::-webkit-scrollbar-track,
+  .preview-panel-desktop::-webkit-scrollbar-track {
+    background: #2a2a2a;
+  }
+
+  .preview-panel-bottom-sheet::-webkit-scrollbar-thumb,
+  .preview-panel-desktop::-webkit-scrollbar-thumb {
+    background: #666;
+  }
+
+  .preview-panel-bottom-sheet::-webkit-scrollbar-thumb:hover,
+  .preview-panel-desktop::-webkit-scrollbar-thumb:hover {
+    background: #888;
+  }
+
+  .preview-panel-bottom-sheet .sticky {
+    background-color: rgba(26, 26, 26, 0.95);
+  }
+}
+
+/* Tailwind 유틸리티 클래스 보완 */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* bottom-sheet 특별 유틸리티 클래스 */
+.bottom-sheet-handle {
+  width: 48px;
+  height: 4px;
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+  margin: 0 auto;
+  margin-top: 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  transition: background-color 0.2s ease;
+}
+
+.bottom-sheet-handle:hover {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+.bottom-sheet-handle:active {
+  cursor: grabbing;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* 모바일 뷰포트 높이 조정 */
+@media (max-width: 767px) {
+  .bottom-sheet-container {
+    height: 85vh;
+    max-height: 85vh;
+    min-height: 50vh;
+  }
+
+  /* 안전 영역 고려 (노치가 있는 디바이스) */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .bottom-sheet-container {
+      padding-bottom: env(safe-area-inset-bottom);
+      height: calc(85vh - env(safe-area-inset-bottom));
+    }
+  }
+}

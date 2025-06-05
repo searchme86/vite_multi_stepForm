@@ -41,9 +41,6 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-//====여기부터 수정됨====
-// ✅ 추가: Toast 메시지 타입 정의
-// 이유: 타입 안전성 확보 및 컴포넌트 간 일관성 유지
 interface ToastOptions {
   title: string;
   description: string;
@@ -51,33 +48,31 @@ interface ToastOptions {
   hideCloseButton?: boolean;
 }
 
-// ✅ 추가: MultiStepForm Context 타입 정의
-// 이유: props drilling 최소화 및 타입 안전성 확보
-interface MultiStepFormContextType {
-  addToast: (options: ToastOptions) => void;
-  formValues: FormValues;
-}
-
-// // Context 생성
-// const MultiStepFormContext =
-//   React.createContext<MultiStepFormContextType | null>(null);
-
-// // Custom hook for using the context
-// export const useMultiStepForm = () => {
-//   const context = React.useContext(MultiStepFormContext);
-//   if (!context) {
-//     throw new Error(
-//       'useMultiStepForm must be used within MultiStepFormProvider'
-//     );
-//   }
-//   return context;
-// };
-//====여기까지 수정됨====
-
 function MultiStepForm(): React.ReactNode {
   const [currentStep, setCurrentStep] = React.useState(1);
   const [showPreview, setShowPreview] = React.useState(false);
   const [progressWidth, setProgressWidth] = React.useState(0);
+
+  // ✅ 추가: PreviewPanel 상태 관리
+  const [isPreviewPanelOpen, setIsPreviewPanelOpen] = React.useState(false);
+
+  // ✅ 추가: 토글 함수
+  const togglePreviewPanel = React.useCallback(() => {
+    setIsPreviewPanelOpen((prev) => !prev);
+  }, []);
+
+  // ✅ 추가: 모바일 사이즈 감지
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const methods = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -105,9 +100,6 @@ function MultiStepForm(): React.ReactNode {
     watch,
   } = methods;
 
-  //====여기부터 수정됨====
-  // ✅ 수정: formValues 최적화 및 안정화
-  // 이유: watch() 호출을 최소화하고 불필요한 리렌더링 방지
   const formValues = React.useMemo(() => {
     const values = watch();
     // 안전한 기본값 제공
@@ -129,8 +121,6 @@ function MultiStepForm(): React.ReactNode {
     } as FormValues;
   }, [watch()]);
 
-  // ✅ 수정: addToast 함수를 useCallback으로 안정화
-  // 이유: 함수 재생성 방지로 하위 컴포넌트 불필요한 리렌더링 차단
   const addToast = React.useCallback((options: ToastOptions) => {
     // HeroUI의 toast 시스템이 없다면 console.log로 대체
     // 실제 프로젝트에서는 toast 라이브러리나 상태관리로 구현
@@ -164,16 +154,20 @@ function MultiStepForm(): React.ReactNode {
     }
   }, []);
 
-  // ✅ 수정: Context value 안정화
-  // 이유: 불필요한 리렌더링 방지
+  // ✅ 수정: Context value에 PreviewPanel 상태 및 모바일 감지 추가
   const contextValue = React.useMemo(
     () => ({
       addToast,
       formValues,
+      // PreviewPanel 관련 추가
+      isPreviewPanelOpen,
+      setIsPreviewPanelOpen,
+      togglePreviewPanel,
+      // 모바일 상태 추가
+      isMobile,
     }),
-    [addToast, formValues]
+    [addToast, formValues, isPreviewPanelOpen, togglePreviewPanel, isMobile]
   );
-  //====여기까지 수정됨====
 
   React.useEffect(() => {
     // Calculate progress based on current step
@@ -191,9 +185,6 @@ function MultiStepForm(): React.ReactNode {
     setShowPreview((prev) => !prev);
   }, []);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: validateCurrentStep 함수 최적화
-  // 이유: useCallback으로 안정화하여 불필요한 리렌더링 방지
   const validateCurrentStep = React.useCallback(async () => {
     let fieldsToValidate: (keyof FormValues)[] = [];
 
@@ -256,7 +247,6 @@ function MultiStepForm(): React.ReactNode {
     },
     [currentStep, validateCurrentStep]
   );
-  //====여기까지 수정됨====
 
   const onSubmit = React.useCallback(
     (data: FormValues) => {
@@ -286,9 +276,7 @@ function MultiStepForm(): React.ReactNode {
   }, [currentStep]);
 
   return (
-    //====여기부터 수정됨====
-    // ✅ 추가: Context Provider로 감싸기
-    // 이유: 하위 컴포넌트들이 addToast와 formValues에 접근할 수 있도록 함
+    // ✅ Context Provider로 감싸기
     <MultiStepFormContext.Provider value={contextValue}>
       <div className="p-2 mx-auto max-w-7xl sm:p-4 md:p-8">
         <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
@@ -299,20 +287,23 @@ function MultiStepForm(): React.ReactNode {
             <span className="hidden text-xs sm:text-sm text-default-500 sm:inline">
               작성 날짜: {new Date().toISOString().split('T')[0]}
             </span>
-            <Button
-              color="primary"
-              variant="flat"
-              size="sm"
-              fullWidth
-              startContent={
-                <Icon icon={showPreview ? 'lucide:eye-off' : 'lucide:eye'} />
-              }
-              onPress={togglePreview}
-              className="whitespace-nowrap"
-              type="button"
-            >
-              {showPreview ? '미리보기 숨기기' : '미리보기 보기'}
-            </Button>
+            {/* 데스크탑에서만 미리보기 토글 버튼 표시 */}
+            <div className="hidden md:block">
+              <Button
+                color="primary"
+                variant="flat"
+                size="sm"
+                fullWidth
+                startContent={
+                  <Icon icon={showPreview ? 'lucide:eye-off' : 'lucide:eye'} />
+                }
+                onPress={togglePreview}
+                className="whitespace-nowrap"
+                type="button"
+              >
+                {showPreview ? '미리보기 숨기기' : '미리보기 보기'}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -484,8 +475,9 @@ function MultiStepForm(): React.ReactNode {
             </FormProvider>
           </div>
 
+          {/* 데스크탑에서만 미리보기 패널 표시 */}
           {showPreview && (
-            <div className="w-full lg:w-1/2 h-[500px] lg:h-screen lg:sticky lg:top-0 overflow-y-auto">
+            <div className="hidden md:block w-full lg:w-1/2 h-[500px] lg:h-screen lg:sticky lg:top-0 overflow-y-auto">
               <Card className="h-full shadow-sm">
                 <CardBody className="p-3 sm:p-6">
                   <PreviewPanel />
@@ -494,9 +486,13 @@ function MultiStepForm(): React.ReactNode {
             </div>
           )}
         </div>
+
+        {/* ✅ 수정: 모바일에서는 항상 PreviewPanel을 bottom-sheet 형태로 렌더링 */}
+        <div className="md:hidden">
+          <PreviewPanel />
+        </div>
       </div>
     </MultiStepFormContext.Provider>
-    //====여기까지 수정됨====
   );
 }
 

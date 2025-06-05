@@ -1,7 +1,7 @@
 //====여기부터 수정됨====
-// ✅ 수정: 모달 상태 관리 개선 및 DOM 정리 문제 해결
+// ✅ 수정: 모바일 Bottom Sheet 패널 및 스와이프 제스처 지원
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardBody,
@@ -34,9 +34,86 @@ import 'swiper/css/effect-fade';
 import { useMultiStepForm } from './useMultiStepForm';
 
 function PreviewPanel(): React.ReactNode {
-  const { formValues } = useMultiStepForm();
+  const { formValues, isPreviewPanelOpen, setIsPreviewPanelOpen } =
+    useMultiStepForm();
 
-  // 모바일 모달 상태 관리 최적화
+  // ✅ 추가: 모바일 사이즈 감지
+  const [isMobile, setIsMobile] = useState(false);
+
+  // ✅ 수정: 세로 스와이프 제스처를 위한 ref
+  const touchStartY = React.useRef<number>(0);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // ✅ 추가: 로컬 스토리지에 상태 저장
+  React.useEffect(() => {
+    if (isMobile) {
+      localStorage.setItem('previewPanelOpen', String(isPreviewPanelOpen));
+    }
+  }, [isPreviewPanelOpen, isMobile]);
+
+  // ✅ 추가: 로컬 스토리지에서 상태 복원
+  React.useEffect(() => {
+    if (isMobile) {
+      const savedState = localStorage.getItem('previewPanelOpen');
+      if (savedState !== null) {
+        setIsPreviewPanelOpen(savedState === 'true');
+      }
+    }
+  }, [isMobile, setIsPreviewPanelOpen]);
+
+  // ✅ 추가: 모바일에서 ESC 키로 패널 닫기
+  React.useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobile && isPreviewPanelOpen) {
+        setIsPreviewPanelOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isMobile, isPreviewPanelOpen, setIsPreviewPanelOpen]);
+
+  // ✅ 추가: body 스크롤 제어
+  React.useEffect(() => {
+    if (isMobile && isPreviewPanelOpen) {
+      document.body.classList.add('preview-panel-open');
+    } else {
+      document.body.classList.remove('preview-panel-open');
+    }
+
+    return () => {
+      document.body.classList.remove('preview-panel-open');
+    };
+  }, [isMobile, isPreviewPanelOpen]);
+
+  // ✅ 수정: 세로 스와이프 제스처 핸들러 (아래로 스와이프하면 패널 닫기)
+  const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = React.useCallback(
+    (e: React.TouchEvent) => {
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffY = touchEndY - touchStartY.current;
+
+      // 아래로 100px 이상 스와이프하면 패널 닫기
+      if (diffY > 100) {
+        setIsPreviewPanelOpen(false);
+      }
+    },
+    [setIsPreviewPanelOpen]
+  );
+
+  // 모바일 모달 상태 관리
   const {
     isOpen: isMobileModalOpen,
     onOpen: onMobileModalOpen,
@@ -49,10 +126,10 @@ function PreviewPanel(): React.ReactNode {
     onClose: onDesktopModalClose,
   } = useDisclosure();
 
-  // ✅ 수정: 탭 변경 상태 추적
+  // 탭 변경 상태 추적
   const [hasTabChanged, setHasTabChanged] = React.useState(false);
 
-  // ✅ 수정: 디버깅 정보를 useRef로 관리
+  // 디버깅 정보를 useRef로 관리
   const debugInfoRef = React.useRef({
     buttonClickCount: 0,
     modalOpenCount: 0,
@@ -89,9 +166,8 @@ function PreviewPanel(): React.ReactNode {
     }
   };
 
-  // ✅ 수정: 모바일 모달 열기 함수
+  // 모바일 모달 열기 함수
   const handleMobileModalOpen = React.useCallback(() => {
-    // 모달이 이미 열려있으면 실행하지 않음
     if (isMobileModalOpen) {
       console.log('⚠️ [DEBUG] 모바일 모달 이미 열려있음');
       return;
@@ -100,7 +176,7 @@ function PreviewPanel(): React.ReactNode {
     debugInfoRef.current.buttonClickCount += 1;
     debugInfoRef.current.modalOpenCount += 1;
     debugInfoRef.current.criticalPathActive = false;
-    setHasTabChanged(false); // 탭 변경 상태 초기화
+    setHasTabChanged(false);
 
     logTabInteraction('modal_open');
 
@@ -119,7 +195,7 @@ function PreviewPanel(): React.ReactNode {
     }
   }, [isMobileModalOpen, onMobileModalOpen]);
 
-  // ✅ 수정: 모바일 모달 닫기 함수 - 단순화
+  // 모바일 모달 닫기 함수
   const handleMobileModalClose = React.useCallback(() => {
     debugInfoRef.current.modalCloseCount += 1;
     const isCriticalPath =
@@ -138,7 +214,6 @@ function PreviewPanel(): React.ReactNode {
     try {
       onMobileModalClose();
 
-      // 크리티컬 패스 및 탭 변경 상태 리셋
       debugInfoRef.current.criticalPathActive = false;
       debugInfoRef.current.tabChangeCount = 0;
       setHasTabChanged(false);
@@ -176,7 +251,7 @@ function PreviewPanel(): React.ReactNode {
     };
   }, []);
 
-  // ✅ 수정: 모달 상태 변화 감지
+  // 모달 상태 변화 감지
   React.useEffect(() => {
     console.log('🔍 [DEBUG] 모바일 모달 상태 변화:', {
       isOpen: isMobileModalOpen,
@@ -570,11 +645,11 @@ function PreviewPanel(): React.ReactNode {
     ]
   );
 
-  // ✅ 수정: 모바일 전용 컨텐츠 컴포넌트
+  // 모바일 전용 컨텐츠 컴포넌트
   const MobileContent = React.useCallback(() => {
     const [selectedMobileSize, setSelectedMobileSize] = React.useState('360');
 
-    // ✅ 수정: 탭 변경 핸들러
+    // 탭 변경 핸들러
     const handleTabChange = React.useCallback(
       (key: string) => {
         console.log('📱 [DEBUG] 모바일 탭 변경:', {
@@ -586,7 +661,7 @@ function PreviewPanel(): React.ReactNode {
 
         logTabInteraction('tab_change', key);
         setSelectedMobileSize(key);
-        setHasTabChanged(true); // 탭 변경 상태 설정
+        setHasTabChanged(true);
       },
       [selectedMobileSize]
     );
@@ -934,166 +1009,225 @@ function PreviewPanel(): React.ReactNode {
   console.log('sliderImages', sliderImages);
 
   return (
-    <div className="relative">
-      {/* 메인 이미지 피드백 */}
-      {isUsingFallbackImage && media && media.length > 0 && (
-        <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-warning-50 border-warning-200">
-          <Icon
-            icon="lucide:alert-triangle"
-            className="flex-shrink-0 text-warning"
-          />
-          <p className="text-xs text-warning-700">
-            메인 이미지가 선택되지 않아 첫 번째 이미지가 자동으로 사용됩니다.
-          </p>
-        </div>
+    <>
+      {/* ✅ 수정: 모바일 오버레이 - bottom-sheet용 */}
+      {isMobile && isPreviewPanelOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsPreviewPanelOpen(false)}
+        />
       )}
 
-      {/* 디버깅 정보 패널 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="p-2 mb-4 text-xs border rounded bg-gray-50">
-          <strong>🔧 디버깅:</strong>
-          크리티컬패스:
-          {debugInfoRef.current.criticalPathActive ? '활성' : '비활성'} |
-          탭변경:{debugInfoRef.current.tabChangeCount} | 탭변경상태:
-          {hasTabChanged ? 'O' : 'X'} | 히스토리:
-          {tabHistoryRef.current.slice(-3).join('→')}
+      {/* ✅ 수정: 모바일에서 bottom-sheet 스타일로 변경 */}
+      <div
+        className={`
+          ${
+            isMobile
+              ? 'fixed bottom-0 left-0 right-0 bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-300 ease-in-out preview-panel-bottom-sheet rounded-t-3xl'
+              : 'relative preview-panel-desktop'
+          }
+          ${
+            isMobile && !isPreviewPanelOpen
+              ? 'translate-y-full'
+              : 'translate-y-0'
+          }
+          ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
+        `}
+        onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      >
+        {/* ✅ 수정: 모바일 헤더 - bottom-sheet 스타일 */}
+        {isMobile && (
+          <div className="sticky top-0 z-10 bg-white rounded-t-3xl">
+            {/* 드래그 핸들 */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
+            </div>
+
+            {/* 헤더 컨텐츠 */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold">미리보기</h2>
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                onPress={() => setIsPreviewPanelOpen(false)}
+                aria-label="패널 닫기"
+              >
+                <Icon icon="lucide:x" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 기존 컨텐츠를 패딩 추가하여 감싸기 */}
+        <div className={isMobile ? 'p-4' : ''}>
+          {/* 메인 이미지 피드백 */}
+          {isUsingFallbackImage && media && media.length > 0 && (
+            <div className="flex items-center gap-2 p-2 mb-4 border rounded-md bg-warning-50 border-warning-200">
+              <Icon
+                icon="lucide:alert-triangle"
+                className="flex-shrink-0 text-warning"
+              />
+              <p className="text-xs text-warning-700">
+                메인 이미지가 선택되지 않아 첫 번째 이미지가 자동으로
+                사용됩니다.
+              </p>
+            </div>
+          )}
+
+          {/* 디버깅 정보 패널 */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="p-2 mb-4 text-xs border rounded bg-gray-50">
+              <strong>🔧 디버깅:</strong>
+              크리티컬패스:
+              {debugInfoRef.current.criticalPathActive ? '활성' : '비활성'} |
+              탭변경:{debugInfoRef.current.tabChangeCount} | 탭변경상태:
+              {hasTabChanged ? 'O' : 'X'} | 히스토리:
+              {tabHistoryRef.current.slice(-3).join('→')}
+            </div>
+          )}
+
+          {/* 버튼 영역 - 모바일에서는 숨김 */}
+          {!isMobile && (
+            <div className="flex justify-end gap-2 mb-4">
+              <Button
+                color="secondary"
+                variant="flat"
+                size="sm"
+                onPress={handleMobileModalOpen}
+                startContent={<Icon icon="lucide:smartphone" />}
+                className="text-xs shadow-sm sm:text-sm"
+                type="button"
+                isDisabled={isMobileModalOpen}
+              >
+                모바일뷰 보기
+              </Button>
+
+              <Button
+                color="primary"
+                variant="flat"
+                size="sm"
+                onPress={handleDesktopModalOpen}
+                startContent={<Icon icon="lucide:monitor" />}
+                className="text-xs shadow-sm sm:text-sm"
+                type="button"
+                isDisabled={isDesktopModalOpen}
+              >
+                데스크탑뷰 보기
+              </Button>
+            </div>
+          )}
+
+          {/* 일반 미리보기 컨텐츠 */}
+          <PreviewContent />
+
+          {/* 모바일뷰 전용 모달 */}
+          {isMobileModalOpen && (
+            <Modal
+              isOpen={isMobileModalOpen}
+              onClose={handleMobileModalClose}
+              size="full"
+              scrollBehavior="inside"
+              hideCloseButton={false}
+              backdrop="blur"
+              motionProps={{
+                variants: {
+                  enter: {
+                    opacity: 1,
+                    transition: {
+                      duration: 0.3,
+                      ease: 'easeOut',
+                    },
+                  },
+                  exit: {
+                    opacity: 0,
+                    transition: {
+                      duration: 0.2,
+                      ease: 'easeIn',
+                    },
+                  },
+                },
+              }}
+            >
+              <ModalContent>
+                {(onClose) => (
+                  <>
+                    <ModalBody className="p-0">
+                      <div className="relative h-full">
+                        <Button
+                          isIconOnly
+                          color="default"
+                          variant="flat"
+                          size="sm"
+                          className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                          onPress={() => {
+                            logTabInteraction('x_button_click');
+                            console.log('🔒 [DEBUG] X 버튼 클릭됨:', {
+                              criticalPath:
+                                debugInfoRef.current.criticalPathActive,
+                              tabChangeCount:
+                                debugInfoRef.current.tabChangeCount,
+                              hasTabChanged,
+                            });
+                            handleMobileModalClose();
+                          }}
+                          type="button"
+                        >
+                          <Icon icon="lucide:x" />
+                        </Button>
+
+                        {/* MobileContent 컴포넌트 자체가 탭 기능을 포함 */}
+                        <MobileContent />
+                      </div>
+                    </ModalBody>
+                  </>
+                )}
+              </ModalContent>
+            </Modal>
+          )}
+
+          {/* 데스크탑뷰 전용 모달 */}
+          {isDesktopModalOpen && (
+            <Modal
+              isOpen={isDesktopModalOpen}
+              onClose={handleDesktopModalClose}
+              size="full"
+              scrollBehavior="inside"
+              hideCloseButton={false}
+              backdrop="blur"
+            >
+              <ModalContent>
+                {(onClose) => (
+                  <>
+                    <ModalBody className="p-0">
+                      <div className="relative">
+                        <Button
+                          isIconOnly
+                          color="default"
+                          variant="flat"
+                          size="sm"
+                          className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                          onPress={onClose}
+                          type="button"
+                        >
+                          <Icon icon="lucide:x" />
+                        </Button>
+
+                        {/* 전체폭 데스크탑 컨텐츠 */}
+                        <div className="max-w-4xl mx-auto">
+                          <DesktopContent />
+                        </div>
+                      </div>
+                    </ModalBody>
+                  </>
+                )}
+              </ModalContent>
+            </Modal>
+          )}
         </div>
-      )}
-
-      {/* 버튼 영역 */}
-      <div className="flex justify-end gap-2 mb-4">
-        <Button
-          color="secondary"
-          variant="flat"
-          size="sm"
-          onPress={handleMobileModalOpen}
-          startContent={<Icon icon="lucide:smartphone" />}
-          className="text-xs shadow-sm sm:text-sm"
-          type="button"
-          isDisabled={isMobileModalOpen}
-        >
-          모바일뷰 보기
-        </Button>
-
-        <Button
-          color="primary"
-          variant="flat"
-          size="sm"
-          onPress={handleDesktopModalOpen}
-          startContent={<Icon icon="lucide:monitor" />}
-          className="text-xs shadow-sm sm:text-sm"
-          type="button"
-          isDisabled={isDesktopModalOpen}
-        >
-          데스크탑뷰 보기
-        </Button>
       </div>
-
-      {/* 일반 미리보기 컨텐츠 */}
-      <PreviewContent />
-
-      {/* ✅ 수정: 모바일뷰 전용 모달 - 강제 리렌더링 및 DOM 정리 */}
-      {isMobileModalOpen && (
-        <Modal
-          isOpen={isMobileModalOpen}
-          onClose={handleMobileModalClose}
-          size="full"
-          scrollBehavior="inside"
-          hideCloseButton={false}
-          backdrop="blur"
-          motionProps={{
-            variants: {
-              enter: {
-                opacity: 1,
-                transition: {
-                  duration: 0.3,
-                  ease: 'easeOut',
-                },
-              },
-              exit: {
-                opacity: 0,
-                transition: {
-                  duration: 0.2,
-                  ease: 'easeIn',
-                },
-              },
-            },
-          }}
-        >
-          <ModalContent>
-            {(onClose) => (
-              <>
-                <ModalBody className="p-0">
-                  <div className="relative h-full">
-                    <Button
-                      isIconOnly
-                      color="default"
-                      variant="flat"
-                      size="sm"
-                      className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                      onPress={() => {
-                        logTabInteraction('x_button_click');
-                        console.log('🔒 [DEBUG] X 버튼 클릭됨:', {
-                          criticalPath: debugInfoRef.current.criticalPathActive,
-                          tabChangeCount: debugInfoRef.current.tabChangeCount,
-                          hasTabChanged,
-                        });
-                        handleMobileModalClose();
-                      }}
-                      type="button"
-                    >
-                      <Icon icon="lucide:x" />
-                    </Button>
-
-                    {/* MobileContent 컴포넌트 자체가 탭 기능을 포함 */}
-                    <MobileContent />
-                  </div>
-                </ModalBody>
-              </>
-            )}
-          </ModalContent>
-        </Modal>
-      )}
-
-      {/* 데스크탑뷰 전용 모달 */}
-      {isDesktopModalOpen && (
-        <Modal
-          isOpen={isDesktopModalOpen}
-          onClose={handleDesktopModalClose}
-          size="full"
-          scrollBehavior="inside"
-          hideCloseButton={false}
-          backdrop="blur"
-        >
-          <ModalContent>
-            {(onClose) => (
-              <>
-                <ModalBody className="p-0">
-                  <div className="relative">
-                    <Button
-                      isIconOnly
-                      color="default"
-                      variant="flat"
-                      size="sm"
-                      className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                      onPress={onClose}
-                      type="button"
-                    >
-                      <Icon icon="lucide:x" />
-                    </Button>
-
-                    {/* 전체폭 데스크탑 컨텐츠 */}
-                    <div className="max-w-4xl mx-auto">
-                      <DesktopContent />
-                    </div>
-                  </div>
-                </ModalBody>
-              </>
-            )}
-          </ModalContent>
-        </Modal>
-      )}
-    </div>
+    </>
   );
 }
 

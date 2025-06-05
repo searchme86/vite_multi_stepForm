@@ -30,6 +30,10 @@ export interface FormValues {
 export interface MultiStepFormContextType {
   addToast: (options: ToastOptions) => void;
   formValues: FormValues;
+  // PreviewPanel 제어를 위한 새로운 속성
+  isPreviewPanelOpen: boolean;
+  setIsPreviewPanelOpen: (isOpen: boolean) => void;
+  togglePreviewPanel: () => void;
 }
 
 // Context 생성
