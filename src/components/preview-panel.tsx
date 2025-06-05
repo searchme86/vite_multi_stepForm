@@ -69,7 +69,7 @@ import { useFormContext } from 'react-hook-form';
 function PreviewPanel(): ReactNode {
   //====여기부터 수정됨====
 
-  // ✅ 수정: 안전한 useFormContext 사용 및 fallback 처리
+  // ✅ 수정: 완전히 안전한 useFormContext 사용 및 fallback 처리
 
   // 이유: FormProvider가 없을 때 null을 반환하므로 안전하게 처리
 
@@ -78,14 +78,25 @@ function PreviewPanel(): ReactNode {
   let isFormContextAvailable = false;
 
   try {
-    formContextData = useFormContext();
+    // useFormContext 호출을 안전하게 처리
+    const contextResult = useFormContext();
 
-    isFormContextAvailable = !!formContextData;
+    // null 체크를 먼저 수행
+    if (
+      contextResult &&
+      typeof contextResult === 'object' &&
+      contextResult.watch
+    ) {
+      formContextData = contextResult;
+      isFormContextAvailable = true;
+    } else {
+      formContextData = null;
+      isFormContextAvailable = false;
+    }
   } catch (error) {
     // FormProvider 범위 밖에서는 에러가 발생할 수 있음
-
-    console.warn('useFormContext not available, using fallback');
-
+    console.warn('useFormContext not available, using fallback:', error);
+    formContextData = null;
     isFormContextAvailable = false;
   }
 
@@ -101,7 +112,7 @@ function PreviewPanel(): ReactNode {
     imageViewConfig,
 
     customGalleryViews,
-  } = useMultiStepForm();
+  } = useMultiStepForm() || {}; // 안전한 기본값 추가
 
   // ✅ 수정: 안전한 form 값 가져오기 (formContext 우선, fallback으로 Context 사용)
 
@@ -111,6 +122,12 @@ function PreviewPanel(): ReactNode {
 
       try {
         const watchFn = formContextData.watch;
+
+        // watch 함수가 정상적으로 작동하는지 확인
+        if (typeof watchFn !== 'function') {
+          console.warn('watch is not a function, falling back to formValues');
+          return getFallbackFormValues();
+        }
 
         return {
           media: watchFn('media') || [],
@@ -137,7 +154,8 @@ function PreviewPanel(): ReactNode {
         };
       } catch (error) {
         console.warn(
-          'Error using formContext.watch, falling back to formValues'
+          'Error using formContext.watch, falling back to formValues:',
+          error
         );
 
         return getFallbackFormValues();
@@ -152,7 +170,8 @@ function PreviewPanel(): ReactNode {
   // ✅ 추가: Fallback용 formValues 처리 함수
 
   const getFallbackFormValues = useCallback(() => {
-    if (!formValues) {
+    // formValues가 없거나 null인 경우 기본값 반환
+    if (!formValues || typeof formValues !== 'object') {
       return {
         media: [],
 
@@ -178,6 +197,7 @@ function PreviewPanel(): ReactNode {
       };
     }
 
+    // 각 필드를 안전하게 추출
     return {
       media: Array.isArray(formValues.media) ? formValues.media : [],
 
@@ -187,29 +207,57 @@ function PreviewPanel(): ReactNode {
         ? formValues.sliderImages
         : [],
 
-      title: formValues.title || '',
+      title: typeof formValues.title === 'string' ? formValues.title : '',
 
-      description: formValues.description || '',
+      description:
+        typeof formValues.description === 'string'
+          ? formValues.description
+          : '',
 
-      content: formValues.content || '',
+      content: typeof formValues.content === 'string' ? formValues.content : '',
 
-      tags: formValues.tags || '',
+      tags: typeof formValues.tags === 'string' ? formValues.tags : '',
 
-      nickname: formValues.nickname || '',
+      nickname:
+        typeof formValues.nickname === 'string' ? formValues.nickname : '',
 
-      userImage: formValues.userImage || '',
+      userImage:
+        typeof formValues.userImage === 'string' ? formValues.userImage : '',
 
-      emailPrefix: formValues.emailPrefix || '',
+      emailPrefix:
+        typeof formValues.emailPrefix === 'string'
+          ? formValues.emailPrefix
+          : '',
 
-      emailDomain: formValues.emailDomain || '',
+      emailDomain:
+        typeof formValues.emailDomain === 'string'
+          ? formValues.emailDomain
+          : '',
     };
   }, [formValues]);
 
   // ✅ 수정: 최종 form 값들을 안전하게 가져오기
 
   const currentFormValues = useMemo(() => {
-    return getFormValues();
-  }, [getFormValues, formValues, isFormContextAvailable]);
+    try {
+      return getFormValues();
+    } catch (error) {
+      console.warn('Error getting form values, using empty defaults:', error);
+      return {
+        media: [],
+        mainImage: null,
+        sliderImages: [],
+        title: '',
+        description: '',
+        content: '',
+        tags: '',
+        nickname: '',
+        userImage: '',
+        emailPrefix: '',
+        emailDomain: '',
+      };
+    }
+  }, [getFormValues]);
 
   //====여기까지 수정됨====
 
@@ -238,19 +286,27 @@ function PreviewPanel(): ReactNode {
   // ✅ 추가: 로컬 스토리지에 상태 저장
 
   React.useEffect(() => {
-    if (isMobile) {
-      localStorage.setItem('previewPanelOpen', String(isPreviewPanelOpen));
+    if (isMobile && typeof isPreviewPanelOpen === 'boolean') {
+      try {
+        localStorage.setItem('previewPanelOpen', String(isPreviewPanelOpen));
+      } catch (error) {
+        console.warn('Failed to save to localStorage:', error);
+      }
     }
   }, [isPreviewPanelOpen, isMobile]);
 
   // ✅ 추가: 로컬 스토리지에서 상태 복원
 
   React.useEffect(() => {
-    if (isMobile) {
-      const savedState = localStorage.getItem('previewPanelOpen');
+    if (isMobile && setIsPreviewPanelOpen) {
+      try {
+        const savedState = localStorage.getItem('previewPanelOpen');
 
-      if (savedState !== null) {
-        setIsPreviewPanelOpen(savedState === 'true');
+        if (savedState !== null) {
+          setIsPreviewPanelOpen(savedState === 'true');
+        }
+      } catch (error) {
+        console.warn('Failed to load from localStorage:', error);
       }
     }
   }, [isMobile, setIsPreviewPanelOpen]);
@@ -259,7 +315,12 @@ function PreviewPanel(): ReactNode {
 
   React.useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isMobile && isPreviewPanelOpen) {
+      if (
+        e.key === 'Escape' &&
+        isMobile &&
+        isPreviewPanelOpen &&
+        setIsPreviewPanelOpen
+      ) {
         setIsPreviewPanelOpen(false);
       }
     };
@@ -311,7 +372,7 @@ function PreviewPanel(): ReactNode {
 
       // 아래로 100px 이상 스와이프하면 패널 닫기
 
-      if (diffY > 100 && isDragging.current) {
+      if (diffY > 100 && isDragging.current && setIsPreviewPanelOpen) {
         setIsPreviewPanelOpen(false);
       }
 
@@ -330,7 +391,7 @@ function PreviewPanel(): ReactNode {
   const handleHeaderClick = React.useCallback(() => {
     // 드래그 중이 아닐 때만 클릭으로 처리
 
-    if (!isDragging.current) {
+    if (!isDragging.current && setIsPreviewPanelOpen) {
       setIsPreviewPanelOpen(false);
     }
   }, [setIsPreviewPanelOpen]);
@@ -813,7 +874,7 @@ function PreviewPanel(): ReactNode {
   // ✅ 수정: 사용자 정의 이미지 갤러리 컴포넌트 - 모든 헤더와 정보 삭제
   // 이유: 사용자 요청에 따라 순수하게 이미지 레이아웃만 표시
   const CustomImageGallery = useCallback(() => {
-    // 안전한 기본값 제공
+    // 안전한 기본값 제공 - undefined나 null 체크 강화
     const safeCustomGalleryViews = Array.isArray(customGalleryViews)
       ? customGalleryViews
       : [];
@@ -825,27 +886,44 @@ function PreviewPanel(): ReactNode {
 
     return (
       <div className="my-8 space-y-8 not-prose">
-        {safeCustomGalleryViews.map((galleryView, galleryIndex) => (
-          <div key={galleryView.id || galleryIndex}>
-            {/* ✅ 수정: 모든 헤더, 타이틀, 정보 칩, 날짜 정보 완전 삭제 */}
-            {/* 이유: 사용자 요청에 따라 깔끔한 이미지 레이아웃만 표시 */}
+        {safeCustomGalleryViews.map((galleryView, galleryIndex) => {
+          // 각 galleryView도 안전하게 처리
+          if (!galleryView || typeof galleryView !== 'object') {
+            return null;
+          }
 
-            {/* ✅ 수정: DynamicImageLayout만 렌더링 (모든 추가 정보 제거) */}
-            <DynamicImageLayout
-              config={{
-                selectedImages: galleryView.selectedImages || [],
-                clickOrder: galleryView.clickOrder || [],
-                layout: galleryView.layout || { columns: 3, gridType: 'grid' },
-                filter: 'available',
-              }}
-              showNumbers={false}
-              className="rounded-lg"
-            />
+          return (
+            <div key={galleryView.id || `gallery-${galleryIndex}`}>
+              {/* ✅ 수정: 모든 헤더, 타이틀, 정보 칩, 날짜 정보 완전 삭제 */}
+              {/* 이유: 사용자 요청에 따라 깔끔한 이미지 레이아웃만 표시 */}
 
-            {/* ✅ 수정: 갤러리 설명, 날짜 정보 등 모든 메타데이터 제거 */}
-            {/* 이유: 순수하게 이미지 그리드만 표시하여 깔끔한 UI 구현 */}
-          </div>
-        ))}
+              {/* ✅ 수정: DynamicImageLayout만 렌더링 (모든 추가 정보 제거) */}
+              <DynamicImageLayout
+                config={{
+                  selectedImages: Array.isArray(galleryView.selectedImages)
+                    ? galleryView.selectedImages
+                    : [],
+                  clickOrder: Array.isArray(galleryView.clickOrder)
+                    ? galleryView.clickOrder
+                    : [],
+                  layout:
+                    galleryView.layout && typeof galleryView.layout === 'object'
+                      ? {
+                          columns: galleryView.layout.columns || 3,
+                          gridType: galleryView.layout.gridType || 'grid',
+                        }
+                      : { columns: 3, gridType: 'grid' },
+                  filter: 'available',
+                }}
+                showNumbers={false}
+                className="rounded-lg"
+              />
+
+              {/* ✅ 수정: 갤러리 설명, 날짜 정보 등 모든 메타데이터 제거 */}
+              {/* 이유: 순수하게 이미지 그리드만 표시하여 깔끔한 UI 구현 */}
+            </div>
+          );
+        })}
       </div>
     );
   }, [customGalleryViews]);
@@ -1335,7 +1413,7 @@ function PreviewPanel(): ReactNode {
       {isMobile && isPreviewPanelOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => setIsPreviewPanelOpen(false)}
+          onClick={() => setIsPreviewPanelOpen && setIsPreviewPanelOpen(false)}
         />
       )}
 
@@ -1393,7 +1471,9 @@ function PreviewPanel(): ReactNode {
                 onPress={(e) => {
                   e.stopPropagation(); // 부모 클릭 이벤트 방지
 
-                  setIsPreviewPanelOpen(false);
+                  if (setIsPreviewPanelOpen) {
+                    setIsPreviewPanelOpen(false);
+                  }
                 }}
                 aria-label="패널 닫기"
               >
