@@ -1,7 +1,14 @@
 //====여기부터 수정됨====
 // ✅ 수정: 모바일 Bottom Sheet 패널 및 스와이프 제스처 지원
 
-import React, { useState } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react';
 import {
   Card,
   CardBody,
@@ -33,7 +40,7 @@ import 'swiper/css/effect-fade';
 // MultiStepForm Context 사용
 import { useMultiStepForm } from './useMultiStepForm';
 
-function PreviewPanel(): React.ReactNode {
+function PreviewPanel(): ReactNode {
   const { formValues, isPreviewPanelOpen, setIsPreviewPanelOpen } =
     useMultiStepForm();
 
@@ -41,9 +48,10 @@ function PreviewPanel(): React.ReactNode {
   const [isMobile, setIsMobile] = useState(false);
 
   // ✅ 수정: 세로 스와이프 제스처를 위한 ref
-  const touchStartY = React.useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const isDragging = useRef<boolean>(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
@@ -98,6 +106,17 @@ function PreviewPanel(): React.ReactNode {
   // ✅ 수정: 세로 스와이프 제스처 핸들러 (아래로 스와이프하면 패널 닫기)
   const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  }, []);
+
+  const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
+    const currentY = e.touches[0].clientY;
+    const diffY = Math.abs(currentY - touchStartY.current);
+
+    // 5px 이상 움직이면 드래그로 판단
+    if (diffY > 5) {
+      isDragging.current = true;
+    }
   }, []);
 
   const handleTouchEnd = React.useCallback(
@@ -106,12 +125,25 @@ function PreviewPanel(): React.ReactNode {
       const diffY = touchEndY - touchStartY.current;
 
       // 아래로 100px 이상 스와이프하면 패널 닫기
-      if (diffY > 100) {
+      if (diffY > 100 && isDragging.current) {
         setIsPreviewPanelOpen(false);
       }
+
+      // 터치 종료 후 드래그 상태 리셋
+      setTimeout(() => {
+        isDragging.current = false;
+      }, 100);
     },
     [setIsPreviewPanelOpen]
   );
+
+  // ✅ 추가: 헤더 클릭으로 패널 닫기
+  const handleHeaderClick = React.useCallback(() => {
+    // 드래그 중이 아닐 때만 클릭으로 처리
+    if (!isDragging.current) {
+      setIsPreviewPanelOpen(false);
+    }
+  }, [setIsPreviewPanelOpen]);
 
   // 모바일 모달 상태 관리
   const {
@@ -127,10 +159,10 @@ function PreviewPanel(): React.ReactNode {
   } = useDisclosure();
 
   // 탭 변경 상태 추적
-  const [hasTabChanged, setHasTabChanged] = React.useState(false);
+  const [hasTabChanged, setHasTabChanged] = useState(false);
 
   // 모바일 모달 열기 함수
-  const handleMobileModalOpen = React.useCallback(() => {
+  const handleMobileModalOpen = useCallback(() => {
     if (isMobileModalOpen) {
       return;
     }
@@ -145,7 +177,7 @@ function PreviewPanel(): React.ReactNode {
   }, [isMobileModalOpen, onMobileModalOpen]);
 
   // 모바일 모달 닫기 함수
-  const handleMobileModalClose = React.useCallback(() => {
+  const handleMobileModalClose = useCallback(() => {
     try {
       onMobileModalClose();
       setHasTabChanged(false);
@@ -155,25 +187,25 @@ function PreviewPanel(): React.ReactNode {
   }, [onMobileModalClose]);
 
   // 데스크탑 모달 함수들
-  const handleDesktopModalOpen = React.useCallback(() => {
+  const handleDesktopModalOpen = useCallback(() => {
     onDesktopModalOpen();
   }, [onDesktopModalOpen]);
 
-  const handleDesktopModalClose = React.useCallback(() => {
+  const handleDesktopModalClose = useCallback(() => {
     onDesktopModalClose();
   }, [onDesktopModalClose]);
 
   // 컴포넌트 마운트 상태 추적
-  const isMountedRef = React.useRef(true);
+  const isMountedRef = useRef(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
   // formValues 안정화
-  const stableFormValues = React.useMemo(() => {
+  const stableFormValues = useMemo(() => {
     if (!formValues) {
       return {
         mainImage: null,
@@ -234,10 +266,10 @@ function PreviewPanel(): React.ReactNode {
   } = stableFormValues;
 
   // Swiper 상태 관리
-  const [swiperRef, setSwiperRef] = React.useState<any>(null);
-  const [currentSlide, setCurrentSlide] = React.useState(0);
+  const [swiperRef, setSwiperRef] = useState<any>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
 
-  const swiperKey = React.useMemo(() => {
+  const swiperKey = useMemo(() => {
     return sliderImages.length > 0
       ? `swiper-${sliderImages.length}-${Date.now()}`
       : 'swiper-empty';
@@ -247,7 +279,7 @@ function PreviewPanel(): React.ReactNode {
   const heroImage = mainImage || (media && media.length > 0 ? media[0] : null);
   const isUsingFallbackImage = !mainImage && media && media.length > 0;
 
-  const tagArray = React.useMemo(() => {
+  const tagArray = useMemo(() => {
     return tags
       ? tags
           .split(',')
@@ -256,12 +288,12 @@ function PreviewPanel(): React.ReactNode {
       : [];
   }, [tags]);
 
-  const email = React.useMemo(() => {
+  const email = useMemo(() => {
     return emailPrefix && emailDomain ? `${emailPrefix}@${emailDomain}` : '';
   }, [emailPrefix, emailDomain]);
 
   // Swiper 네비게이션 함수들
-  const goToSlide = React.useCallback(
+  const goToSlide = useCallback(
     (index: number) => {
       if (swiperRef && isMountedRef.current) {
         try {
@@ -275,7 +307,7 @@ function PreviewPanel(): React.ReactNode {
     [swiperRef]
   );
 
-  const nextSlide = React.useCallback(() => {
+  const nextSlide = useCallback(() => {
     if (swiperRef && isMountedRef.current) {
       try {
         swiperRef.slideNext();
@@ -285,7 +317,7 @@ function PreviewPanel(): React.ReactNode {
     }
   }, [swiperRef]);
 
-  const prevSlide = React.useCallback(() => {
+  const prevSlide = useCallback(() => {
     if (swiperRef && isMountedRef.current) {
       try {
         swiperRef.slidePrev();
@@ -295,13 +327,13 @@ function PreviewPanel(): React.ReactNode {
     }
   }, [swiperRef]);
 
-  const handleSwiperInit = React.useCallback((swiper: any) => {
+  const handleSwiperInit = useCallback((swiper: any) => {
     if (isMountedRef.current) {
       setSwiperRef(swiper);
     }
   }, []);
 
-  const handleSlideChange = React.useCallback((swiper: any) => {
+  const handleSlideChange = useCallback((swiper: any) => {
     if (isMountedRef.current && swiper?.activeIndex !== undefined) {
       try {
         setCurrentSlide(swiper.activeIndex);
@@ -311,7 +343,7 @@ function PreviewPanel(): React.ReactNode {
     }
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (swiperRef) {
         try {
@@ -324,7 +356,7 @@ function PreviewPanel(): React.ReactNode {
   }, [swiperRef]);
 
   // 유틸리티 함수들
-  const renderMarkdown = React.useCallback((text: string) => {
+  const renderMarkdown = useCallback((text: string) => {
     if (!text) return null;
 
     let formatted = text
@@ -372,7 +404,7 @@ function PreviewPanel(): React.ReactNode {
     );
   }, []);
 
-  const formatDate = React.useCallback((dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     if (!dateString)
       return new Date().toLocaleDateString('en-US', {
         day: 'numeric',
@@ -386,7 +418,7 @@ function PreviewPanel(): React.ReactNode {
     });
   }, []);
 
-  const currentDate = React.useMemo(
+  const currentDate = useMemo(
     () => formatDate(new Date().toISOString()),
     [formatDate]
   );
@@ -396,7 +428,7 @@ function PreviewPanel(): React.ReactNode {
     'https://img.heroui.chat/image/avatar?w=200&h=200&u=1';
   const defaultNickname = 'User';
 
-  const avatarProps = React.useMemo(() => {
+  const avatarProps = useMemo(() => {
     const src = userImage || defaultAvatarSrc;
     const name = nickname || defaultNickname;
 
@@ -409,7 +441,7 @@ function PreviewPanel(): React.ReactNode {
     };
   }, [userImage, nickname]);
 
-  const largeAvatarProps = React.useMemo(() => {
+  const largeAvatarProps = useMemo(() => {
     const src = userImage || defaultAvatarSrc;
     const name = nickname || defaultNickname;
 
@@ -423,7 +455,7 @@ function PreviewPanel(): React.ReactNode {
   }, [userImage, nickname]);
 
   // Swiper 컴포넌트를 재사용 가능한 형태로 분리
-  const SwiperGallery = React.useCallback(
+  const SwiperGallery = useCallback(
     () =>
       sliderImages && sliderImages.length > 0 ? (
         <div className="my-8 not-prose">
@@ -549,11 +581,11 @@ function PreviewPanel(): React.ReactNode {
   );
 
   // 모바일 전용 컨텐츠 컴포넌트
-  const MobileContent = React.useCallback(() => {
-    const [selectedMobileSize, setSelectedMobileSize] = React.useState('360');
+  const MobileContent = useCallback(() => {
+    const [selectedMobileSize, setSelectedMobileSize] = useState('360');
 
     // 탭 변경 핸들러
-    const handleTabChange = React.useCallback(
+    const handleTabChange = useCallback(
       (key: string) => {
         setSelectedMobileSize(key);
         setHasTabChanged(true);
@@ -700,7 +732,7 @@ function PreviewPanel(): React.ReactNode {
   ]);
 
   // 데스크탑 전용 컨텐츠 컴포넌트
-  const DesktopContent = React.useCallback(
+  const DesktopContent = useCallback(
     () => (
       <div>
         {/* 데스크탑 히어로 섹션 */}
@@ -792,13 +824,13 @@ function PreviewPanel(): React.ReactNode {
   );
 
   // 일반 미리보기 컨텐츠 (페이지 내 표시용)
-  const PreviewContent = React.useCallback(
+  const PreviewContent = useCallback(
     () => (
       <div>
         {/* 모바일 영역 (md 이하에서만 표시) */}
         <div className="md:hidden">
           {/* 기존 HTML 구조를 위한 단순 768px 뷰 (탭 기능 없음) */}
-          <div className="w-[100%] mx-auto">
+          <div className="w-[768px] mx-auto">
             {/* 모바일 커버 이미지 */}
             <div className="relative">
               <img
@@ -927,24 +959,39 @@ function PreviewPanel(): React.ReactNode {
           ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
         `}
         onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchMove={isMobile ? handleTouchMove : undefined}
         onTouchEnd={isMobile ? handleTouchEnd : undefined}
       >
         {/* ✅ 수정: 모바일 헤더 - bottom-sheet 스타일 */}
         {isMobile && (
           <div className="sticky top-0 z-10 bg-white rounded-t-3xl">
-            {/* 드래그 핸들 */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
+            {/* 드래그 핸들 - 클릭 가능 */}
+            <div
+              className="flex justify-center pt-3 pb-2 cursor-pointer header-clickable"
+              onClick={handleHeaderClick}
+            >
+              <div className="w-12 h-1 bg-gray-300 rounded-full transition-all hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
             </div>
 
-            {/* 헤더 컨텐츠 */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">미리보기</h2>
+            {/* 헤더 컨텐츠 - 클릭 가능 */}
+            <div
+              className="flex items-center justify-between p-4 border-b cursor-pointer header-clickable transition-colors"
+              onClick={handleHeaderClick}
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">미리보기</h2>
+                <span className="text-xs text-gray-400 opacity-75">
+                  탭하여 닫기
+                </span>
+              </div>
               <Button
                 isIconOnly
                 size="sm"
                 variant="light"
-                onPress={() => setIsPreviewPanelOpen(false)}
+                onPress={(e) => {
+                  e.stopPropagation(); // 부모 클릭 이벤트 방지
+                  setIsPreviewPanelOpen(false);
+                }}
                 aria-label="패널 닫기"
               >
                 <Icon icon="lucide:x" />
