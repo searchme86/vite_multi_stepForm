@@ -312,28 +312,30 @@ function PreviewPanel(): ReactNode {
     };
   }, []);
 
-  // Swiper 상태 관리
-  const [swiperRef, setSwiperRef] = useState<any>(null);
-  const [currentSlide, setCurrentSlide] = useState(0);
+  //====여기부터 수정됨====
+  // ✅ 수정: 모든 커스텀 슬라이드 제어 코드 제거
+  // 이유: swiper가 이미 모든 슬라이드 기능을 제공하므로 중복 제거
 
-  // ✅ 수정: sliderImages 변경에 즉시 반응하는 swiperKey 생성
+  // ❌ 제거: 불필요한 swiper 상태 관리
+  // const [swiperRef, setSwiperRef] = useState<any>(null);
+  // const [currentSlide, setCurrentSlide] = useState(0);
+
+  // ✅ 수정: 단순한 swiperKey 생성 (복잡한 timestamp 제거)
   const swiperKey = useMemo(() => {
     const imageCount = Array.isArray(sliderImages) ? sliderImages.length : 0;
-    const timestamp = Date.now();
-    const key =
-      imageCount > 0
-        ? `swiper-${imageCount}-${timestamp}`
-        : `swiper-empty-${timestamp}`;
-
-    console.log('🔑 SwiperKey 생성:', {
-      imageCount,
-      key,
-      sliderImages: sliderImages?.slice(0, 2),
-      hasImages: imageCount > 0,
-    }); // 디버깅용
-
-    return key;
+    return `swiper-${imageCount}`;
   }, [sliderImages]);
+
+  // ❌ 제거: 모든 커스텀 슬라이드 제어 함수들
+  // const goToSlide = useCallback(...);
+  // const nextSlide = useCallback(...);
+  // const prevSlide = useCallback(...);
+  // const handleSwiperInit = useCallback(...);
+  // const handleSlideChange = useCallback(...);
+
+  // ❌ 제거: swiper 인스턴스 정리 useEffect
+  // useEffect(() => { swiperRef.destroy... }, [swiperRef]);
+  //====여기까지 수정됨====
 
   // 기본 데이터 처리
   const heroImage = mainImage || (media && media.length > 0 ? media[0] : null);
@@ -351,70 +353,6 @@ function PreviewPanel(): ReactNode {
   const email = useMemo(() => {
     return emailPrefix && emailDomain ? `${emailPrefix}@${emailDomain}` : '';
   }, [emailPrefix, emailDomain]);
-
-  // Swiper 네비게이션 함수들
-  const goToSlide = useCallback(
-    (index: number) => {
-      if (swiperRef && isMountedRef.current) {
-        try {
-          swiperRef.slideTo(index);
-          setCurrentSlide(index);
-        } catch (error) {
-          console.warn('Swiper slideTo error:', error);
-        }
-      }
-    },
-    [swiperRef]
-  );
-
-  const nextSlide = useCallback(() => {
-    if (swiperRef && isMountedRef.current) {
-      try {
-        swiperRef.slideNext();
-      } catch (error) {
-        console.warn('Swiper slideNext error:', error);
-      }
-    }
-  }, [swiperRef]);
-
-  const prevSlide = useCallback(() => {
-    if (swiperRef && isMountedRef.current) {
-      try {
-        swiperRef.slidePrev();
-      } catch (error) {
-        console.warn('Swiper slidePrev error:', error);
-      }
-    }
-  }, [swiperRef]);
-
-  const handleSwiperInit = useCallback((swiper: any) => {
-    if (isMountedRef.current) {
-      setSwiperRef(swiper);
-      console.log('🎬 Swiper 초기화 완료:', swiper); // 디버깅용
-    }
-  }, []);
-
-  const handleSlideChange = useCallback((swiper: any) => {
-    if (isMountedRef.current && swiper?.activeIndex !== undefined) {
-      try {
-        setCurrentSlide(swiper.activeIndex);
-      } catch (error) {
-        console.warn('Swiper slide change error:', error);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (swiperRef) {
-        try {
-          swiperRef.destroy?.(true, true);
-        } catch (error) {
-          console.warn('Swiper destroy error:', error);
-        }
-      }
-    };
-  }, [swiperRef]);
 
   // 유틸리티 함수들
   const renderMarkdown = useCallback((text: string) => {
@@ -517,8 +455,8 @@ function PreviewPanel(): ReactNode {
     };
   }, [userImage, nickname]);
 
-  //====핵심 수정====
-  // ✅ 수정: SwiperGallery 컴포넌트 - 실시간 sliderImages 반응 개선
+  //====여기부터 수정됨====
+  // ✅ 수정: SwiperGallery 컴포넌트 - swiper 자체 기능만 사용하도록 완전히 단순화
   const SwiperGallery = useCallback(() => {
     const hasSliderImages =
       Array.isArray(sliderImages) && sliderImages.length > 0;
@@ -552,10 +490,12 @@ function PreviewPanel(): ReactNode {
           <div className="w-full h-[400px] rounded-lg overflow-hidden bg-default-100">
             <Swiper
               key={swiperKey}
-              modules={[Navigation, Pagination, Autoplay, EffectFade]}
+              // ✅ 수정: Autoplay 모듈 추가 (이전에 누락됨)
+              modules={[Navigation, Pagination, EffectFade, Autoplay]}
               spaceBetween={0}
               slidesPerView={1}
-              navigation={false}
+              // ✅ 수정: swiper 자체 네비게이션 사용 (커스텀 버튼 대신)
+              navigation={sliderImages.length > 1}
               pagination={{
                 clickable: true,
                 dynamicBullets: true,
@@ -574,8 +514,7 @@ function PreviewPanel(): ReactNode {
               fadeEffect={{
                 crossFade: true,
               }}
-              onSwiper={handleSwiperInit}
-              onSlideChange={handleSlideChange}
+              // ✅ 수정: 모든 커스텀 이벤트 핸들러 제거
               className="w-full h-full"
               watchSlidesProgress={true}
               allowTouchMove={true}
@@ -594,79 +533,14 @@ function PreviewPanel(): ReactNode {
               ))}
             </Swiper>
 
-            {sliderImages.length > 1 && (
-              <>
-                <button
-                  className="absolute z-10 flex items-center justify-center w-10 h-10 text-white transition-all -translate-y-1/2 rounded-full top-1/2 left-4 bg-black/30 hover:bg-black/50 group"
-                  onClick={prevSlide}
-                  type="button"
-                  aria-label="이전 이미지"
-                >
-                  <Icon
-                    icon="lucide:chevron-left"
-                    className="transition-transform group-hover:scale-110"
-                  />
-                </button>
-
-                <button
-                  className="absolute z-10 flex items-center justify-center w-10 h-10 text-white transition-all -translate-y-1/2 rounded-full top-1/2 right-4 bg-black/30 hover:bg-black/50 group"
-                  onClick={nextSlide}
-                  type="button"
-                  aria-label="다음 이미지"
-                >
-                  <Icon
-                    icon="lucide:chevron-right"
-                    className="transition-transform group-hover:scale-110"
-                  />
-                </button>
-              </>
-            )}
+            {/* ✅ 수정: 모든 커스텀 네비게이션 버튼, 썸네일, 카운터 제거 */}
+            {/* swiper 자체 기능으로 충분함 */}
           </div>
-
-          {sliderImages.length > 1 && (
-            <div className="flex gap-3 pb-2 mt-4 overflow-x-auto hide-scrollbar">
-              {sliderImages.map((img: string, index: number) => (
-                <button
-                  key={`thumb-${index}-${img.slice(-10)}`}
-                  onClick={() => goToSlide(index)}
-                  className={`flex-shrink-0 w-20 h-20 rounded-md overflow-hidden border-2 transition-all hover:scale-105 ${
-                    currentSlide === index
-                      ? 'border-primary shadow-lg'
-                      : 'border-transparent hover:border-primary/50'
-                  }`}
-                  type="button"
-                  aria-label={`${index + 1}번째 이미지로 이동`}
-                >
-                  <img
-                    src={img}
-                    alt={`썸네일 ${index + 1}`}
-                    className="object-cover w-full h-full"
-                    loading="lazy"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {sliderImages.length > 1 && (
-            <div className="absolute z-10 px-2 py-1 text-sm text-white rounded-md top-4 left-4 bg-black/50">
-              {currentSlide + 1} / {sliderImages.length}
-            </div>
-          )}
         </div>
       </div>
     );
-  }, [
-    sliderImages,
-    swiperKey,
-    handleSwiperInit,
-    handleSlideChange,
-    prevSlide,
-    nextSlide,
-    goToSlide,
-    currentSlide,
-  ]);
-  //====핵심 수정 끝====
+  }, [sliderImages, swiperKey]); // ✅ 수정: 불필요한 dependency 모두 제거
+  //====여기까지 수정됨====
 
   // 사용자 정의 이미지 갤러리 컴포넌트
   const CustomImageGallery = useCallback(() => {
@@ -914,28 +788,24 @@ function PreviewPanel(): ReactNode {
           </div>
         </div>
 
-        <div className="flex gap-8">
-          <div className="flex-1">
-            <div className="prose max-w-none">
-              <p className="pl-5 text-lg border-l-4 border-red-500 mb-7">
-                {description || '블로그의 요약 내용이 보여질 공간입니다.'}
-              </p>
+        <div className="w-full">
+          <p className="pl-5 text-lg border-l-4 border-red-500 mb-7">
+            {description || '블로그의 요약 내용이 보여질 공간입니다.'}
+          </p>
 
-              {content ? (
-                renderMarkdown(content)
-              ) : (
-                <p>
-                  Software as a Service (SaaS) has transformed the way
-                  businesses operate, providing access to a wide range of
-                  applications and tools through the internet.
-                </p>
-              )}
+          {content ? (
+            renderMarkdown(content)
+          ) : (
+            <p>
+              Software as a Service (SaaS) has transformed the way businesses
+              operate, providing access to a wide range of applications and
+              tools through the internet.
+            </p>
+          )}
 
-              <CustomImageGallery />
+          <CustomImageGallery />
 
-              <SwiperGallery />
-            </div>
-          </div>
+          <SwiperGallery />
         </div>
       </div>
     ),
