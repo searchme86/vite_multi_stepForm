@@ -354,7 +354,7 @@ function MultiStepForm(): React.ReactNode {
 
   return (
     <MultiStepFormContext.Provider value={contextValue}>
-      <div className="p-2 mx-auto max-w-7xl sm:p-4 md:p-8">
+      <div className="p-2 mx-auto max-w-[1200px] sm:p-4 md:p-8">
         <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
           <h1 className="text-xl font-bold sm:text-2xl">
             새 블로그 포스트 작성
