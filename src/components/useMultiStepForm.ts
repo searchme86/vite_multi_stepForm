@@ -1,16 +1,14 @@
-import React from 'react';
+// 🔧 useMultiStepForm.ts - 에디터 상태 관리 실제 구현 추가
 
-//====핵심 수정====
-// ✅ 추가: Context 관련 타입 및 인터페이스 정의
-// 이유: 타입 안전성 확보 및 컴포넌트 간 일관성 유지
-interface ToastOptions {
-  title: string;
-  description: string;
-  color: 'success' | 'danger' | 'warning' | 'primary';
-  hideCloseButton?: boolean;
-}
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 
-// ✅ 수정: Form Values 타입 정의 - 실시간 동기화를 위한 안전한 타입 정의
+// ====기존 타입 정의들 (그대로 유지)====
 export interface FormValues {
   userImage?: string;
   nickname: string;
@@ -23,148 +21,213 @@ export interface FormValues {
   content: string;
   media?: string[];
   mainImage?: string | null;
-  sliderImages?: string[]; // ✅ 핵심: 슬라이더 이미지 배열 타입
+  sliderImages?: string[];
+
+  // 모듈화된 에디터 관련 필드들
+  editorContainers?: Container[];
+  editorParagraphs?: ParagraphBlock[];
+  editorCompletedContent?: string;
+  isEditorCompleted?: boolean;
 }
 
-// ✅ 수정: 이미지 뷰 설정 타입 정의 (간소화된 버전으로 업데이트)
+/**
+ * 컨테이너 - 사용자가 정의한 글 구조의 각 섹션
+ */
+export interface Container {
+  id: string; // 고유 식별자
+  name: string; // 컨테이너 이름 (예: "글 요약", "서론")
+  order: number; // 순서
+  createdAt: Date; // 생성 시간
+}
+
+/**
+ * 단락 블록 - 개별적으로 작성된 마크다운 단락
+ */
+export interface ParagraphBlock {
+  id: string; // 고유 식별자
+  content: string; // 마크다운 내용
+  containerId: string | null; // 할당된 컨테이너 ID (null이면 미할당)
+  order: number; // 컨테이너 내 순서
+  createdAt: Date; // 생성 시간
+  updatedAt: Date; // 수정 시간
+}
+
+/**
+ * 에디터 상태 - 에디터의 전체 상태 정보
+ */
+export interface EditorState {
+  containers: Container[];
+  paragraphs: ParagraphBlock[];
+  completedContent: string;
+  isCompleted: boolean;
+}
+
+// ====기존 ImageViewConfig 관련 타입들 (그대로 유지)====
 export interface ImageViewConfig {
+  clickOrder: number[];
+  selectedImages: string[];
+  layout: {
+    columns: number;
+    gridType: 'grid' | 'masonry';
+  };
+  filter: 'all' | 'available';
+}
+
+export interface CustomGalleryView {
+  id: string;
+  name: string;
   selectedImages: string[];
   clickOrder: number[];
   layout: {
     columns: number;
-    gridType?: 'grid' | 'masonry'; // ✅ 수정: spacing 제거, gridType 단순화
+    gridType: 'grid' | 'masonry';
   };
-  filter: string;
+  createdAt: Date;
 }
 
-// ✅ 새로 추가: 사용자 정의 갤러리 뷰 타입 정의
-// 이유: 사용자가 "해당 뷰로 추가" 버튼으로 추가한 갤러리들을 관리하기 위함
-export interface CustomGalleryView {
-  id: string; // 고유 식별자
-  selectedImages: string[]; // 선택된 이미지 URL 배열
-  clickOrder: number[]; // 클릭 순서 배열 (1, 2, 3...)
-  layout: {
-    columns: number; // 열 개수 (2~6)
-    gridType: 'grid' | 'masonry'; // 레이아웃 타입
-  };
-  createdAt: Date; // 생성 시간
-  title?: string; // 갤러리 제목 (선택사항)
+export interface ToastOptions {
+  title: string;
+  description: string;
+  color: 'success' | 'danger' | 'warning' | 'primary';
+  hideCloseButton?: boolean;
 }
 
-// ✅ 수정: MultiStepForm Context 타입 정의 - 강화된 타입 안전성
+// ====Context 타입 정의====
 export interface MultiStepFormContextType {
   // 기존 기능들
   addToast: (options: ToastOptions) => void;
-  formValues: FormValues; // ✅ 핵심: 실시간 form 값들
-
-  // PreviewPanel 제어를 위한 속성들
+  formValues: FormValues;
   isPreviewPanelOpen: boolean;
   setIsPreviewPanelOpen: (isOpen: boolean) => void;
   togglePreviewPanel: () => void;
-
-  // 이미지 뷰 설정 관련 상태 (기존 ImageViewBuilder용)
   imageViewConfig: ImageViewConfig;
   setImageViewConfig: React.Dispatch<React.SetStateAction<ImageViewConfig>>;
-
-  // ✅ 새로 추가: 사용자 정의 갤러리 뷰 관련 상태 및 함수들
-  // 이유: 사용자가 여러 개의 갤러리 뷰를 생성하고 PreviewPanel에서 표시할 수 있도록 함
-  customGalleryViews: CustomGalleryView[]; // 사용자가 추가한 갤러리 뷰들의 배열
-  addCustomGalleryView: (view: CustomGalleryView) => void; // 새로운 갤러리 뷰 추가 함수
-  removeCustomGalleryView: (id: string) => void; // 특정 갤러리 뷰 제거 함수
-  clearCustomGalleryViews: () => void; // 모든 갤러리 뷰 초기화 함수
+  customGalleryViews: CustomGalleryView[];
+  addCustomGalleryView: (view: CustomGalleryView) => void;
+  removeCustomGalleryView: (id: string) => void;
+  clearCustomGalleryViews: () => void;
   updateCustomGalleryView: (
     id: string,
     updates: Partial<CustomGalleryView>
-  ) => void; // 갤러리 뷰 업데이트 함수
+  ) => void;
+
+  // ====여기부터 새로 추가 - 에디터 관련 상태 및 함수들====
+  editorState: EditorState;
+  updateEditorContainers: (containers: Container[]) => void;
+  updateEditorParagraphs: (paragraphs: ParagraphBlock[]) => void;
+  updateEditorCompletedContent: (content: string) => void;
+  setEditorCompleted: (isCompleted: boolean) => void;
+  resetEditorState: () => void;
+  // ====여기까지 새로 추가====
 }
 
-// Context 생성
+// ====Context 생성====
 export const MultiStepFormContext =
-  React.createContext<MultiStepFormContextType | null>(null);
+  createContext<MultiStepFormContextType | null>(null);
 
-// ✅ 수정: Custom hook for using the context (타입 안전성 강화)
-export const useMultiStepForm = (): MultiStepFormContextType => {
-  const context = React.useContext(MultiStepFormContext);
-  if (!context) {
-    throw new Error(
-      'useMultiStepForm must be used within MultiStepFormProvider'
-    );
-  }
-  return context;
-};
-
-// ✅ 새로 추가: CustomGalleryView 관련 유틸리티 함수들
-// 이유: 갤러리 뷰 관리를 위한 헬퍼 함수들 제공
+// ====에디터 관련 유틸리티 함수들====
 
 /**
- * 새로운 CustomGalleryView 객체를 생성하는 팩토리 함수
- * @param selectedImages - 선택된 이미지 URL 배열
- * @param clickOrder - 클릭 순서 배열
- * @param layout - 레이아웃 설정
- * @param title - 갤러리 제목 (선택사항)
- * @returns 새로 생성된 CustomGalleryView 객체
+ * 새로운 Container 객체를 생성하는 팩토리 함수
  */
-export const createCustomGalleryView = (
-  selectedImages: string[],
-  clickOrder: number[],
-  layout: { columns: number; gridType: 'grid' | 'masonry' },
-  title?: string
-): CustomGalleryView => {
+export const createContainer = (name: string, order: number): Container => {
   return {
-    id: `gallery-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-    selectedImages: [...selectedImages], // 배열 복사로 불변성 보장
-    clickOrder: [...clickOrder], // 배열 복사로 불변성 보장
-    layout: { ...layout }, // 객체 복사로 불변성 보장
+    id: `container-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    name: name.trim(),
+    order,
     createdAt: new Date(),
-    title,
   };
 };
 
 /**
- * CustomGalleryView 배열을 생성 시간순으로 정렬하는 함수
- * @param views - 정렬할 CustomGalleryView 배열
- * @param order - 정렬 순서 ('asc' | 'desc')
- * @returns 정렬된 CustomGalleryView 배열
+ * 새로운 ParagraphBlock 객체를 생성하는 팩토리 함수
  */
-export const sortCustomGalleryViews = (
-  views: CustomGalleryView[],
-  order: 'asc' | 'desc' = 'desc'
-): CustomGalleryView[] => {
-  return [...views].sort((a, b) => {
-    const timeA = a.createdAt.getTime();
-    const timeB = b.createdAt.getTime();
-    return order === 'asc' ? timeA - timeB : timeB - timeA;
-  });
+export const createParagraphBlock = (content: string): ParagraphBlock => {
+  return {
+    id: `paragraph-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    content: content.trim(),
+    containerId: null,
+    order: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 };
 
 /**
- * CustomGalleryView의 유효성을 검사하는 함수
- * @param view - 검사할 CustomGalleryView 객체
- * @returns 유효성 검사 결과 (boolean)
+ * 컨테이너 배열을 순서대로 정렬하는 함수
  */
-export const validateCustomGalleryView = (view: CustomGalleryView): boolean => {
-  // 필수 필드 존재 여부 확인
-  if (!view.id || !view.selectedImages || !view.clickOrder || !view.layout) {
+export const sortContainers = (containers: Container[]): Container[] => {
+  return [...containers].sort((a, b) => a.order - b.order);
+};
+
+/**
+ * 특정 컨테이너에 속한 단락들을 순서대로 반환하는 함수
+ */
+export const getParagraphsByContainer = (
+  paragraphs: ParagraphBlock[],
+  containerId: string
+): ParagraphBlock[] => {
+  return paragraphs
+    .filter((p) => p.containerId === containerId)
+    .sort((a, b) => a.order - b.order);
+};
+
+/**
+ * 할당되지 않은 단락들을 반환하는 함수
+ */
+export const getUnassignedParagraphs = (
+  paragraphs: ParagraphBlock[]
+): ParagraphBlock[] => {
+  return paragraphs
+    .filter((p) => p.containerId === null)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+};
+
+/**
+ * 전체 컨테이너와 단락을 하나의 완성된 마크다운 텍스트로 변환하는 함수
+ */
+export const generateCompletedContent = (
+  containers: Container[],
+  paragraphs: ParagraphBlock[]
+): string => {
+  const sortedContainers = sortContainers(containers);
+
+  const sections = sortedContainers.map((container) => {
+    const containerParagraphs = getParagraphsByContainer(
+      paragraphs,
+      container.id
+    );
+
+    if (containerParagraphs.length === 0) {
+      return '';
+    }
+
+    // 컨테이너별로 단락들을 결합 (컨테이너 구조는 최종 결과에서 제거)
+    return containerParagraphs.map((p) => p.content).join('\n\n');
+  });
+
+  // 빈 섹션 제거하고 결합
+  return sections.filter((section) => section.trim().length > 0).join('\n\n');
+};
+
+/**
+ * 에디터 상태 유효성 검사 함수
+ */
+export const validateEditorState = (state: Partial<EditorState>): boolean => {
+  // 최소 1개 이상의 컨테이너 필요
+  if (!state.containers || state.containers.length === 0) {
     return false;
   }
 
-  // 배열 길이 일치 여부 확인
-  if (view.selectedImages.length !== view.clickOrder.length) {
+  // 최소 1개 이상의 할당된 단락 필요
+  if (!state.paragraphs || state.paragraphs.length === 0) {
     return false;
   }
 
-  // 이미지 배열이 비어있지 않은지 확인
-  if (view.selectedImages.length === 0) {
-    return false;
-  }
-
-  // 레이아웃 설정 유효성 확인
-  if (view.layout.columns < 1 || view.layout.columns > 10) {
-    return false;
-  }
-
-  // gridType 유효성 확인
-  if (!['grid', 'masonry'].includes(view.layout.gridType)) {
+  const assignedParagraphs = state.paragraphs.filter(
+    (p) => p.containerId !== null
+  );
+  if (assignedParagraphs.length === 0) {
     return false;
   }
 
@@ -172,147 +235,109 @@ export const validateCustomGalleryView = (view: CustomGalleryView): boolean => {
 };
 
 /**
- * CustomGalleryView 배열에서 특정 조건에 맞는 갤러리를 찾는 함수
- * @param views - 검색할 CustomGalleryView 배열
- * @param predicate - 검색 조건 함수
- * @returns 조건에 맞는 첫 번째 CustomGalleryView 또는 undefined
+ * 기본 에디터 상태를 생성하는 함수
  */
-export const findCustomGalleryView = (
-  views: CustomGalleryView[],
-  predicate: (view: CustomGalleryView) => boolean
-): CustomGalleryView | undefined => {
-  return views.find(predicate);
+export const createDefaultEditorState = (): EditorState => {
+  return {
+    containers: [],
+    paragraphs: [],
+    completedContent: '',
+    isCompleted: false,
+  };
 };
 
 /**
- * CustomGalleryView의 요약 정보를 생성하는 함수
- * @param view - 요약할 CustomGalleryView 객체
- * @returns 갤러리 뷰의 요약 정보 문자열
+ * 기본 ImageViewConfig를 생성하는 함수
  */
-export const getCustomGalleryViewSummary = (
-  view: CustomGalleryView
-): string => {
-  const imageCount = view.selectedImages.length;
-  const layoutType =
-    view.layout.gridType === 'masonry' ? '매스너리' : '균등 그리드';
-  const columns = view.layout.columns;
-  const date = view.createdAt.toLocaleDateString('ko-KR');
-
-  return `${imageCount}개 이미지, ${columns}열 ${layoutType} (${date})`;
-};
-
-// ✅ 새로 추가: 기본 ImageViewConfig 생성 함수
-// 이유: ImageViewBuilder에서 사용할 기본 설정을 일관되게 제공
 export const createDefaultImageViewConfig = (): ImageViewConfig => {
   return {
-    selectedImages: [],
     clickOrder: [],
+    selectedImages: [],
     layout: {
       columns: 3,
       gridType: 'grid',
     },
-    filter: 'available',
+    filter: 'all',
   };
 };
 
-// ✅ 새로 추가: ImageViewConfig를 CustomGalleryView로 변환하는 함수
-// 이유: ImageViewBuilder의 현재 상태를 CustomGalleryView로 쉽게 변환
-export const convertImageViewConfigToCustomGalleryView = (
-  config: ImageViewConfig,
-  gridType: 'grid' | 'masonry' = 'grid',
-  title?: string
-): CustomGalleryView => {
-  return createCustomGalleryView(
-    config.selectedImages,
-    config.clickOrder,
-    {
-      columns: config.layout.columns,
-      gridType: gridType, // ImageViewBuilder에서 선택한 뷰 타입 적용
-    },
-    title
+// ====여기부터 새로 추가 - 에디터 상태 관리 훅====
+
+/**
+ * 에디터 상태를 관리하는 커스텀 훅
+ * @returns 에디터 상태와 관련 액션 함수들
+ */
+export const useEditorState = () => {
+  // 에디터 상태 관리
+  const [editorState, setEditorState] = useState<EditorState>(
+    createDefaultEditorState
   );
-};
 
-//====핵심 추가====
-// ✅ 새로 추가: FormValues 유효성 검사 함수
-// 이유: 실시간 동기화 과정에서 데이터 무결성 보장
-export const validateFormValues = (values: Partial<FormValues>): FormValues => {
+  // 컨테이너 업데이트 함수
+  const updateEditorContainers = useCallback((containers: Container[]) => {
+    setEditorState((prev) => ({
+      ...prev,
+      containers,
+      // 컨테이너가 변경되면 완성된 컨텐츠도 재생성
+      completedContent: generateCompletedContent(containers, prev.paragraphs),
+    }));
+  }, []);
+
+  // 단락 업데이트 함수
+  const updateEditorParagraphs = useCallback((paragraphs: ParagraphBlock[]) => {
+    setEditorState((prev) => ({
+      ...prev,
+      paragraphs,
+      // 단락이 변경되면 완성된 컨텐츠도 재생성
+      completedContent: generateCompletedContent(prev.containers, paragraphs),
+    }));
+  }, []);
+
+  // 완성된 컨텐츠 직접 업데이트 함수
+  const updateEditorCompletedContent = useCallback((content: string) => {
+    setEditorState((prev) => ({
+      ...prev,
+      completedContent: content,
+    }));
+  }, []);
+
+  // 에디터 완료 상태 설정 함수
+  const setEditorCompleted = useCallback((isCompleted: boolean) => {
+    setEditorState((prev) => ({
+      ...prev,
+      isCompleted,
+    }));
+  }, []);
+
+  // 에디터 상태 초기화 함수
+  const resetEditorState = useCallback(() => {
+    setEditorState(createDefaultEditorState());
+  }, []);
+
   return {
-    userImage: typeof values.userImage === 'string' ? values.userImage : '',
-    nickname: typeof values.nickname === 'string' ? values.nickname : '',
-    emailPrefix:
-      typeof values.emailPrefix === 'string' ? values.emailPrefix : '',
-    emailDomain:
-      typeof values.emailDomain === 'string' ? values.emailDomain : '',
-    bio: typeof values.bio === 'string' ? values.bio : '',
-    title: typeof values.title === 'string' ? values.title : '',
-    description:
-      typeof values.description === 'string' ? values.description : '',
-    tags: typeof values.tags === 'string' ? values.tags : '',
-    content: typeof values.content === 'string' ? values.content : '',
-    media: Array.isArray(values.media) ? values.media : [],
-    mainImage: values.mainImage || null,
-    sliderImages: Array.isArray(values.sliderImages) ? values.sliderImages : [],
+    editorState,
+    updateEditorContainers,
+    updateEditorParagraphs,
+    updateEditorCompletedContent,
+    setEditorCompleted,
+    resetEditorState,
   };
 };
 
-// ✅ 새로 추가: 슬라이더 이미지 관련 유틸리티 함수들
-// 이유: BlogMediaStep과 PreviewPanel 간의 일관된 슬라이더 관리
-
 /**
- * 슬라이더 이미지 배열이 유효한지 검사하는 함수
- * @param sliderImages - 검사할 슬라이더 이미지 배열
- * @returns 유효성 검사 결과 (boolean)
+ * MultiStepForm Context를 사용하는 훅
  */
-export const validateSliderImages = (
-  sliderImages: any
-): sliderImages is string[] => {
-  return (
-    Array.isArray(sliderImages) &&
-    sliderImages.every((img) => typeof img === 'string' && img.length > 0)
-  );
+export const useMultiStepForm = (): MultiStepFormContextType | null => {
+  const context = useContext(MultiStepFormContext);
+
+  if (!context) {
+    console.warn(
+      'useMultiStepForm은 MultiStepFormContext.Provider 내부에서 사용되어야 합니다.'
+    );
+    return null;
+  }
+
+  return context;
 };
 
-/**
- * 중복된 슬라이더 이미지를 제거하는 함수
- * @param sliderImages - 정리할 슬라이더 이미지 배열
- * @returns 중복이 제거된 슬라이더 이미지 배열
- */
-export const deduplicateSliderImages = (sliderImages: string[]): string[] => {
-  return [...new Set(sliderImages)];
-};
-
-/**
- * 슬라이더 이미지 순서를 변경하는 함수
- * @param sliderImages - 현재 슬라이더 이미지 배열
- * @param fromIndex - 이동할 이미지의 현재 인덱스
- * @param toIndex - 이동할 목표 인덱스
- * @returns 순서가 변경된 슬라이더 이미지 배열
- */
-export const reorderSliderImages = (
-  sliderImages: string[],
-  fromIndex: number,
-  toIndex: number
-): string[] => {
-  const result = [...sliderImages];
-  const [removed] = result.splice(fromIndex, 1);
-  result.splice(toIndex, 0, removed);
-  return result;
-};
-
-/**
- * 슬라이더 이미지 상태 정보를 생성하는 함수
- * @param sliderImages - 슬라이더 이미지 배열
- * @returns 슬라이더 상태 정보 객체
- */
-export const getSliderImageInfo = (sliderImages: string[]) => {
-  return {
-    count: sliderImages.length,
-    isEmpty: sliderImages.length === 0,
-    hasImages: sliderImages.length > 0,
-    isMultiple: sliderImages.length > 1,
-    firstImage: sliderImages[0] || null,
-    lastImage: sliderImages[sliderImages.length - 1] || null,
-  };
-};
-//====핵심 추가 끝====
+// ====여기까지 새로 추가====

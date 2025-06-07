@@ -44,26 +44,36 @@ import DynamicImageLayout from './DynamicImageLayout';
 import { useMultiStepForm } from './useMultiStepForm';
 
 function PreviewPanel(): ReactNode {
-  //====핵심 수정====
-  // ✅ 수정: Context의 formValues를 우선적으로 사용
-  // 이유: FormContext watch가 불안정하므로 Context의 실시간 formValues 사용
+  // Context의 formValues를 우선적으로 사용
   const {
     formValues,
     isPreviewPanelOpen,
     setIsPreviewPanelOpen,
     imageViewConfig,
     customGalleryViews,
+    //====여기부터 수정됨====
+    // ✅ 수정: 에디터 상태도 가져오기
+    // 이유: 에디터 완성 여부와 상태를 체크하기 위해
+    editorState,
+    //====여기까지 수정됨====
   } = useMultiStepForm() || {};
 
-  // ✅ 수정: 안전한 기본값 제공 및 실시간 값 사용
+  // 안전한 기본값 제공 및 실시간 값 사용
   const currentFormValues = useMemo(() => {
     if (formValues && typeof formValues === 'object') {
       console.log('✅ Context formValues 사용:', {
         sliderImagesLength: formValues.sliderImages?.length || 0,
         sliderImages: formValues.sliderImages?.slice(0, 2) || [],
+        //====여기부터 수정됨====
+        // ✅ 수정: 에디터 관련 로그 추가
+        // 이유: 에디터 결과 추적을 위해
+        editorCompletedContent:
+          formValues.editorCompletedContent?.slice(0, 50) + '...' || 'none',
+        isEditorCompleted: formValues.isEditorCompleted || false,
+        //====여기까지 수정됨====
         source: 'Context-FormValues',
         timestamp: new Date().toLocaleTimeString(),
-      }); // 디버깅용
+      });
 
       return {
         media: Array.isArray(formValues.media) ? formValues.media : [],
@@ -91,6 +101,18 @@ function PreviewPanel(): ReactNode {
           typeof formValues.emailDomain === 'string'
             ? formValues.emailDomain
             : '',
+        //====여기부터 수정됨====
+        // ✅ 수정: 에디터 관련 값들 추가
+        // 이유: 에디터 결과를 미리보기에서 사용하기 위해
+        editorCompletedContent:
+          typeof formValues.editorCompletedContent === 'string'
+            ? formValues.editorCompletedContent
+            : '',
+        isEditorCompleted:
+          typeof formValues.isEditorCompleted === 'boolean'
+            ? formValues.isEditorCompleted
+            : false,
+        //====여기까지 수정됨====
       };
     }
 
@@ -107,18 +129,28 @@ function PreviewPanel(): ReactNode {
       userImage: '',
       emailPrefix: '',
       emailDomain: '',
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 기본값 추가
+      // 이유: 안전한 기본값 제공
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+      //====여기까지 수정됨====
     };
 
     console.log('📋 기본값 사용:', {
       sliderImagesLength: 0,
       sliderImages: [],
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 기본값 로그
+      editorCompletedContent: 'none',
+      isEditorCompleted: false,
+      //====여기까지 수정됨====
       source: 'DefaultValues',
       timestamp: new Date().toLocaleTimeString(),
-    }); // 디버깅용
+    });
 
     return defaultValues;
-  }, [formValues]); // Context의 formValues만 dependency로 사용
-  //====핵심 수정 끝====
+  }, [formValues]);
 
   const {
     mainImage,
@@ -132,16 +164,69 @@ function PreviewPanel(): ReactNode {
     userImage,
     emailPrefix,
     emailDomain,
+    //====여기부터 수정됨====
+    // ✅ 수정: 에디터 관련 값들 destructuring
+    // 이유: 컴포넌트에서 사용하기 위해
+    editorCompletedContent,
+    isEditorCompleted,
+    //====여기까지 수정됨====
   } = currentFormValues;
+
+  //====여기부터 수정됨====
+  // ✅ 수정: 우선 사용할 컨텐츠 결정 로직
+  // 이유: 에디터 결과가 있으면 우선 사용, 없으면 기본 content 사용
+  const displayContent = useMemo(() => {
+    // 에디터가 완성되고 에디터 컨텐츠가 있으면 에디터 결과 우선 사용
+    if (isEditorCompleted && editorCompletedContent?.trim()) {
+      return {
+        text: editorCompletedContent,
+        source: 'editor',
+      };
+    }
+
+    // 그렇지 않으면 기본 content 사용
+    return {
+      text: content,
+      source: 'basic',
+    };
+  }, [isEditorCompleted, editorCompletedContent, content]);
+
+  // ✅ 수정: 에디터 상태 표시용 정보
+  const editorStatusInfo = useMemo(() => {
+    if (!editorState) {
+      return {
+        hasEditor: false,
+        containerCount: 0,
+        paragraphCount: 0,
+        isCompleted: false,
+      };
+    }
+
+    return {
+      hasEditor: true,
+      containerCount: editorState.containers?.length || 0,
+      paragraphCount:
+        editorState.paragraphs?.filter((p) => p.containerId !== null)?.length ||
+        0,
+      isCompleted: editorState.isCompleted || false,
+    };
+  }, [editorState]);
+  //====여기까지 수정됨====
 
   // sliderImages 변경 감지 및 디버깅 강화
   useEffect(() => {
     console.log('🎬 PreviewPanel sliderImages 변경 감지:', {
       length: sliderImages?.length || 0,
       images: sliderImages?.slice(0, 2) || [],
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 상태 변경 감지 로그 추가
+      // 이유: 에디터 결과 반영 여부 확인
+      editorStatus: editorStatusInfo,
+      displayContentSource: displayContent.source,
+      //====여기까지 수정됨====
       timestamp: new Date().toLocaleTimeString(),
     });
-  }, [sliderImages]);
+  }, [sliderImages, editorStatusInfo, displayContent.source]);
 
   // 모바일 사이즈 감지
   const [isMobile, setIsMobile] = useState(false);
@@ -312,30 +397,11 @@ function PreviewPanel(): ReactNode {
     };
   }, []);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: 모든 커스텀 슬라이드 제어 코드 제거
-  // 이유: swiper가 이미 모든 슬라이드 기능을 제공하므로 중복 제거
-
-  // ❌ 제거: 불필요한 swiper 상태 관리
-  // const [swiperRef, setSwiperRef] = useState<any>(null);
-  // const [currentSlide, setCurrentSlide] = useState(0);
-
-  // ✅ 수정: 단순한 swiperKey 생성 (복잡한 timestamp 제거)
+  // 단순한 swiperKey 생성
   const swiperKey = useMemo(() => {
     const imageCount = Array.isArray(sliderImages) ? sliderImages.length : 0;
     return `swiper-${imageCount}`;
   }, [sliderImages]);
-
-  // ❌ 제거: 모든 커스텀 슬라이드 제어 함수들
-  // const goToSlide = useCallback(...);
-  // const nextSlide = useCallback(...);
-  // const prevSlide = useCallback(...);
-  // const handleSwiperInit = useCallback(...);
-  // const handleSlideChange = useCallback(...);
-
-  // ❌ 제거: swiper 인스턴스 정리 useEffect
-  // useEffect(() => { swiperRef.destroy... }, [swiperRef]);
-  //====여기까지 수정됨====
 
   // 기본 데이터 처리
   const heroImage = mainImage || (media && media.length > 0 ? media[0] : null);
@@ -455,8 +521,7 @@ function PreviewPanel(): ReactNode {
     };
   }, [userImage, nickname]);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: SwiperGallery 컴포넌트 - swiper 자체 기능만 사용하도록 완전히 단순화
+  // SwiperGallery 컴포넌트 - swiper 자체 기능만 사용하도록 완전히 단순화
   const SwiperGallery = useCallback(() => {
     const hasSliderImages =
       Array.isArray(sliderImages) && sliderImages.length > 0;
@@ -468,7 +533,7 @@ function PreviewPanel(): ReactNode {
       actualCount,
       timestamp: new Date().toLocaleTimeString(),
       swiperKey,
-    }); // 디버깅용
+    });
 
     if (!hasSliderImages || actualCount === 0) {
       console.log(
@@ -490,11 +555,9 @@ function PreviewPanel(): ReactNode {
           <div className="w-full h-[400px] rounded-lg overflow-hidden bg-default-100">
             <Swiper
               key={swiperKey}
-              // ✅ 수정: Autoplay 모듈 추가 (이전에 누락됨)
               modules={[Navigation, Pagination, EffectFade, Autoplay]}
               spaceBetween={0}
               slidesPerView={1}
-              // ✅ 수정: swiper 자체 네비게이션 사용 (커스텀 버튼 대신)
               navigation={sliderImages.length > 1}
               pagination={{
                 clickable: true,
@@ -514,7 +577,6 @@ function PreviewPanel(): ReactNode {
               fadeEffect={{
                 crossFade: true,
               }}
-              // ✅ 수정: 모든 커스텀 이벤트 핸들러 제거
               className="w-full h-full"
               watchSlidesProgress={true}
               allowTouchMove={true}
@@ -532,15 +594,11 @@ function PreviewPanel(): ReactNode {
                 </SwiperSlide>
               ))}
             </Swiper>
-
-            {/* ✅ 수정: 모든 커스텀 네비게이션 버튼, 썸네일, 카운터 제거 */}
-            {/* swiper 자체 기능으로 충분함 */}
           </div>
         </div>
       </div>
     );
-  }, [sliderImages, swiperKey]); // ✅ 수정: 불필요한 dependency 모두 제거
-  //====여기까지 수정됨====
+  }, [sliderImages, swiperKey]);
 
   // 사용자 정의 이미지 갤러리 컴포넌트
   const CustomImageGallery = useCallback(() => {
@@ -679,8 +737,11 @@ function PreviewPanel(): ReactNode {
 
               <h2 className="text-2xl font-bold">Introduction</h2>
 
-              {content ? (
-                renderMarkdown(content)
+              {/*====여기부터 수정됨====*/}
+              {/* ✅ 수정: 에디터 결과 또는 기본 content 렌더링 */}
+              {/* 이유: 에디터에서 완성된 글이 있으면 우선 표시 */}
+              {displayContent.text ? (
+                renderMarkdown(displayContent.text)
               ) : (
                 <p>
                   Software as a Service (SaaS) has transformed the way
@@ -691,6 +752,7 @@ function PreviewPanel(): ReactNode {
                   browser or mobile app.
                 </p>
               )}
+              {/*====여기까지 수정됨====*/}
 
               {media && media.length > 1 && (
                 <div className="my-6">
@@ -706,14 +768,18 @@ function PreviewPanel(): ReactNode {
 
               <SwiperGallery />
 
-              {content ? (
-                renderMarkdown(content.split('\n\n')[1] || '')
+              {/*====여기부터 수정됨====*/}
+              {/* ✅ 수정: 추가 컨텐츠도 에디터 결과 사용 */}
+              {/* 이유: 일관성 유지 */}
+              {displayContent.text && displayContent.text.split('\n\n')[1] ? (
+                renderMarkdown(displayContent.text.split('\n\n')[1])
               ) : (
                 <p>
                   Macrivate offers a range of features that can help your team
                   work more efficiently and productively.
                 </p>
               )}
+              {/*====여기까지 수정됨====*/}
             </div>
           </div>
         </div>
@@ -726,7 +792,11 @@ function PreviewPanel(): ReactNode {
     avatarProps,
     nickname,
     description,
-    content,
+    //====여기부터 수정됨====
+    // ✅ 수정: displayContent 사용하도록 dependency 변경
+    // 이유: 에디터 결과 반영
+    displayContent,
+    //====여기까지 수정됨====
     renderMarkdown,
     media,
     CustomImageGallery,
@@ -793,8 +863,11 @@ function PreviewPanel(): ReactNode {
             {description || '블로그의 요약 내용이 보여질 공간입니다.'}
           </p>
 
-          {content ? (
-            renderMarkdown(content)
+          {/*====여기부터 수정됨====*/}
+          {/* ✅ 수정: 에디터 결과 또는 기본 content 렌더링 */}
+          {/* 이유: 에디터에서 완성된 글이 있으면 우선 표시 */}
+          {displayContent.text ? (
+            renderMarkdown(displayContent.text)
           ) : (
             <p>
               Software as a Service (SaaS) has transformed the way businesses
@@ -802,6 +875,7 @@ function PreviewPanel(): ReactNode {
               tools through the internet.
             </p>
           )}
+          {/*====여기까지 수정됨====*/}
 
           <CustomImageGallery />
 
@@ -816,7 +890,11 @@ function PreviewPanel(): ReactNode {
       largeAvatarProps,
       nickname,
       description,
-      content,
+      //====여기부터 수정됨====
+      // ✅ 수정: displayContent 사용하도록 dependency 변경
+      // 이유: 에디터 결과 반영
+      displayContent,
+      //====여기까지 수정됨====
       renderMarkdown,
       CustomImageGallery,
       SwiperGallery,
@@ -886,11 +964,15 @@ function PreviewPanel(): ReactNode {
                   '모바일 뷰이면서 블로그의 요약 컨텐츠가 렌더링될 공간입니다'}
               </p>
 
-              {content ? (
-                renderMarkdown(content)
+              {/*====여기부터 수정됨====*/}
+              {/* ✅ 수정: 에디터 결과 또는 기본 content 렌더링 */}
+              {/* 이유: 에디터에서 완성된 글이 있으면 우선 표시 */}
+              {displayContent.text ? (
+                renderMarkdown(displayContent.text)
               ) : (
                 <p>모바일 뷰이면서 블로그의 마크다운이 렌더링할 공간입니다.</p>
               )}
+              {/*====여기까지 수정됨====*/}
 
               {media && media.length > 1 && (
                 <div className="my-6">
@@ -921,7 +1003,11 @@ function PreviewPanel(): ReactNode {
       avatarProps,
       nickname,
       description,
-      content,
+      //====여기부터 수정됨====
+      // ✅ 수정: displayContent 사용하도록 dependency 변경
+      // 이유: 에디터 결과 반영
+      displayContent,
+      //====여기까지 수정됨====
       renderMarkdown,
       media,
       CustomImageGallery,
@@ -939,9 +1025,24 @@ function PreviewPanel(): ReactNode {
       mediaLength: media?.length || 0,
       sliderImagesLength: sliderImages?.length || 0,
       sliderImagesFirst: sliderImages?.[0]?.slice(0, 30) + '...' || 'none',
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 상태 로그 추가
+      // 이유: 에디터 결과 반영 확인
+      editorStatus: editorStatusInfo,
+      displayContentSource: displayContent.source,
+      displayContentLength: displayContent.text?.length || 0,
+      //====여기까지 수정됨====
       formValuesSource: 'Context',
     });
-  }, [mainImage, heroImage, isUsingFallbackImage, media, sliderImages]);
+  }, [
+    mainImage,
+    heroImage,
+    isUsingFallbackImage,
+    media,
+    sliderImages,
+    editorStatusInfo,
+    displayContent,
+  ]);
 
   return (
     <>
@@ -1054,6 +1155,55 @@ function PreviewPanel(): ReactNode {
               </p>
             </div>
           )}
+
+          {/*====여기부터 수정됨====*/}
+          {/* ✅ 수정: 에디터 상태 표시 추가 */}
+          {/* 이유: 사용자에게 에디터 사용 여부와 상태 정보 제공 */}
+          {editorStatusInfo.hasEditor && (
+            <div
+              className={`flex items-center gap-2 p-2 mb-4 border rounded-md ${
+                editorStatusInfo.isCompleted
+                  ? 'bg-success-50 border-success-200'
+                  : 'bg-info-50 border-info-200'
+              }`}
+            >
+              <Icon
+                icon={
+                  editorStatusInfo.isCompleted
+                    ? 'lucide:check-circle'
+                    : 'lucide:edit'
+                }
+                className={`flex-shrink-0 ${
+                  editorStatusInfo.isCompleted ? 'text-success' : 'text-info'
+                }`}
+              />
+              <p
+                className={`text-xs ${
+                  editorStatusInfo.isCompleted
+                    ? 'text-success-700'
+                    : 'text-info-700'
+                }`}
+              >
+                {editorStatusInfo.isCompleted
+                  ? `모듈화된 에디터로 작성 완료! (컨테이너 ${editorStatusInfo.containerCount}개, 단락 ${editorStatusInfo.paragraphCount}개 조합)`
+                  : `모듈화된 에디터 사용 중 (컨테이너 ${editorStatusInfo.containerCount}개, 할당된 단락 ${editorStatusInfo.paragraphCount}개)`}
+              </p>
+            </div>
+          )}
+
+          {displayContent.source === 'editor' && (
+            <div className="flex items-center gap-2 p-2 mb-4 border border-purple-200 rounded-md bg-purple-50">
+              <Icon
+                icon="lucide:sparkles"
+                className="flex-shrink-0 text-purple-600"
+              />
+              <p className="text-xs text-purple-700">
+                ✨ 현재 모듈화된 에디터 결과가 표시되고 있습니다. (레고 블록식
+                조합)
+              </p>
+            </div>
+          )}
+          {/*====여기까지 수정됨====*/}
 
           {!isMobile && (
             <div className="flex justify-end gap-2 mb-4">
