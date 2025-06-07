@@ -359,13 +359,10 @@ function MultiStepForm(): React.ReactNode {
       case 3:
         fieldsToValidate = ['content'];
         break;
-      case 4:
-        // No required fields in media step
-        return true;
       //====여기부터 수정됨====
-      // ✅ 수정: 에디터 스텝 유효성 검사 추가
-      // 이유: 에디터에서 글 작성 완료 여부 확인
-      case 5:
+      // ✅ 수정: 4번째 스텝을 에디터 유효성 검사로 변경
+      // 이유: 스텝 순서 조정으로 에디터가 4번째로 이동
+      case 4:
         // 에디터에서 완성된 글이 있는지 확인
         if (!editorState.isCompleted || !editorState.completedContent.trim()) {
           addToast({
@@ -375,6 +372,11 @@ function MultiStepForm(): React.ReactNode {
           });
           return false;
         }
+        return true;
+      // ✅ 수정: 5번째 스텝을 미디어 스텝으로 변경
+      // 이유: 블로그 미디어가 마지막 단계가 되도록 함
+      case 5:
+        // No required fields in media step
         return true;
       //====여기까지 수정됨====
     }
@@ -450,13 +452,15 @@ function MultiStepForm(): React.ReactNode {
         return <BlogBasicStep />;
       case 3:
         return <BlogContentStep />;
-      case 4:
-        return <BlogMediaStep />;
       //====여기부터 수정됨====
-      // ✅ 수정: 5번째 스텝으로 모듈화된 에디터 추가
-      // 이유: 새로운 에디터 기능 제공
-      case 5:
+      // ✅ 수정: 4번째 스텝을 모듈화된 에디터로 변경
+      // 이유: 블로그 컨텐츠 다음에 모듈화 에디터가 오도록 순서 조정
+      case 4:
         return <ModularBlogEditor />;
+      // ✅ 수정: 5번째 스텝을 블로그 미디어로 변경
+      // 이유: 블로그 미디어가 가장 마지막 섹션이 되도록 함
+      case 5:
+        return <BlogMediaStep />;
       //====여기까지 수정됨====
       default:
         return null;
@@ -549,12 +553,12 @@ function MultiStepForm(): React.ReactNode {
                       className="z-10"
                       type="button"
                     >
-                      4. 블로그 미디어
+                      4. 모듈화 에디터
                     </Button>
 
                     {/*====여기부터 수정됨====*/}
-                    {/* ✅ 수정: 5번째 스텝 버튼 추가 */}
-                    {/* 이유: 모듈화된 에디터 스텝 네비게이션 */}
+                    {/* ✅ 수정: 5번째 스텝을 블로그 미디어로 변경 */}
+                    {/* 이유: 블로그 미디어가 마지막 단계가 되도록 순서 조정 */}
                     <Button
                       variant={currentStep === 5 ? 'solid' : 'flat'}
                       color={currentStep === 5 ? 'primary' : 'default'}
@@ -562,7 +566,7 @@ function MultiStepForm(): React.ReactNode {
                       className="z-10"
                       type="button"
                     >
-                      5. 모듈화 에디터
+                      5. 블로그 미디어
                     </Button>
                     {/*====여기까지 수정됨====*/}
                   </div>
@@ -594,11 +598,12 @@ function MultiStepForm(): React.ReactNode {
                       {currentStep === 1 && '유저 정보 입력'}
                       {currentStep === 2 && '블로그 기본 정보'}
                       {currentStep === 3 && '블로그 컨텐츠'}
-                      {currentStep === 4 && '블로그 미디어'}
                       {/*====여기부터 수정됨====*/}
-                      {/* ✅ 수정: 5번째 스텝 표시 추가 */}
-                      {/* 이유: 모바일에서 현재 스텝 표시 */}
-                      {currentStep === 5 && '모듈화 에디터'}
+                      {/* ✅ 수정: 4번째 스텝을 모듈화 에디터로 변경 */}
+                      {/* 이유: 스텝 순서 조정에 따른 모바일 표시 변경 */}
+                      {currentStep === 4 && '모듈화 에디터'}
+                      {/* ✅ 수정: 5번째 스텝을 블로그 미디어로 변경 */}
+                      {currentStep === 5 && '블로그 미디어'}
                       {/*====여기까지 수정됨====*/}
                     </p>
                   </div>
