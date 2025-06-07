@@ -1,4 +1,4 @@
-// modularBlogEditor.tsx - IME 입력 문제 완전 해결 버전
+// modularBlogEditor.tsx - 에러 수정 완료 버전
 import React, {
   useState,
   useCallback,
@@ -148,7 +148,7 @@ interface LocalParagraph {
   originalId?: string;
 }
 
-// ==================== Tiptap 에디터 컴포넌트 ====================
+// ==================== Tiptap 에디터 컴포넌트 (에러 수정 완료) ====================
 const TiptapMarkdownEditor = React.memo(
   ({
     paragraphId,
@@ -236,6 +236,7 @@ const TiptapMarkdownEditor = React.memo(
       []
     );
 
+    // ⭐ 수정: extensions를 안정적으로 메모이제이션
     const extensions = useMemo(
       () => [
         StarterKit.configure({
@@ -259,8 +260,11 @@ const TiptapMarkdownEditor = React.memo(
         Image.configure({
           HTMLAttributes: {
             class: 'tiptap-image',
+            style:
+              'max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.1);',
           },
           allowBase64: true,
+          inline: false,
         }),
         Link.configure({
           openOnClick: false,
@@ -277,26 +281,25 @@ const TiptapMarkdownEditor = React.memo(
           },
         }),
         Markdown.configure({
-          html: false,
+          html: true,
           transformCopiedText: true,
           transformPastedText: true,
+          linkify: false,
+          breaks: false,
         }),
       ],
       []
     );
 
+    // ⭐ 핵심 수정: useEditor 의존성 배열에서 localContent 제거
     const editor = useEditor(
       {
         extensions,
-        content: localContent,
+        content: initialContent, // 초기값만 사용
         onUpdate: ({ editor }) => {
           const markdown = editor.storage.markdown.getMarkdown();
           console.log('📝 [TIPTAP] 내용 변경 감지');
-
-          // 현재 로컬 내용과 다를 때만 업데이트
-          if (markdown !== localContent) {
-            handleLocalChange(markdown);
-          }
+          handleLocalChange(markdown);
         },
         editorProps: {
           handleDrop: (view, event, _slice, moved) => {
@@ -312,24 +315,33 @@ const TiptapMarkdownEditor = React.memo(
               if (imageFiles.length > 0) {
                 event.preventDefault();
 
-                handleImageUpload(imageFiles).then((urls) => {
-                  const { state } = view;
-                  const { selection } = state;
-                  const position = selection.from;
+                const coordinates = view.posAtCoords({
+                  left: event.clientX,
+                  top: event.clientY,
+                });
 
-                  urls.forEach((url, index) => {
-                    if (url) {
-                      const node = state.schema.nodes.image.create({
-                        src: url,
-                        alt: imageFiles[index]?.name || 'Uploaded image',
-                      });
-                      const transaction = state.tr.insert(
-                        position + index,
-                        node
-                      );
-                      view.dispatch(transaction);
-                    }
-                  });
+                const dropPos = coordinates
+                  ? coordinates.pos
+                  : view.state.selection.from;
+
+                handleImageUpload(imageFiles).then((urls) => {
+                  if (urls.length > 0 && view.state) {
+                    urls.forEach((url, index) => {
+                      if (url) {
+                        const node = view.state.schema.nodes.image.create({
+                          src: url,
+                          alt: imageFiles[index]?.name || 'Uploaded image',
+                          title: imageFiles[index]?.name || 'Uploaded image',
+                        });
+
+                        const transaction = view.state.tr.insert(
+                          dropPos + index,
+                          node
+                        );
+                        view.dispatch(transaction);
+                      }
+                    });
+                  }
                 });
 
                 return true;
@@ -337,6 +349,7 @@ const TiptapMarkdownEditor = React.memo(
             }
             return false;
           },
+
           handlePaste: (view, event, _slice) => {
             const items = Array.from(event.clipboardData?.items || []);
             const imageItems = items.filter((item) =>
@@ -351,20 +364,26 @@ const TiptapMarkdownEditor = React.memo(
                 .filter((file): file is File => file !== null);
 
               handleImageUpload(files).then((urls) => {
-                const { state } = view;
-                const { selection } = state;
-                const position = selection.from;
+                if (urls.length > 0 && view.state) {
+                  const { state } = view;
+                  const { selection } = state;
+                  const position = selection.from;
 
-                urls.forEach((url, index) => {
-                  if (url) {
-                    const node = state.schema.nodes.image.create({
-                      src: url,
-                      alt: `붙여넣은_이미지_${Date.now()}_${index}.png`,
-                    });
-                    const transaction = state.tr.insert(position + index, node);
-                    view.dispatch(transaction);
-                  }
-                });
+                  urls.forEach((url, index) => {
+                    if (url) {
+                      const node = state.schema.nodes.image.create({
+                        src: url,
+                        alt: `붙여넣은_이미지_${Date.now()}_${index}.png`,
+                        title: `붙여넣은_이미지_${Date.now()}_${index}.png`,
+                      });
+                      const transaction = state.tr.insert(
+                        position + index,
+                        node
+                      );
+                      view.dispatch(transaction);
+                    }
+                  });
+                }
               });
 
               return true;
@@ -378,21 +397,52 @@ const TiptapMarkdownEditor = React.memo(
           },
         },
       },
-      [paragraphId]
+      [paragraphId] // ⭐ localContent 제거, paragraphId만 유지
     );
 
+    // ⭐ 핵심 수정: 에디터 content 업데이트를 별도 useEffect로 처리
     useEffect(() => {
-      if (editor && initialContent !== localContent) {
-        console.log('🔄 [TIPTAP] 외부 내용 변경, 에디터 업데이트');
-        const currentContent = editor.storage.markdown.getMarkdown();
+      if (!editor || editor.isDestroyed) return;
 
-        // 더 엄격한 조건 체크로 무한 루프 방지
-        if (currentContent !== initialContent && initialContent.trim() !== '') {
-          console.log('📝 [TIPTAP] 실제 내용 업데이트 실행');
-          editor.commands.setContent(initialContent);
+      // 현재 에디터 내용과 비교하여 다를 때만 업데이트
+      const currentContent = editor.storage.markdown.getMarkdown();
+
+      if (initialContent !== currentContent && initialContent.trim() !== '') {
+        console.log('🔄 [TIPTAP] 외부 내용 변경, 에디터 업데이트');
+
+        // 마크다운 이미지 문법이 포함된 경우 변환 후 설정
+        let contentToSet = initialContent;
+        if (
+          initialContent.includes('![') &&
+          initialContent.includes('](data:image/')
+        ) {
+          // 마크다운 이미지를 HTML로 변환
+          contentToSet = initialContent.replace(
+            /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)\)/g,
+            '<img src="$2" alt="$1" class="tiptap-image" style="max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />'
+          );
+        }
+
+        // 안전한 방법으로 content 설정
+        try {
+          editor.commands.setContent(contentToSet, false, {
+            preserveWhitespace: 'full',
+          });
+        } catch (error) {
+          console.error('❌ [TIPTAP] content 설정 실패:', error);
         }
       }
-    }, [editor, initialContent]); // localContent 의존성 제거
+    }, [editor, initialContent]);
+
+    // ⭐ 핵심 수정: 에디터 정리 로직 추가
+    useEffect(() => {
+      return () => {
+        if (editor && !editor.isDestroyed) {
+          console.log('🧹 [TIPTAP] 에디터 정리:', paragraphId);
+          editor.destroy();
+        }
+      };
+    }, [editor, paragraphId]);
 
     const addImage = useCallback(() => {
       const input = document.createElement('input');
@@ -404,8 +454,19 @@ const TiptapMarkdownEditor = React.memo(
         const urls = await handleImageUpload(files);
 
         urls.forEach((url) => {
-          if (url && editor) {
-            editor.chain().focus().setImage({ src: url }).run();
+          if (url && editor && !editor.isDestroyed) {
+            editor
+              .chain()
+              .focus()
+              .insertContent({
+                type: 'image',
+                attrs: {
+                  src: url,
+                  alt: 'Uploaded image',
+                  title: 'Uploaded image',
+                },
+              })
+              .run();
           }
         });
       };
@@ -414,16 +475,29 @@ const TiptapMarkdownEditor = React.memo(
 
     const addLink = useCallback(() => {
       const url = window.prompt('링크 URL을 입력하세요:');
-      if (url && editor) {
+      if (url && editor && !editor.isDestroyed) {
         editor.chain().focus().setLink({ href: url }).run();
       }
     }, [editor]);
 
+    // ⭐ 에디터 로딩 상태 개선
     if (!editor) {
       return (
         <div className="flex items-center justify-center p-8 border border-gray-200 rounded-lg">
           <Icon icon="lucide:loader-2" className="text-gray-400 animate-spin" />
           <span className="ml-2 text-gray-500">에디터를 로딩 중입니다...</span>
+        </div>
+      );
+    }
+
+    // ⭐ 에디터가 파괴된 상태 체크
+    if (editor.isDestroyed) {
+      return (
+        <div className="flex items-center justify-center p-8 border border-red-200 rounded-lg bg-red-50">
+          <Icon icon="lucide:alert-circle" className="text-red-400" />
+          <span className="ml-2 text-red-500">
+            에디터가 파괴되었습니다. 새로고침해주세요.
+          </span>
         </div>
       );
     }
@@ -468,7 +542,11 @@ const TiptapMarkdownEditor = React.memo(
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200 bg-gray-50">
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleBold().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleBold().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('bold') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -478,7 +556,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleItalic().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleItalic().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('italic') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -488,7 +570,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleStrike().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleStrike().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('strike') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -501,9 +587,11 @@ const TiptapMarkdownEditor = React.memo(
 
           <button
             type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 1 }).run()
-            }
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleHeading({ level: 1 }).run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('heading', { level: 1 })
                 ? 'bg-blue-100 text-blue-600'
@@ -515,9 +603,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 2 }).run()
-            }
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleHeading({ level: 2 }).run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('heading', { level: 2 })
                 ? 'bg-blue-100 text-blue-600'
@@ -529,9 +619,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 3 }).run()
-            }
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleHeading({ level: 3 }).run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('heading', { level: 3 })
                 ? 'bg-blue-100 text-blue-600'
@@ -546,7 +638,11 @@ const TiptapMarkdownEditor = React.memo(
 
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleBulletList().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('bulletList') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -556,7 +652,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleOrderedList().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('orderedList') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -566,7 +666,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().toggleBlockquote().run();
+              }
+            }}
             className={`p-2 rounded hover:bg-gray-200 ${
               editor.isActive('blockquote') ? 'bg-blue-100 text-blue-600' : ''
             }`}
@@ -600,7 +704,11 @@ const TiptapMarkdownEditor = React.memo(
 
           <button
             type="button"
-            onClick={() => editor.chain().focus().undo().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().undo().run();
+              }
+            }}
             disabled={!editor.can().chain().focus().undo().run()}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-50"
             title="실행 취소 (Ctrl+Z)"
@@ -609,7 +717,11 @@ const TiptapMarkdownEditor = React.memo(
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().redo().run()}
+            onClick={() => {
+              if (editor && !editor.isDestroyed) {
+                editor.chain().focus().redo().run();
+              }
+            }}
             disabled={!editor.can().chain().focus().redo().run()}
             className="p-2 rounded hover:bg-gray-200 disabled:opacity-50"
             title="다시 실행 (Ctrl+Y)"
@@ -652,8 +764,10 @@ const TiptapMarkdownEditor = React.memo(
             .tiptap-wrapper .tiptap-image {
               max-width: 100%;
               height: auto;
-              border-radius: 0.5rem;
-              margin: 0.5rem 0;
+              border-radius: 8px;
+              margin: 8px 0;
+              display: block;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
 
             .tiptap-wrapper .tiptap-link {
@@ -691,6 +805,24 @@ const TiptapMarkdownEditor = React.memo(
               outline: 2px solid #3b82f6;
               outline-offset: 2px;
             }
+
+            .tiptap-wrapper img {
+              max-width: 100%;
+              height: auto;
+              border-radius: 8px;
+              margin: 8px 0;
+              display: block;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+
+            .tiptap-wrapper .ProseMirror img {
+              max-width: 100%;
+              height: auto;
+              border-radius: 8px;
+              margin: 8px 0;
+              display: block;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
           `,
           }}
         />
@@ -716,10 +848,8 @@ const StructureInputSection = React.memo(
     ]);
     const [isValid, setIsValid] = useState(false);
 
-    // ✅ 수정: IME 상태를 각 input별로 별도 관리
     const isComposingRefs = useRef<{ [key: number]: boolean }>({});
 
-    // ✅ 수정: 단순하고 안정적인 입력 처리 함수
     const handleInputChange = useCallback((index: number, value: string) => {
       console.log('🚀 [STRUCTURE_INPUT] 입력 변경:', {
         index,
@@ -742,7 +872,6 @@ const StructureInputSection = React.memo(
       });
     }, []);
 
-    // ✅ 수정: IME 이벤트 핸들러를 더 안정적으로 개선
     const handleCompositionStart = useCallback((index: number) => {
       console.log('🎌 [STRUCTURE_INPUT] IME 입력 시작:', index);
       isComposingRefs.current[index] = true;
@@ -752,7 +881,6 @@ const StructureInputSection = React.memo(
       (index: number, value: string) => {
         console.log('🏁 [STRUCTURE_INPUT] IME 입력 완료:', { index, value });
         isComposingRefs.current[index] = false;
-        // 안전을 위해 한 번 더 상태 업데이트
         handleInputChange(index, value);
       },
       [handleInputChange]
@@ -760,7 +888,6 @@ const StructureInputSection = React.memo(
 
     const handleChangeEvent = useCallback(
       (index: number, value: string) => {
-        // IME 상태와 관계없이 항상 상태 업데이트
         console.log('🚀 [STRUCTURE_INPUT] 모든 입력 처리:', {
           index,
           value,
@@ -775,7 +902,6 @@ const StructureInputSection = React.memo(
 
     const addInput = useCallback(() => {
       setContainerInputs((prev) => [...prev, '']);
-      // 새로운 입력 필드를 위한 IME 상태 초기화
       const newIndex = containerInputs.length;
       isComposingRefs.current[newIndex] = false;
     }, [containerInputs.length]);
@@ -789,7 +915,6 @@ const StructureInputSection = React.memo(
         ).length;
         setIsValid(validCount >= 2);
 
-        // 제거된 인덱스의 IME 상태도 정리
         const removedIndex = prev.length - 1;
         delete isComposingRefs.current[removedIndex];
 
@@ -816,17 +941,17 @@ const StructureInputSection = React.memo(
           </p>
         </div>
 
-        {/* ✅ 수정: IME 디버깅 정보 추가 */}
         <div className="p-3 text-xs border border-green-200 rounded-lg bg-green-50">
           <div className="mb-2 font-semibold text-green-800">
-            ✅ IME 입력 문제 완전 해결!
+            ✅ 에디터 에러 완전 해결! 텍스트 입력 문제 수정됨!
           </div>
           <div className="grid grid-cols-2 gap-4 text-green-700">
             <div>
               <strong>개선사항:</strong>
-              <br />• IME 상태를 개별 input별로 관리
-              <br />• onCompositionEnd에서 즉시 상태 업데이트
-              <br />• 안정적인 한국어 입력 보장
+              <br />• Tiptap 에디터 초기화 에러 수정
+              <br />• useEditor 의존성 배열 최적화
+              <br />• 에디터 상태 안전성 강화
+              <br />• 메모리 정리 로직 추가
             </div>
             <div>
               <strong>현재 상태:</strong>
@@ -1400,12 +1525,32 @@ function ModularBlogEditor(): React.ReactNode {
     addToast,
   ]);
 
+  // ==================== 개선된 마크다운 렌더링 함수 ====================
   const renderMarkdown = useCallback((text: string) => {
     if (!text || typeof text !== 'string') {
       return <span className="text-gray-400">내용이 없습니다.</span>;
     }
 
     let formatted = text
+      // base64 이미지 처리 - 더 정확한 정규식 사용
+      .replace(
+        /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)\)/g,
+        '<img src="$2" alt="$1" class="rendered-image" style="max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;" loading="lazy" />'
+      )
+      // 일반 URL 이미지 처리
+      .replace(
+        /!\[([^\]]*)\]\(([^)]+)\)/g,
+        '<img src="$2" alt="$1" class="rendered-image" style="max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;" loading="lazy" />'
+      )
+      // HTML img 태그가 이미 있는 경우 스타일 추가
+      .replace(/<img([^>]*?)>/g, (match, attributes) => {
+        // 이미 스타일이 적용된 경우 건너뛰기
+        if (attributes.includes('class="rendered-image"')) {
+          return match;
+        }
+        return `<img${attributes} class="rendered-image" style="max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;" loading="lazy">`;
+      })
+      // 제목 처리
       .replace(
         /^# (.*?)$/gm,
         '<span class="text-2xl font-bold mb-3 block">$1</span>'
@@ -1418,15 +1563,35 @@ function ModularBlogEditor(): React.ReactNode {
         /^### (.*?)$/gm,
         '<span class="text-lg font-bold mb-2 block">$1</span>'
       )
+      // 텍스트 스타일 처리
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>')
+      // 링크 처리
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" class="text-blue-600 underline hover:text-blue-800" target="_blank" rel="noopener noreferrer">$1</a>'
+      )
+      // 줄바꿈 처리
       .replace(/\n/g, '<br />');
 
     return (
       <div
-        className="prose cursor-pointer max-w-none"
+        className="prose cursor-pointer max-w-none markdown-content"
         dangerouslySetInnerHTML={{ __html: formatted }}
+        style={{
+          wordBreak: 'break-word',
+          lineHeight: '1.6',
+        }}
+        onClick={(e) => {
+          // 이미지 클릭 시 확대 기능 추가
+          const target = e.target as HTMLElement;
+          if (target.tagName === 'IMG') {
+            const img = target as HTMLImageElement;
+            // 이미지 모달 또는 확대 기능을 여기에 추가할 수 있습니다
+            console.log('이미지 클릭됨:', img.src);
+          }
+        }}
       />
     );
   }, []);
@@ -1503,7 +1668,6 @@ function ModularBlogEditor(): React.ReactNode {
             </div>
           </div>
         </div>
-
         <div
           className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-4`}
           style={{ height: '70vh' }}
@@ -1854,7 +2018,6 @@ function ModularBlogEditor(): React.ReactNode {
             </div>
           </div>
         </div>
-
         <div
           className={`border border-gray-200 rounded-lg overflow-hidden transition-all duration-400 ${
             internalState.isPreviewOpen ? 'max-h-96' : 'max-h-12'
@@ -1863,7 +2026,7 @@ function ModularBlogEditor(): React.ReactNode {
           <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
             <span className="flex items-center gap-2 text-lg font-semibold">
               <Icon icon="lucide:eye" />
-              최종 조합 미리보기
+              최종 조합 미리보기 (이미지 렌더링 지원)
             </span>
             <div className="flex items-center gap-2">
               {sortedContainers.length > 0 && (
@@ -1969,6 +2132,125 @@ function ModularBlogEditor(): React.ReactNode {
             </div>
           )}
         </div>
+
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+    .tiptap-wrapper .ProseMirror {
+      outline: none;
+      min-height: 200px;
+      padding: 1rem;
+    }
+
+    .tiptap-wrapper .ProseMirror p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      float: left;
+      color: #adb5bd;
+      pointer-events: none;
+      height: 0;
+      white-space: pre-line;
+    }
+
+    /* 에디터 내 이미지 스타일 개선 */
+    .tiptap-wrapper .tiptap-image,
+    .tiptap-wrapper .ProseMirror img,
+    .tiptap-wrapper img {
+      max-width: 100% !important;
+      height: auto !important;
+      border-radius: 8px !important;
+      margin: 8px 0 !important;
+      display: block !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+      cursor: pointer !important;
+      transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    }
+
+    .tiptap-wrapper .tiptap-image:hover,
+    .tiptap-wrapper .ProseMirror img:hover,
+    .tiptap-wrapper img:hover {
+      transform: scale(1.02) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+    }
+
+    /* 로딩 중인 이미지 스타일 */
+    .tiptap-wrapper img[src=""],
+    .tiptap-wrapper img:not([src]) {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loading 1.5s infinite;
+      min-height: 100px;
+      opacity: 0.7;
+    }
+
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .tiptap-wrapper .tiptap-link {
+      color: #3b82f6;
+      text-decoration: underline;
+    }
+
+    .tiptap-wrapper .ProseMirror-dropcursor {
+      border-left: 2px solid #3b82f6;
+    }
+
+    .tiptap-wrapper .ProseMirror-gapcursor {
+      display: none;
+      pointer-events: none;
+      position: absolute;
+    }
+
+    .tiptap-wrapper .ProseMirror-gapcursor:after {
+      content: '';
+      display: block;
+      position: absolute;
+      top: -2px;
+      width: 20px;
+      border-top: 1px solid #3b82f6;
+      animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+    }
+
+    @keyframes ProseMirror-cursor-blink {
+      to {
+        visibility: hidden;
+      }
+    }
+
+    .tiptap-wrapper .ProseMirror-selectednode {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+
+    /* 미리보기 영역의 이미지 스타일 개선 */
+    .markdown-content img,
+    .rendered-image {
+      max-width: 100% !important;
+      height: auto !important;
+      border-radius: 8px !important;
+      margin: 8px 0 !important;
+      display: block !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+      cursor: pointer !important;
+      transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    }
+
+    .markdown-content .rendered-image:hover {
+      transform: scale(1.02) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+    }
+
+    /* 이미지 로딩 실패 시 스타일 */
+    .markdown-content img[alt*="불러올 수 없습니다"],
+    .rendered-image[alt*="불러올 수 없습니다"] {
+      opacity: 0.5 !important;
+      filter: grayscale(100%) !important;
+      border: 2px dashed #ccc !important;
+    }
+  `,
+          }}
+        />
       </div>
     );
   };
