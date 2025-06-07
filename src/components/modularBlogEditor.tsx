@@ -1,4 +1,4 @@
-// modularBlogEditor.tsx - Tiptap 완전 교체 버전 (수정됨)
+// modularBlogEditor.tsx - Tiptap 완전 교체 버전 (에러 수정 완료)
 import React, {
   useState,
   useCallback,
@@ -202,7 +202,7 @@ interface LocalParagraph {
 const TiptapMarkdownEditor = React.memo(
   ({
     paragraphId,
-    initialContent,
+    initialContent = '', //====여기부터 수정됨==== 기본값 설정으로 undefined 방지
     onContentChange,
     isActive,
   }: {
@@ -213,7 +213,7 @@ const TiptapMarkdownEditor = React.memo(
   }) => {
     console.log('📝 [TIPTAP] 렌더링:', {
       paragraphId,
-      contentLength: initialContent.length,
+      contentLength: (initialContent || '').length, //====여기부터 수정됨==== 안전한 길이 계산
       isActive,
     });
 
@@ -224,10 +224,10 @@ const TiptapMarkdownEditor = React.memo(
     // 디바운스가 적용된 마크다운 에디터 상태 관리
     const { localContent, handleLocalChange, isContentChanged } =
       useMarkdownEditorState({
-        initialContent,
+        initialContent: initialContent || '', //====여기부터 수정됨==== 빈 문자열로 안전하게 처리
         onContentChange,
         debounceDelay: 1000,
-      });
+      }); //====여기까지 수정됨====
 
     // 🖼️ 이미지 업로드 핸들러
     const handleImageUpload = useCallback(
@@ -350,7 +350,7 @@ const TiptapMarkdownEditor = React.memo(
         },
         editorProps: {
           // 드래그 앤 드롭 이미지 업로드 처리
-          handleDrop: (view, event, slice, moved) => {
+          handleDrop: (view, event, _slice, moved) => {
             if (
               !moved &&
               event.dataTransfer &&
@@ -367,9 +367,8 @@ const TiptapMarkdownEditor = React.memo(
                 handleImageUpload(imageFiles).then((urls) => {
                   const { state } = view;
                   const { selection } = state;
-                  const position = selection.$cursor
-                    ? selection.$cursor.pos
-                    : selection.anchor;
+                  // ProseMirror Selection API 올바른 사용법
+                  const position = selection.from;
 
                   urls.forEach((url, index) => {
                     if (url) {
@@ -392,7 +391,7 @@ const TiptapMarkdownEditor = React.memo(
             return false;
           },
           // 클립보드 이미지 붙여넣기 처리
-          handlePaste: (view, event, slice) => {
+          handlePaste: (view, event, _slice) => {
             const items = Array.from(event.clipboardData?.items || []);
             const imageItems = items.filter((item) =>
               item.type.startsWith('image/')
@@ -408,9 +407,8 @@ const TiptapMarkdownEditor = React.memo(
               handleImageUpload(files).then((urls) => {
                 const { state } = view;
                 const { selection } = state;
-                const position = selection.$cursor
-                  ? selection.$cursor.pos
-                  : selection.anchor;
+                // ProseMirror Selection API 올바른 사용법
+                const position = selection.from;
 
                 urls.forEach((url, index) => {
                   if (url) {
@@ -693,67 +691,70 @@ const TiptapMarkdownEditor = React.memo(
           />
         </div>
 
-        {/* Tiptap 에디터 스타일 */}
-        <style jsx>{`
-          .tiptap-wrapper :global(.ProseMirror) {
-            outline: none;
-            min-height: 200px;
-            padding: 1rem;
-          }
-
-          .tiptap-wrapper
-            :global(.ProseMirror p.is-editor-empty:first-child::before) {
-            content: attr(data-placeholder);
-            float: left;
-            color: #adb5bd;
-            pointer-events: none;
-            height: 0;
-            white-space: pre-line;
-          }
-
-          .tiptap-wrapper :global(.tiptap-image) {
-            max-width: 100%;
-            height: auto;
-            border-radius: 0.5rem;
-            margin: 0.5rem 0;
-          }
-
-          .tiptap-wrapper :global(.tiptap-link) {
-            color: #3b82f6;
-            text-decoration: underline;
-          }
-
-          .tiptap-wrapper :global(.ProseMirror-dropcursor) {
-            border-left: 2px solid #3b82f6;
-          }
-
-          .tiptap-wrapper :global(.ProseMirror-gapcursor) {
-            display: none;
-            pointer-events: none;
-            position: absolute;
-          }
-
-          .tiptap-wrapper :global(.ProseMirror-gapcursor:after) {
-            content: '';
-            display: block;
-            position: absolute;
-            top: -2px;
-            width: 20px;
-            border-top: 1px solid #3b82f6;
-            animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
-          }
-
-          @keyframes ProseMirror-cursor-blink {
-            to {
-              visibility: hidden;
+        {/* Tiptap 에디터 스타일 - Tailwind CSS로 대체 */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+            .tiptap-wrapper .ProseMirror {
+              outline: none;
+              min-height: 200px;
+              padding: 1rem;
             }
-          }
 
-          .tiptap-wrapper :global(.ProseMirror-selectednode) {
-            outline: 2px solid #3b82f6;
-            outline-offset: 2px;
-          }
-        `}</style>
+            .tiptap-wrapper .ProseMirror p.is-editor-empty:first-child::before {
+              content: attr(data-placeholder);
+              float: left;
+              color: #adb5bd;
+              pointer-events: none;
+              height: 0;
+              white-space: pre-line;
+            }
+
+            .tiptap-wrapper .tiptap-image {
+              max-width: 100%;
+              height: auto;
+              border-radius: 0.5rem;
+              margin: 0.5rem 0;
+            }
+
+            .tiptap-wrapper .tiptap-link {
+              color: #3b82f6;
+              text-decoration: underline;
+            }
+
+            .tiptap-wrapper .ProseMirror-dropcursor {
+              border-left: 2px solid #3b82f6;
+            }
+
+            .tiptap-wrapper .ProseMirror-gapcursor {
+              display: none;
+              pointer-events: none;
+              position: absolute;
+            }
+
+            .tiptap-wrapper .ProseMirror-gapcursor:after {
+              content: '';
+              display: block;
+              position: absolute;
+              top: -2px;
+              width: 20px;
+              border-top: 1px solid #3b82f6;
+              animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+            }
+
+            @keyframes ProseMirror-cursor-blink {
+              to {
+                visibility: hidden;
+              }
+            }
+
+            .tiptap-wrapper .ProseMirror-selectednode {
+              outline: 2px solid #3b82f6;
+              outline-offset: 2px;
+            }
+          `,
+          }}
+        />
       </div>
     );
   }
@@ -1110,12 +1111,12 @@ function ModularBlogEditor(): React.ReactNode {
     console.log('📄 [LOCAL] 새 단락 추가');
     const newParagraph: LocalParagraph = {
       id: `paragraph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      content: '',
+      content: '', //====여기부터 수정됨==== 빈 문자열로 초기화하여 undefined 방지
       containerId: null,
       order: localParagraphs.length,
       createdAt: new Date(),
       updatedAt: new Date(),
-    };
+    }; //====여기까지 수정됨====
 
     setLocalParagraphs((prev) => [...prev, newParagraph]);
     setInternalState((prev) => ({
@@ -1131,14 +1132,16 @@ function ModularBlogEditor(): React.ReactNode {
     (paragraphId: string, content: string) => {
       console.log('✏️ [LOCAL] 로컬 단락 내용 업데이트:', {
         paragraphId,
-        contentLength: content.length,
+        contentLength: (content || '').length, //====여기부터 수정됨==== 안전한 길이 계산
       });
 
       setLocalParagraphs((prev) =>
         prev.map((p) =>
-          p.id === paragraphId ? { ...p, content, updatedAt: new Date() } : p
+          p.id === paragraphId
+            ? { ...p, content: content || '', updatedAt: new Date() } //====여기부터 수정됨==== 빈 문자열 보장
+            : p
         )
-      );
+      ); //====여기까지 수정됨====
     },
     []
   );
@@ -1415,8 +1418,12 @@ function ModularBlogEditor(): React.ReactNode {
     addToast,
   ]);
 
+  //====여기부터 수정됨====
   const renderMarkdown = useCallback((text: string) => {
-    if (!text) return <span className="text-gray-400">내용이 없습니다.</span>;
+    // text가 undefined, null, 또는 빈 문자열인 경우 안전하게 처리
+    if (!text || typeof text !== 'string') {
+      return <span className="text-gray-400">내용이 없습니다.</span>;
+    }
 
     let formatted = text
       .replace(
@@ -1443,6 +1450,7 @@ function ModularBlogEditor(): React.ReactNode {
       />
     );
   }, []);
+  //====여기까지 수정됨====
 
   // 🔥 로컬 상태 기반 유틸 함수들
   const getLocalUnassignedParagraphs = useCallback(() => {
@@ -1744,9 +1752,12 @@ function ModularBlogEditor(): React.ReactNode {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <span className="text-sm text-gray-700 line-clamp-2">
-                                  {paragraph.content.slice(0, 80) ||
+                                  {/*====여기부터 수정됨==== 안전한 문자열 처리 */}
+                                  {(paragraph.content || '').slice(0, 80) ||
                                     '내용 없음'}
-                                  {paragraph.content.length > 80 && '...'}
+                                  {(paragraph.content || '').length > 80 &&
+                                    '...'}
+                                  {/*====여기까지 수정됨====*/}
                                 </span>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className="text-xs text-gray-400">
