@@ -292,7 +292,11 @@ const TiptapMarkdownEditor = React.memo(
         onUpdate: ({ editor }) => {
           const markdown = editor.storage.markdown.getMarkdown();
           console.log('📝 [TIPTAP] 내용 변경 감지');
-          handleLocalChange(markdown);
+
+          // 현재 로컬 내용과 다를 때만 업데이트
+          if (markdown !== localContent) {
+            handleLocalChange(markdown);
+          }
         },
         editorProps: {
           handleDrop: (view, event, _slice, moved) => {
@@ -381,11 +385,14 @@ const TiptapMarkdownEditor = React.memo(
       if (editor && initialContent !== localContent) {
         console.log('🔄 [TIPTAP] 외부 내용 변경, 에디터 업데이트');
         const currentContent = editor.storage.markdown.getMarkdown();
-        if (currentContent !== initialContent) {
+
+        // 더 엄격한 조건 체크로 무한 루프 방지
+        if (currentContent !== initialContent && initialContent.trim() !== '') {
+          console.log('📝 [TIPTAP] 실제 내용 업데이트 실행');
           editor.commands.setContent(initialContent);
         }
       }
-    }, [editor, initialContent, localContent]);
+    }, [editor, initialContent]); // localContent 의존성 제거
 
     const addImage = useCallback(() => {
       const input = document.createElement('input');
