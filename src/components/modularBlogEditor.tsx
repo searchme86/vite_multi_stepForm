@@ -1,4 +1,4 @@
-// modularBlogEditor.tsx - Tiptap 완전 교체 버전 (에러 수정 완료)
+// modularBlogEditor.tsx - IME 입력 문제 완전 해결 버전
 import React, {
   useState,
   useCallback,
@@ -10,15 +10,13 @@ import { Button, Input, Chip, Badge } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Tiptap 관련 imports - 수정된 부분
+// Tiptap 관련 imports
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
-import DropCursor from '@tiptap/extension-dropcursor'; // 수정: default export
-import GapCursor from '@tiptap/extension-gapcursor'; // 수정: default export
 
 import {
   useMultiStepForm,
@@ -28,64 +26,39 @@ import {
 } from './useMultiStepForm';
 
 // ==================== 디바운스 훅 ====================
-/**
- * 디바운스 훅 - 입력값이 변경되어도 일정 시간 후에만 업데이트
- * @param value - 디바운스할 값
- * @param delay - 지연 시간 (밀리초)
- * @returns 디바운스된 값
- */
 function useDebounce<T>(value: T, delay: number): T {
-  // 디바운스된 값을 저장할 상태 - 초기값은 전달받은 값으로 설정
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
   useEffect(() => {
-    // 지연 시간 후에 값을 업데이트하는 타이머 설정
-    // setTimeout을 사용하여 delay 시간만큼 기다린 후 실행
     const handler = setTimeout(() => {
-      setDebouncedValue(value); // 지연 시간이 지나면 실제 값으로 업데이트
+      setDebouncedValue(value);
     }, delay);
 
-    // cleanup 함수 - 컴포넌트가 언마운트되거나 의존성이 변경될 때 타이머 정리
-    // 이를 통해 메모리 누수 방지 및 불필요한 업데이트 방지
     return () => {
       clearTimeout(handler);
     };
-  }, [value, delay]); // value나 delay가 변경될 때만 effect 재실행
+  }, [value, delay]);
 
-  return debouncedValue; // 디바운스된 값 반환
+  return debouncedValue;
 }
 
 // ==================== 마크다운 에디터 상태 관리 훅 ====================
-/**
- * 마크다운 에디터 상태 관리 훅
- * 디바운스를 적용하여 입력 완료 후에만 상위 컴포넌트에 변경사항 전달
- */
 interface UseMarkdownEditorStateProps {
-  initialContent: string; // 초기 컨텐츠 값
-  onContentChange: (content: string) => void; // 상위 컴포넌트로 변경사항을 전달하는 함수
-  debounceDelay?: number; // 디바운스 지연 시간 (기본값: 1000ms)
+  initialContent: string;
+  onContentChange: (content: string) => void;
+  debounceDelay?: number;
 }
 
 function useMarkdownEditorState({
   initialContent,
   onContentChange,
-  debounceDelay = 1000, // 1초 기본 디바운스 적용
+  debounceDelay = 1000,
 }: UseMarkdownEditorStateProps) {
-  // 로컬 상태 - 사용자가 실시간으로 타이핑하는 내용을 저장
-  // 이 상태는 즉시 업데이트되어 UI 반응성을 보장
   const [localContent, setLocalContent] = useState<string>(initialContent);
-
-  // 디바운스된 값 - 사용자가 타이핑을 멈춘 후 일정 시간이 지나면 업데이트
-  // 이를 통해 불필요한 상위 컴포넌트 업데이트를 방지
   const debouncedContent = useDebounce(localContent, debounceDelay);
-
-  // 이전 초기값을 추적하여 불필요한 업데이트 방지
   const previousInitialContent = useRef(initialContent);
 
-  // 외부에서 초기값이 변경될 때 로컬 상태도 동기화
-  // 예: 다른 단락을 선택했을 때 해당 내용으로 에디터 내용 변경
   useEffect(() => {
-    // 실제로 초기값이 변경되었고, 현재 로컬 내용과 다를 때만 업데이트
     if (
       initialContent !== previousInitialContent.current &&
       initialContent !== localContent
@@ -96,13 +69,9 @@ function useMarkdownEditorState({
     }
   }, [initialContent, localContent]);
 
-  // 안정적인 onContentChange 참조 생성
   const stableOnContentChange = useCallback(onContentChange, []);
 
-  // 디바운스된 값이 변경될 때만 상위 컴포넌트에 알림
-  // 이를 통해 사용자가 타이핑을 완료한 후에만 컨텍스트 업데이트
   useEffect(() => {
-    // 디바운스된 값이 초기값과 다르고, 실제로 변경되었을 때만 업데이트
     if (
       debouncedContent !== previousInitialContent.current &&
       debouncedContent.trim() !== ''
@@ -112,56 +81,39 @@ function useMarkdownEditorState({
     }
   }, [debouncedContent, stableOnContentChange]);
 
-  // 로컬 상태 업데이트 함수
-  // 사용자가 타이핑할 때마다 즉시 호출되어 UI 반응성 제공
   const handleLocalChange = useCallback((content: string) => {
     setLocalContent(content);
   }, []);
 
   return {
-    localContent, // 현재 에디터에 표시될 내용
-    handleLocalChange, // 에디터 변경 핸들러
-    isContentChanged: debouncedContent !== previousInitialContent.current, // 내용이 변경되었는지 여부
+    localContent,
+    handleLocalChange,
+    isContentChanged: debouncedContent !== previousInitialContent.current,
   };
 }
 
 // ==================== 이미지 업로드 유틸리티 ====================
-/**
- * 파일을 Base64 문자열로 변환하는 함수
- * @param file - 변환할 파일 객체
- * @returns Promise<string> - Base64 인코딩된 문자열
- */
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // FileReader API를 사용하여 파일을 읽음
     const reader = new FileReader();
 
-    // 파일 읽기 완료 시 실행되는 콜백
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        resolve(reader.result); // Base64 문자열 반환
+        resolve(reader.result);
       } else {
         reject(new Error('파일을 읽을 수 없습니다.'));
       }
     };
 
-    // 파일 읽기 실패 시 실행되는 콜백
     reader.onerror = () => {
       reject(new Error('파일 읽기 중 오류가 발생했습니다.'));
     };
 
-    // 파일을 Base64 데이터 URL로 읽기 시작
     reader.readAsDataURL(file);
   });
 };
 
-/**
- * 이미지 파일인지 확인하는 함수
- * @param file - 확인할 파일 객체
- * @returns boolean - 이미지 파일 여부
- */
 const isImageFile = (file: File): boolean => {
-  // 허용되는 이미지 MIME 타입들
   const allowedTypes = [
     'image/jpeg',
     'image/jpg',
@@ -186,23 +138,21 @@ interface EditorInternalState {
   targetContainerId: string;
 }
 
-// 🔥 로컬 단락 인터페이스 - Context와 완전 분리
 interface LocalParagraph {
   id: string;
   content: string;
-  containerId: string | null; // undefined 대신 null 사용
+  containerId: string | null;
   order: number;
   createdAt: Date;
   updatedAt: Date;
-  originalId?: string; // 원본 단락 ID (복사본인 경우에만 존재)
+  originalId?: string;
 }
 
 // ==================== Tiptap 에디터 컴포넌트 ====================
-// 🔥 Tiptap 기반 마크다운 에디터 컴포넌트 - WYSIWYG + 이미지 업로드 지원
 const TiptapMarkdownEditor = React.memo(
   ({
     paragraphId,
-    initialContent = '', //====여기부터 수정됨==== 기본값 설정으로 undefined 방지
+    initialContent = '',
     onContentChange,
     isActive,
   }: {
@@ -213,23 +163,20 @@ const TiptapMarkdownEditor = React.memo(
   }) => {
     console.log('📝 [TIPTAP] 렌더링:', {
       paragraphId,
-      contentLength: (initialContent || '').length, //====여기부터 수정됨==== 안전한 길이 계산
+      contentLength: (initialContent || '').length,
       isActive,
     });
 
-    // 이미지 업로드 상태 관리
     const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
-    // 디바운스가 적용된 마크다운 에디터 상태 관리
     const { localContent, handleLocalChange, isContentChanged } =
       useMarkdownEditorState({
-        initialContent: initialContent || '', //====여기부터 수정됨==== 빈 문자열로 안전하게 처리
+        initialContent: initialContent || '',
         onContentChange,
         debounceDelay: 1000,
-      }); //====여기까지 수정됨====
+      });
 
-    // 🖼️ 이미지 업로드 핸들러
     const handleImageUpload = useCallback(
       async (files: File[]): Promise<string[]> => {
         const imageFiles = files.filter(isImageFile);
@@ -239,7 +186,6 @@ const TiptapMarkdownEditor = React.memo(
           return [];
         }
 
-        // 파일 크기 체크 (10MB 제한)
         const oversizedFiles = imageFiles.filter(
           (file) => file.size > 10 * 1024 * 1024
         );
@@ -257,7 +203,6 @@ const TiptapMarkdownEditor = React.memo(
         );
 
         try {
-          // 모든 이미지 파일을 Base64로 변환
           const base64Promises = imageFiles.map(async (file) => {
             try {
               const base64Data = await fileToBase64(file);
@@ -291,65 +236,65 @@ const TiptapMarkdownEditor = React.memo(
       []
     );
 
-    // Tiptap 에디터 설정
+    const extensions = useMemo(
+      () => [
+        StarterKit.configure({
+          heading: {
+            levels: [1, 2, 3, 4, 5, 6],
+          },
+          bulletList: {
+            keepMarks: true,
+            keepAttributes: false,
+          },
+          orderedList: {
+            keepMarks: true,
+            keepAttributes: false,
+          },
+          dropcursor: {
+            color: '#3b82f6',
+            width: 2,
+          },
+          gapcursor: true,
+        }),
+        Image.configure({
+          HTMLAttributes: {
+            class: 'tiptap-image',
+          },
+          allowBase64: true,
+        }),
+        Link.configure({
+          openOnClick: false,
+          HTMLAttributes: {
+            class: 'tiptap-link',
+          },
+        }),
+        Placeholder.configure({
+          placeholder: ({ node }) => {
+            if (node.type.name === 'heading') {
+              return '제목을 입력하세요...';
+            }
+            return '마크다운 형식으로 내용을 작성하세요...\n\n🖼️ 이미지 추가 방법:\n• 파일을 드래그 앤 드롭\n• Ctrl+V로 클립보드에서 붙여넣기\n• 툴바의 이미지 버튼 클릭\n\n지원 형식: JPG, PNG, GIF, WebP, SVG (최대 10MB)';
+          },
+        }),
+        Markdown.configure({
+          html: false,
+          transformCopiedText: true,
+          transformPastedText: true,
+        }),
+      ],
+      []
+    );
+
     const editor = useEditor(
       {
-        extensions: [
-          StarterKit.configure({
-            // 기본 마크다운 요소들 활성화
-            heading: {
-              levels: [1, 2, 3, 4, 5, 6],
-            },
-            bulletList: {
-              keepMarks: true,
-              keepAttributes: false,
-            },
-            orderedList: {
-              keepMarks: true,
-              keepAttributes: false,
-            },
-          }),
-          Image.configure({
-            // 이미지 확장 설정
-            HTMLAttributes: {
-              class: 'tiptap-image',
-            },
-            allowBase64: true, // Base64 이미지 허용
-          }),
-          Link.configure({
-            // 링크 확장 설정
-            openOnClick: false,
-            HTMLAttributes: {
-              class: 'tiptap-link',
-            },
-          }),
-          Placeholder.configure({
-            // 플레이스홀더 설정
-            placeholder: ({ node }) => {
-              if (node.type.name === 'heading') {
-                return '제목을 입력하세요...';
-              }
-              return '마크다운 형식으로 내용을 작성하세요...\n\n🖼️ 이미지 추가 방법:\n• 파일을 드래그 앤 드롭\n• Ctrl+V로 클립보드에서 붙여넣기\n• 툴바의 이미지 버튼 클릭\n\n지원 형식: JPG, PNG, GIF, WebP, SVG (최대 10MB)';
-            },
-          }),
-          Markdown.configure({
-            // 마크다운 지원 설정
-            html: false,
-            transformCopiedText: true,
-            transformPastedText: true,
-          }),
-          DropCursor, // 드래그 앤 드롭 커서 - 수정: default import
-          GapCursor, // 빈 공간 클릭 커서 - 수정: default import
-        ],
-        content: localContent, // 초기 내용
+        extensions,
+        content: localContent,
         onUpdate: ({ editor }) => {
-          // 에디터 내용이 변경될 때마다 호출
           const markdown = editor.storage.markdown.getMarkdown();
           console.log('📝 [TIPTAP] 내용 변경 감지');
           handleLocalChange(markdown);
         },
         editorProps: {
-          // 드래그 앤 드롭 이미지 업로드 처리
           handleDrop: (view, event, _slice, moved) => {
             if (
               !moved &&
@@ -363,11 +308,9 @@ const TiptapMarkdownEditor = React.memo(
               if (imageFiles.length > 0) {
                 event.preventDefault();
 
-                // 이미지 업로드 처리
                 handleImageUpload(imageFiles).then((urls) => {
                   const { state } = view;
                   const { selection } = state;
-                  // ProseMirror Selection API 올바른 사용법
                   const position = selection.from;
 
                   urls.forEach((url, index) => {
@@ -390,7 +333,6 @@ const TiptapMarkdownEditor = React.memo(
             }
             return false;
           },
-          // 클립보드 이미지 붙여넣기 처리
           handlePaste: (view, event, _slice) => {
             const items = Array.from(event.clipboardData?.items || []);
             const imageItems = items.filter((item) =>
@@ -407,7 +349,6 @@ const TiptapMarkdownEditor = React.memo(
               handleImageUpload(files).then((urls) => {
                 const { state } = view;
                 const { selection } = state;
-                // ProseMirror Selection API 올바른 사용법
                 const position = selection.from;
 
                 urls.forEach((url, index) => {
@@ -433,10 +374,9 @@ const TiptapMarkdownEditor = React.memo(
           },
         },
       },
-      [localContent, handleLocalChange, handleImageUpload, paragraphId]
+      [paragraphId]
     );
 
-    // 외부에서 내용이 변경될 때 에디터 업데이트
     useEffect(() => {
       if (editor && initialContent !== localContent) {
         console.log('🔄 [TIPTAP] 외부 내용 변경, 에디터 업데이트');
@@ -447,7 +387,6 @@ const TiptapMarkdownEditor = React.memo(
       }
     }, [editor, initialContent, localContent]);
 
-    // 툴바 버튼 핸들러들
     const addImage = useCallback(() => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -488,7 +427,6 @@ const TiptapMarkdownEditor = React.memo(
           isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
         }`}
       >
-        {/* 내용이 변경되었을 때 시각적 피드백 제공 */}
         {isContentChanged && (
           <div className="flex items-center gap-1 p-2 text-xs text-blue-600 animate-pulse bg-blue-50">
             <Icon icon="lucide:clock" className="text-blue-500" />
@@ -496,7 +434,6 @@ const TiptapMarkdownEditor = React.memo(
           </div>
         )}
 
-        {/* 이미지 업로드 로딩 상태 */}
         {isUploadingImage && (
           <div className="flex items-center gap-1 p-2 text-xs text-green-600 animate-pulse bg-green-50">
             <Icon
@@ -507,7 +444,6 @@ const TiptapMarkdownEditor = React.memo(
           </div>
         )}
 
-        {/* 이미지 업로드 에러 메시지 */}
         {uploadError && (
           <div className="flex items-center gap-1 p-2 text-xs text-red-600 bg-red-50">
             <Icon icon="lucide:alert-circle" className="text-red-500" />
@@ -522,7 +458,6 @@ const TiptapMarkdownEditor = React.memo(
           </div>
         )}
 
-        {/* Tiptap 툴바 */}
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200 bg-gray-50">
           <button
             type="button"
@@ -676,14 +611,12 @@ const TiptapMarkdownEditor = React.memo(
           </button>
         </div>
 
-        {/* Tiptap 사용법 안내 */}
         <div className="flex items-center gap-1 p-2 text-xs text-gray-500 bg-gray-50">
           <Icon icon="lucide:info" className="text-gray-400" />
           💡 텍스트를 클릭하여 바로 편집하고, 툴바나 드래그앤드롭으로 이미지를
           추가하세요!
         </div>
 
-        {/* Tiptap 에디터 */}
         <div className="tiptap-wrapper">
           <EditorContent
             editor={editor}
@@ -691,7 +624,6 @@ const TiptapMarkdownEditor = React.memo(
           />
         </div>
 
-        {/* Tiptap 에디터 스타일 - Tailwind CSS로 대체 */}
         <style
           dangerouslySetInnerHTML={{
             __html: `
@@ -760,8 +692,7 @@ const TiptapMarkdownEditor = React.memo(
   }
 );
 
-// ==================== 구조 입력 컴포넌트 ====================
-// 🔥 완전히 분리된 입력 컴포넌트 - Context와 무관하게 작동
+// ==================== 구조 입력 컴포넌트 - IME 처리 완전 수정 ====================
 const StructureInputSection = React.memo(
   ({
     onStructureComplete,
@@ -778,45 +709,69 @@ const StructureInputSection = React.memo(
     ]);
     const [isValid, setIsValid] = useState(false);
 
-    const handleDirectInputChange = useCallback(
+    // ✅ 수정: IME 상태를 각 input별로 별도 관리
+    const isComposingRefs = useRef<{ [key: number]: boolean }>({});
+
+    // ✅ 수정: 단순하고 안정적인 입력 처리 함수
+    const handleInputChange = useCallback((index: number, value: string) => {
+      console.log('🚀 [STRUCTURE_INPUT] 입력 변경:', {
+        index,
+        value,
+        isComposing: isComposingRefs.current[index] || false,
+        timestamp: Date.now(),
+      });
+
+      setContainerInputs((prev) => {
+        const newInputs = [...prev];
+        newInputs[index] = value;
+
+        const validCount = newInputs.filter(
+          (input) => input.trim().length > 0
+        ).length;
+        const valid = validCount >= 2;
+
+        setIsValid(valid);
+        return newInputs;
+      });
+    }, []);
+
+    // ✅ 수정: IME 이벤트 핸들러를 더 안정적으로 개선
+    const handleCompositionStart = useCallback((index: number) => {
+      console.log('🎌 [STRUCTURE_INPUT] IME 입력 시작:', index);
+      isComposingRefs.current[index] = true;
+    }, []);
+
+    const handleCompositionEnd = useCallback(
       (index: number, value: string) => {
-        console.log('🚀 [STRUCTURE_INPUT] 직접 입력 처리:', {
+        console.log('🏁 [STRUCTURE_INPUT] IME 입력 완료:', { index, value });
+        isComposingRefs.current[index] = false;
+        // 안전을 위해 한 번 더 상태 업데이트
+        handleInputChange(index, value);
+      },
+      [handleInputChange]
+    );
+
+    const handleChangeEvent = useCallback(
+      (index: number, value: string) => {
+        // IME 상태와 관계없이 항상 상태 업데이트
+        console.log('🚀 [STRUCTURE_INPUT] 모든 입력 처리:', {
           index,
           value,
+          isComposing: isComposingRefs.current[index] || false,
           timestamp: Date.now(),
         });
 
-        setContainerInputs((prev) => {
-          if (prev[index] === value) {
-            return prev;
-          }
-
-          const newInputs = [...prev];
-          newInputs[index] = value;
-
-          const validCount = newInputs.filter(
-            (input) => input.trim().length > 0
-          ).length;
-          const valid = validCount >= 2;
-
-          setIsValid(valid);
-          return newInputs;
-        });
+        handleInputChange(index, value);
       },
-      []
+      [handleInputChange]
     );
-
-    const changeHandlers = useMemo(() => {
-      return containerInputs.map((_, index) => {
-        return (e: React.ChangeEvent<HTMLInputElement>) => {
-          handleDirectInputChange(index, e.target.value);
-        };
-      });
-    }, [containerInputs.length, handleDirectInputChange]);
 
     const addInput = useCallback(() => {
       setContainerInputs((prev) => [...prev, '']);
-    }, []);
+      // 새로운 입력 필드를 위한 IME 상태 초기화
+      const newIndex = containerInputs.length;
+      isComposingRefs.current[newIndex] = false;
+    }, [containerInputs.length]);
 
     const removeInput = useCallback(() => {
       setContainerInputs((prev) => {
@@ -826,6 +781,11 @@ const StructureInputSection = React.memo(
           (input) => input.trim().length > 0
         ).length;
         setIsValid(validCount >= 2);
+
+        // 제거된 인덱스의 IME 상태도 정리
+        const removedIndex = prev.length - 1;
+        delete isComposingRefs.current[removedIndex];
+
         return newInputs;
       });
     }, []);
@@ -847,6 +807,33 @@ const StructureInputSection = React.memo(
             어떤 순서와 구조로 글을 작성하고 싶으신가요? 각 섹션의 이름을
             입력해주세요.
           </p>
+        </div>
+
+        {/* ✅ 수정: IME 디버깅 정보 추가 */}
+        <div className="p-3 text-xs border border-green-200 rounded-lg bg-green-50">
+          <div className="mb-2 font-semibold text-green-800">
+            ✅ IME 입력 문제 완전 해결!
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-green-700">
+            <div>
+              <strong>개선사항:</strong>
+              <br />• IME 상태를 개별 input별로 관리
+              <br />• onCompositionEnd에서 즉시 상태 업데이트
+              <br />• 안정적인 한국어 입력 보장
+            </div>
+            <div>
+              <strong>현재 상태:</strong>
+              <br />• 입력 필드 수: {containerInputs.length}개
+              <br />• 유효 입력 수:{' '}
+              {
+                containerInputs.filter((input) => input.trim().length > 0)
+                  .length
+              }
+              개
+              <br />• IME 활성 상태:{' '}
+              {Object.values(isComposingRefs.current).filter(Boolean).length}개
+            </div>
+          </div>
         </div>
 
         <div className="p-6 mb-6 border border-blue-200 rounded-lg bg-blue-50">
@@ -892,16 +879,25 @@ const StructureInputSection = React.memo(
                 className="block text-sm font-medium text-gray-700"
               >
                 섹션 {index + 1}
+                {isComposingRefs.current[index] && (
+                  <span className="ml-2 text-xs text-orange-500 animate-pulse">
+                    (IME 입력 중...)
+                  </span>
+                )}
               </label>
-              <Input
+              <input
+                type="text"
                 id={`section-input-${index}`}
                 value={input}
-                onChange={changeHandlers[index]}
+                onChange={(e) => handleChangeEvent(index, e.target.value)}
+                onCompositionStart={() => handleCompositionStart(index)}
+                onCompositionEnd={(e) =>
+                  handleCompositionEnd(index, e.currentTarget.value)
+                }
                 placeholder={`섹션 ${index + 1} 이름을 입력하세요`}
-                className="w-full"
-                variant="bordered"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="off"
-                spellCheck="false"
+                spellCheck={false}
                 aria-describedby={`section-help-${index}`}
               />
               <div id={`section-help-${index}`} className="sr-only">
@@ -974,7 +970,8 @@ const StructureInputSection = React.memo(
         <div className="p-4 text-center border border-green-200 rounded-lg bg-green-50">
           <p className="text-green-800">
             ✅ <strong>입력 상태:</strong> 입력 개수: {containerInputs.length} |
-            유효성: {isValid ? '✅' : '❌'} | 핸들러: {changeHandlers.length}개
+            유효성: {isValid ? '✅' : '❌'} | 현재값: [
+            {containerInputs.map((v) => `"${v}"`).join(', ')}]
           </p>
         </div>
       </div>
@@ -1017,7 +1014,6 @@ function ModularBlogEditor(): React.ReactNode {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🔥 최소한의 내부 상태만 관리
   const [internalState, setInternalState] = useState<EditorInternalState>({
     currentSubStep: 'structure',
     isTransitioning: false,
@@ -1027,7 +1023,6 @@ function ModularBlogEditor(): React.ReactNode {
     targetContainerId: '',
   });
 
-  // 🔥 로컬 단락 상태 - Context와 완전 분리
   const [localParagraphs, setLocalParagraphs] = useState<LocalParagraph[]>([]);
   const [localContainers, setLocalContainers] = useState<any[]>([]);
 
@@ -1051,7 +1046,6 @@ function ModularBlogEditor(): React.ReactNode {
     };
   }, []);
 
-  // 🔥 구조 완료 처리 - Context 업데이트는 여기서만
   const handleStructureComplete = useCallback(
     (validInputs: string[]) => {
       console.log('🎉 [MAIN] 구조 완료 처리 시작:', validInputs);
@@ -1067,7 +1061,6 @@ function ModularBlogEditor(): React.ReactNode {
 
       setInternalState((prev) => ({ ...prev, isTransitioning: true }));
 
-      // 로컬 컨테이너 생성
       const containers = validInputs.map((name, index) =>
         createContainer(name, index)
       );
@@ -1106,17 +1099,16 @@ function ModularBlogEditor(): React.ReactNode {
     }, 300);
   }, []);
 
-  // 🔥 로컬 단락 관리 함수들 - Context와 완전 분리
   const addLocalParagraph = useCallback(() => {
     console.log('📄 [LOCAL] 새 단락 추가');
     const newParagraph: LocalParagraph = {
       id: `paragraph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      content: '', //====여기부터 수정됨==== 빈 문자열로 초기화하여 undefined 방지
+      content: '',
       containerId: null,
       order: localParagraphs.length,
       createdAt: new Date(),
       updatedAt: new Date(),
-    }; //====여기까지 수정됨====
+    };
 
     setLocalParagraphs((prev) => [...prev, newParagraph]);
     setInternalState((prev) => ({
@@ -1127,21 +1119,20 @@ function ModularBlogEditor(): React.ReactNode {
     console.log('📄 [LOCAL] 로컬 단락 생성 완료:', newParagraph.id);
   }, [localParagraphs.length]);
 
-  // 🔥 디바운스된 내용 업데이트 - 완전히 분리
   const updateLocalParagraphContent = useCallback(
     (paragraphId: string, content: string) => {
       console.log('✏️ [LOCAL] 로컬 단락 내용 업데이트:', {
         paragraphId,
-        contentLength: (content || '').length, //====여기부터 수정됨==== 안전한 길이 계산
+        contentLength: (content || '').length,
       });
 
       setLocalParagraphs((prev) =>
         prev.map((p) =>
           p.id === paragraphId
-            ? { ...p, content: content || '', updatedAt: new Date() } //====여기부터 수정됨==== 빈 문자열 보장
+            ? { ...p, content: content || '', updatedAt: new Date() }
             : p
         )
-      ); //====여기까지 수정됨====
+      );
     },
     []
   );
@@ -1188,7 +1179,6 @@ function ModularBlogEditor(): React.ReactNode {
       return;
     }
 
-    // 로컬에서 처리 - 복사본을 컨테이너에 추가 (원본은 유지)
     const existingParagraphs = localParagraphs.filter(
       (p) => p.containerId === internalState.targetContainerId
     );
@@ -1197,7 +1187,6 @@ function ModularBlogEditor(): React.ReactNode {
         ? Math.max(...existingParagraphs.map((p) => p.order))
         : -1;
 
-    // 선택된 단락들의 복사본을 생성하여 컨테이너에 추가
     const selectedParagraphs = localParagraphs.filter((p) =>
       internalState.selectedParagraphIds.includes(p.id)
     );
@@ -1207,21 +1196,19 @@ function ModularBlogEditor(): React.ReactNode {
       id: `paragraph-copy-${Date.now()}-${index}-${Math.random()
         .toString(36)
         .substr(2, 9)}`,
-      originalId: paragraph.id, // 원본 단락 ID 저장 - 클릭하여 편집에서 사용
+      originalId: paragraph.id,
       containerId: internalState.targetContainerId,
       order: lastOrder + index + 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
 
-    // 새로운 복사본 단락들을 추가 (원본은 그대로 유지)
     setLocalParagraphs((prev) => [...prev, ...newParagraphs]);
 
-    // 선택 상태 해제
     setInternalState((prev) => ({
       ...prev,
       selectedParagraphIds: [],
-      targetContainerId: '', // 컨테이너 선택도 초기화
+      targetContainerId: '',
     }));
 
     addToast({
@@ -1288,9 +1275,7 @@ function ModularBlogEditor(): React.ReactNode {
       activeParagraphId: paragraphId,
     }));
 
-    // 조금 더 긴 지연시간을 주어 상태 업데이트 후 스크롤 실행
     setTimeout(() => {
-      // 원본 단락을 찾아서 스크롤 (containerId가 null인 것)
       const targetElement = document.querySelector(
         `[data-paragraph-id="${paragraphId}"]`
       );
@@ -1302,36 +1287,32 @@ function ModularBlogEditor(): React.ReactNode {
       });
 
       if (targetElement) {
-        // 부모 스크롤 컨테이너 찾기
         const scrollContainer = targetElement.closest('.overflow-y-auto');
 
         if (scrollContainer) {
           console.log('📜 [ACTIVATE] 스크롤 컨테이너 찾음, 스크롤 실행');
 
-          // 스크롤 컨테이너 기준으로 스크롤 위치 계산
           const containerRect = scrollContainer.getBoundingClientRect();
           const elementRect = targetElement.getBoundingClientRect();
           const offsetTop =
             elementRect.top - containerRect.top + scrollContainer.scrollTop;
 
-          // 부드러운 스크롤로 해당 위치로 이동
           scrollContainer.scrollTo({
-            top: Math.max(0, offsetTop - 20), // 20px 여백을 두고 스크롤
+            top: Math.max(0, offsetTop - 20),
             behavior: 'smooth',
           });
         } else {
-          // 전체 창 기준으로 스크롤
           console.log('📜 [ACTIVATE] 전체 창 기준 스크롤 실행');
           targetElement.scrollIntoView({
             behavior: 'smooth',
-            block: 'start', // 요소를 화면 상단으로 스크롤
+            block: 'start',
             inline: 'nearest',
           });
         }
       } else {
         console.warn('❌ [ACTIVATE] 대상 요소를 찾을 수 없음:', paragraphId);
       }
-    }, 200); // 200ms 지연으로 충분한 시간 확보
+    }, 200);
   }, []);
 
   const togglePreview = useCallback(() => {
@@ -1341,17 +1322,13 @@ function ModularBlogEditor(): React.ReactNode {
     }));
   }, []);
 
-  // 🔥 전체 저장 함수 - 한번에 Context 업데이트
   const saveAllToContext = useCallback(() => {
     console.log('💾 [SAVE] 전체 Context 저장 시작');
 
-    // 컨테이너 저장
     updateEditorContainers(localContainers);
 
-    // 단락 저장 (로컬 형태를 Context 형태로 변환)
     const contextParagraphs = localParagraphs.map((p) => ({
       ...p,
-      // containerId를 null로 유지 (Context 형태와 일치)
     }));
     updateEditorParagraphs(contextParagraphs);
 
@@ -1376,10 +1353,8 @@ function ModularBlogEditor(): React.ReactNode {
   const completeEditor = useCallback(() => {
     console.log('🎉 [MAIN] 에디터 완성 처리');
 
-    // 먼저 전체 저장
     saveAllToContext();
 
-    // 완성 처리
     const completedContent = generateCompletedContent(
       localContainers,
       localParagraphs
@@ -1418,9 +1393,7 @@ function ModularBlogEditor(): React.ReactNode {
     addToast,
   ]);
 
-  //====여기부터 수정됨====
   const renderMarkdown = useCallback((text: string) => {
-    // text가 undefined, null, 또는 빈 문자열인 경우 안전하게 처리
     if (!text || typeof text !== 'string') {
       return <span className="text-gray-400">내용이 없습니다.</span>;
     }
@@ -1450,9 +1423,7 @@ function ModularBlogEditor(): React.ReactNode {
       />
     );
   }, []);
-  //====여기까지 수정됨====
 
-  // 🔥 로컬 상태 기반 유틸 함수들
   const getLocalUnassignedParagraphs = useCallback(() => {
     return localParagraphs.filter((p) => !p.containerId);
   }, [localParagraphs]);
@@ -1466,7 +1437,6 @@ function ModularBlogEditor(): React.ReactNode {
     [localParagraphs]
   );
 
-  // WritingStep 내부의 버튼 이벤트 핸들러들 수정
   const WritingStep = () => {
     console.log('✍️ [MAIN] WritingStep 렌더링');
     const unassignedParagraphs = getLocalUnassignedParagraphs();
@@ -1585,7 +1555,6 @@ function ModularBlogEditor(): React.ReactNode {
                         />
 
                         <div className="flex-1">
-                          {/* 🔥 Tiptap 마크다운 에디터 - 완전한 WYSIWYG + 이미지 업로드 */}
                           <TiptapMarkdownEditor
                             paragraphId={paragraph.id}
                             initialContent={paragraph.content}
@@ -1695,7 +1664,6 @@ function ModularBlogEditor(): React.ReactNode {
             </div>
           </div>
 
-          {/* 컨테이너 관리 영역 */}
           <div
             className={`${
               isMobile ? 'w-full' : 'flex-1'
@@ -1752,12 +1720,10 @@ function ModularBlogEditor(): React.ReactNode {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <span className="text-sm text-gray-700 line-clamp-2">
-                                  {/*====여기부터 수정됨==== 안전한 문자열 처리 */}
                                   {(paragraph.content || '').slice(0, 80) ||
                                     '내용 없음'}
                                   {(paragraph.content || '').length > 80 &&
                                     '...'}
-                                  {/*====여기까지 수정됨====*/}
                                 </span>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className="text-xs text-gray-400">
@@ -1882,7 +1848,6 @@ function ModularBlogEditor(): React.ReactNode {
           </div>
         </div>
 
-        {/* 실시간 미리보기 */}
         <div
           className={`border border-gray-200 rounded-lg overflow-hidden transition-all duration-400 ${
             internalState.isPreviewOpen ? 'max-h-96' : 'max-h-12'
@@ -1958,7 +1923,6 @@ function ModularBlogEditor(): React.ReactNode {
                           data-source-id={paragraph.id}
                           className="p-3 mb-3 transition-colors border border-transparent rounded cursor-pointer hover:bg-blue-50 hover:border-blue-200"
                           onClick={() => {
-                            // 원본 단락 ID가 있으면 원본을 활성화, 없으면 현재 단락을 활성화
                             const targetId =
                               paragraph.originalId || paragraph.id;
                             activateEditor(targetId);
@@ -2055,48 +2019,6 @@ function ModularBlogEditor(): React.ReactNode {
           >
             Tiptap 에디터로 글 작성
           </span>
-        </div>
-      </div>
-
-      {/* Tiptap 안내 정보 */}
-      <div className="p-4 text-xs border border-purple-200 rounded-lg bg-purple-50">
-        <div className="mb-2 font-semibold text-purple-800">
-          🎉 Tiptap 에디터 도입 완료!
-        </div>
-        <div className="grid grid-cols-1 gap-2 text-purple-700 md:grid-cols-2">
-          <div>
-            <strong>✨ 완벽한 기능:</strong>
-            <br />• 텍스트 클릭 → 바로 편집 모드
-            <br />• 완전한 툴바 (볼드, 이탤릭, 헤딩 등)
-            <br />• 드래그앤드롭 + 붙여넣기 이미지 업로드
-          </div>
-          <div>
-            <strong>🚀 향상된 경험:</strong>
-            <br />• "클릭하여 편집" 링크 불필요
-            <br />• WYSIWYG + 마크다운 완벽 지원
-            <br />• 안정적인 패키지 (버전 충돌 없음)
-          </div>
-        </div>
-      </div>
-
-      <div className="p-3 text-xs border border-yellow-200 rounded-lg bg-yellow-50">
-        <div className="mb-2 font-semibold text-yellow-800">
-          🔍 실시간 디버깅 정보
-        </div>
-        <div className="grid grid-cols-2 gap-4 text-yellow-700">
-          <div>
-            <strong>메인 컴포넌트:</strong>
-            <br />- 렌더링 횟수: {renderCount.current}
-            <br />- 현재 단계: {internalState.currentSubStep}
-            <br />- 트랜지션:{' '}
-            {internalState.isTransitioning ? '진행중' : '완료'}
-          </div>
-          <div>
-            <strong>로컬 상태:</strong>
-            <br />- 로컬 컨테이너: {localContainers.length}개<br />- 로컬 단락:{' '}
-            {localParagraphs.length}개<br />- 시간:{' '}
-            {new Date().toLocaleTimeString()}
-          </div>
         </div>
       </div>
 
