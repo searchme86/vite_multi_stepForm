@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import { Button, Input, Chip, Badge } from '@heroui/react';
+import { Button, Chip, Badge } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -170,12 +170,11 @@ const TiptapMarkdownEditor = React.memo(
     const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
-    const { localContent, handleLocalChange, isContentChanged } =
-      useMarkdownEditorState({
-        initialContent: initialContent || '',
-        onContentChange,
-        debounceDelay: 1000,
-      });
+    const { handleLocalChange, isContentChanged } = useMarkdownEditorState({
+      initialContent: initialContent || '',
+      onContentChange,
+      debounceDelay: 1000,
+    });
 
     const handleImageUpload = useCallback(
       async (files: File[]): Promise<string[]> => {
@@ -255,7 +254,6 @@ const TiptapMarkdownEditor = React.memo(
             color: '#3b82f6',
             width: 2,
           },
-          gapcursor: true,
         }),
         Image.configure({
           HTMLAttributes: {
@@ -281,7 +279,7 @@ const TiptapMarkdownEditor = React.memo(
           },
         }),
         Markdown.configure({
-          html: true,
+          // html: true,
           transformCopiedText: true,
           transformPastedText: true,
           linkify: false,
