@@ -4,12 +4,6 @@ import { useState, useCallback, useMemo } from 'react';
 import { Container } from '../types/container';
 import { LocalParagraph } from '../types/paragraph';
 
-interface ContainerStats {
-  totalContainers: number;
-  containersWithContent: number;
-  averageParagraphsPerContainer: number;
-}
-
 interface ContainerMapping {
   [containerId: string]: {
     paragraphIds: string[];
