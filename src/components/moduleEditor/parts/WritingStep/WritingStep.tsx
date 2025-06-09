@@ -4,10 +4,39 @@ import ParagraphEditor from './paragraph/ParagraphEditor';
 import ContainerManager from './container/ContainerManager';
 import PreviewPanel from './preview/PreviewPanel';
 
+type SubStep = 'structure' | 'writing';
+
+interface EditorInternalState {
+  currentSubStep: SubStep;
+  isTransitioning: boolean;
+  activeParagraphId: string | null;
+  isPreviewOpen: boolean;
+  selectedParagraphIds: string[];
+  targetContainerId: string;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface WritingStepProps {
-  localContainers: any[];
-  localParagraphs: any[];
-  internalState: any;
+  localContainers: Container[];
+  localParagraphs: LocalParagraph[];
+  internalState: EditorInternalState;
   renderMarkdown: (text: string) => React.ReactNode;
   goToStructureStep: () => void;
   saveAllToContext: () => void;
@@ -20,9 +49,9 @@ interface WritingStepProps {
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
   togglePreview: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<any>>;
-  getLocalUnassignedParagraphs: () => any[];
-  getLocalParagraphsByContainer: (containerId: string) => any[];
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
+  getLocalUnassignedParagraphs: () => LocalParagraph[];
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
 }
 
 function WritingStep({

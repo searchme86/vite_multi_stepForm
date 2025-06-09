@@ -9,11 +9,17 @@ import {
 } from '../utils/validation';
 import { createContainersFromInputs } from './containerActions';
 
+interface Toast {
+  title: string;
+  description: string;
+  color: 'warning' | 'success';
+}
+
 export const handleStructureComplete = (
   validInputs: string[],
   setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>,
   setLocalContainers: React.Dispatch<React.SetStateAction<Container[]>>,
-  addToast: (toast: any) => void
+  addToast: (toast: Toast) => void
 ) => {
   console.log('🎉 [MAIN] 구조 완료 처리 시작:', validInputs);
 
@@ -136,7 +142,7 @@ export const saveAllToContext = (
   localParagraphs: LocalParagraph[],
   updateEditorContainers: (containers: Container[]) => void,
   updateEditorParagraphs: (paragraphs: LocalParagraph[]) => void,
-  addToast: (toast: any) => void
+  addToast: (toast: Toast) => void
 ) => {
   console.log('💾 [SAVE] 전체 Context 저장 시작');
 
@@ -169,7 +175,7 @@ export const completeEditor = (
   ) => string,
   updateEditorCompletedContent: (content: string) => void,
   setEditorCompleted: (completed: boolean) => void,
-  addToast: (toast: any) => void
+  addToast: (toast: Toast) => void
 ) => {
   console.log('🎉 [MAIN] 에디터 완성 처리');
 
