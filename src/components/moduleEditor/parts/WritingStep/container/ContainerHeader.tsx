@@ -1,7 +1,15 @@
 import { Icon } from '@iconify/react';
 
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface ContainerHeaderProps {
-  container: any;
+  container: Container;
   paragraphsCount: number;
 }
 

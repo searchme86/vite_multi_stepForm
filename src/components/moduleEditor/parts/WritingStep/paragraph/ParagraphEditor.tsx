@@ -4,17 +4,46 @@ import { Icon } from '@iconify/react';
 import ParagraphCard from './ParagraphCard';
 import EmptyParagraphState from './EmptyParagraphState';
 
+type SubStep = 'structure' | 'writing';
+
+interface EditorInternalState {
+  currentSubStep: SubStep;
+  isTransitioning: boolean;
+  activeParagraphId: string | null;
+  isPreviewOpen: boolean;
+  selectedParagraphIds: string[];
+  targetContainerId: string;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface ParagraphEditorProps {
   isMobile: boolean;
-  unassignedParagraphs: any[];
-  internalState: any;
-  sortedContainers: any[];
+  unassignedParagraphs: LocalParagraph[];
+  internalState: EditorInternalState;
+  sortedContainers: Container[];
   addLocalParagraph: () => void;
   deleteLocalParagraph: (id: string) => void;
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<any>>;
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
 }
 
 function ParagraphEditor({

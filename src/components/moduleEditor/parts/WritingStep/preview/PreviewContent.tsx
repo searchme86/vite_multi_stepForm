@@ -1,9 +1,27 @@
 import React from 'react';
 import { Icon } from '@iconify/react';
 
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
 interface PreviewContentProps {
-  sortedContainers: any[];
-  getLocalParagraphsByContainer: (containerId: string) => any[];
+  sortedContainers: Container[];
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
   renderMarkdown: (text: string) => React.ReactNode;
   activateEditor: (id: string) => void;
 }
@@ -18,7 +36,7 @@ function PreviewContent({
     containersCount: sortedContainers.length,
   });
 
-  const handleParagraphClick = (paragraph: any) => {
+  const handleParagraphClick = (paragraph: LocalParagraph) => {
     console.log('🖱️ [PREVIEW_CONTENT] 단락 클릭:', {
       paragraphId: paragraph.id,
       originalId: paragraph.originalId,

@@ -1,10 +1,28 @@
 import ContainerCard from './ContainerCard';
 import EmptyContainerState from './EmptyContainerState';
 
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
 interface ContainerManagerProps {
   isMobile: boolean;
-  sortedContainers: any[];
-  getLocalParagraphsByContainer: (containerId: string) => any[];
+  sortedContainers: Container[];
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
 }

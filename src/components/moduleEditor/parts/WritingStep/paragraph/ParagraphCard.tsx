@@ -4,15 +4,44 @@ import { Icon } from '@iconify/react';
 import TiptapEditor from '../../TiptapEditor/TiptapEditor';
 import ParagraphActions from './ParagraphActions';
 
+type SubStep = 'structure' | 'writing';
+
+interface EditorInternalState {
+  currentSubStep: SubStep;
+  isTransitioning: boolean;
+  activeParagraphId: string | null;
+  isPreviewOpen: boolean;
+  selectedParagraphIds: string[];
+  targetContainerId: string;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface ParagraphCardProps {
-  paragraph: any;
-  internalState: any;
-  sortedContainers: any[];
+  paragraph: LocalParagraph;
+  internalState: EditorInternalState;
+  sortedContainers: Container[];
   deleteLocalParagraph: (id: string) => void;
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<any>>;
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
 }
 
 function ParagraphCard({

@@ -2,10 +2,39 @@ import React from 'react';
 import PreviewControls from './PreviewControls';
 import PreviewContent from './PreviewContent';
 
+type SubStep = 'structure' | 'writing';
+
+interface EditorInternalState {
+  currentSubStep: SubStep;
+  isTransitioning: boolean;
+  activeParagraphId: string | null;
+  isPreviewOpen: boolean;
+  selectedParagraphIds: string[];
+  targetContainerId: string;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
 interface PreviewPanelProps {
-  internalState: any;
-  sortedContainers: any[];
-  getLocalParagraphsByContainer: (containerId: string) => any[];
+  internalState: EditorInternalState;
+  sortedContainers: Container[];
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
   renderMarkdown: (text: string) => React.ReactNode;
   activateEditor: (id: string) => void;
   togglePreview: () => void;

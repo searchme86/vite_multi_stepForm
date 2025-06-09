@@ -1,12 +1,41 @@
 import React from 'react';
 import { Button } from '@heroui/react';
 
+type SubStep = 'structure' | 'writing';
+
+interface EditorInternalState {
+  currentSubStep: SubStep;
+  isTransitioning: boolean;
+  activeParagraphId: string | null;
+  isPreviewOpen: boolean;
+  selectedParagraphIds: string[];
+  targetContainerId: string;
+}
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface ParagraphActionsProps {
-  paragraph: any;
-  internalState: any;
-  sortedContainers: any[];
+  paragraph: LocalParagraph;
+  internalState: EditorInternalState;
+  sortedContainers: Container[];
   addToLocalContainer: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<any>>;
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
 }
 
 function ParagraphActions({
@@ -30,7 +59,7 @@ function ParagraphActions({
       containerId,
     });
 
-    setInternalState((prev: any) => ({
+    setInternalState((prev: EditorInternalState) => ({
       ...prev,
       targetContainerId: containerId,
       selectedParagraphIds: prev.selectedParagraphIds.includes(paragraph.id)

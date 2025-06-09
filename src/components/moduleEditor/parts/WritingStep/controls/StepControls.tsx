@@ -1,8 +1,16 @@
 import { Button, Badge } from '@heroui/react';
 import { Icon } from '@iconify/react';
 
+interface Container {
+  id: string;
+  name: string;
+  order: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface StepControlsProps {
-  sortedContainers: any[];
+  sortedContainers: Container[];
   goToStructureStep: () => void;
   saveAllToContext: () => void;
   completeEditor: () => void;
