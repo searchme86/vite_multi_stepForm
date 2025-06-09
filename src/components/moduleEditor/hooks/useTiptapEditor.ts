@@ -29,11 +29,9 @@ export function useTiptapEditor({
     initialContentPreview: initialContent?.slice(0, 100),
     hasInitialImages:
       initialContent?.includes('![') || initialContent?.includes('<img'),
+    timestamp: Date.now(),
   });
-
   const extensions = useMemo(() => {
-    console.log('🔧 [USE_TIPTAP_EDITOR] Extensions 생성');
-
     return [
       StarterKit.configure({
         heading: {
@@ -90,30 +88,6 @@ export function useTiptapEditor({
           htmlLength: htmlContent.length,
           hasImgTags: htmlContent.includes('<img'),
           imgTagCount: (htmlContent.match(/<img[^>]*>/g) || []).length,
-          imgTags: htmlContent.match(/<img[^>]*>/g) || [],
-          imgSrcs: (
-            htmlContent.match(/<img[^>]*src="([^"]*)"[^>]*>/g) || []
-          ).map((tag) => {
-            const srcMatch = tag.match(/src="([^"]*)"/);
-            return srcMatch ? srcMatch[1].slice(0, 50) + '...' : 'no src';
-          }),
-        });
-
-        const jsonContent = editor.getJSON();
-        console.log('🔥 [TIPTAP] JSON 내용:', {
-          json: JSON.stringify(jsonContent, null, 2),
-          hasImageNodes: JSON.stringify(jsonContent).includes('"type":"image"'),
-          imageNodes:
-            JSON.stringify(jsonContent).match(/"type":"image"[^}]*}/g) || [],
-        });
-
-        console.log('🔥 [TIPTAP] 마크다운 변환 전 에디터 상태:', {
-          isEmpty: editor.isEmpty,
-          canUndo: editor.can().undo(),
-          isEditable: editor.isEditable,
-          hasContent: editor.state.doc.textContent.length > 0,
-          textContent: editor.state.doc.textContent,
-          docSize: editor.state.doc.content.size,
         });
 
         try {
@@ -124,94 +98,31 @@ export function useTiptapEditor({
             hasImageMarkdown: markdown.includes('!['),
             hasBase64: markdown.includes('data:image'),
             imageMatches: markdown.match(/!\[([^\]]*)\]\(([^)]+)\)/g) || [],
-            base64Matches:
-              markdown.match(
-                /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)\)/g
-              ) || [],
-            urlMatches:
-              markdown.match(/!\[([^\]]*)\]\(((?!data:image)[^)]+)\)/g) || [],
-          });
-
-          console.log('🔥 [TIPTAP] HTML vs 마크다운 비교:', {
-            htmlHasImages: htmlContent.includes('<img'),
-            markdownHasImages: markdown.includes('!['),
-            htmlImageCount: (htmlContent.match(/<img[^>]*>/g) || []).length,
-            markdownImageCount: (markdown.match(/!\[[^\]]*\]\([^)]+\)/g) || [])
-              .length,
-            conversionWorking:
-              htmlContent.includes('<img') === markdown.includes('!['),
           });
 
           console.log('🔥 [TIPTAP] 상위 컴포넌트로 전달되는 내용:', {
-            content: markdown,
+            content: markdown.slice(0, 200),
             willCallHandleLocalChange: true,
             paragraphId: paragraphId,
+            timestamp: Date.now(),
           });
 
-          console.log('📝 [USE_TIPTAP_EDITOR] 내용 변경 감지');
           handleLocalChange(markdown);
         } catch (error) {
           console.error('❌ [TIPTAP] 마크다운 변환 에러:', error);
-          console.log('❌ [TIPTAP] 에러 발생 시 HTML 내용 직접 전달 시도');
           handleLocalChange(htmlContent);
         }
       },
       editorProps: {
         handleDrop: createDropHandler({
           handleImageUpload: async (files: File[]) => {
-            console.log('🎯 [TIPTAP] 드롭 이벤트 - 이미지 업로드 시작:', {
-              fileCount: files.length,
-              fileNames: files.map((f) => f.name),
-              fileSizes: files.map((f) => f.size),
-              fileTypes: files.map((f) => f.type),
-            });
-
             const result = await handleImageUpload(files);
-
-            console.log('🎯 [TIPTAP] 드롭 이벤트 - 이미지 업로드 완료:', {
-              uploadedCount: result.length,
-              resultSamples: result.map((r) => r.slice(0, 50) + '...'),
-            });
-
-            setTimeout(() => {
-              if (editor && !editor.isDestroyed) {
-                console.log('🎯 [TIPTAP] 드롭 후 에디터 상태 확인:', {
-                  html: editor.getHTML(),
-                  markdown: editor.storage.markdown.getMarkdown(),
-                  hasImages: editor.getHTML().includes('<img'),
-                });
-              }
-            }, 100);
-
             return result;
           },
         }),
         handlePaste: createPasteHandler({
           handleImageUpload: async (files: File[]) => {
-            console.log('📋 [TIPTAP] 페이스트 이벤트 - 이미지 업로드 시작:', {
-              fileCount: files.length,
-              fileNames: files.map((f) => f.name),
-              fileSizes: files.map((f) => f.size),
-              fileTypes: files.map((f) => f.type),
-            });
-
             const result = await handleImageUpload(files);
-
-            console.log('📋 [TIPTAP] 페이스트 이벤트 - 이미지 업로드 완료:', {
-              uploadedCount: result.length,
-              resultSamples: result.map((r) => r.slice(0, 50) + '...'),
-            });
-
-            setTimeout(() => {
-              if (editor && !editor.isDestroyed) {
-                console.log('📋 [TIPTAP] 페이스트 후 에디터 상태 확인:', {
-                  html: editor.getHTML(),
-                  markdown: editor.storage.markdown.getMarkdown(),
-                  hasImages: editor.getHTML().includes('<img'),
-                });
-              }
-            }, 100);
-
             return result;
           },
         }),
@@ -231,12 +142,13 @@ export function useTiptapEditor({
     const currentContent = editor.storage.markdown.getMarkdown();
 
     console.log('🔄 [USE_TIPTAP_EDITOR] 초기 내용 동기화 체크:', {
-      initialContent: initialContent,
-      currentContent: currentContent,
+      initialContent: initialContent.slice(0, 100),
+      currentContent: currentContent.slice(0, 100),
       isContentDifferent: initialContent !== currentContent,
       hasInitialContent: initialContent.trim() !== '',
       shouldUpdate:
         initialContent !== currentContent && initialContent.trim() !== '',
+      timestamp: Date.now(),
     });
 
     if (initialContent !== currentContent && initialContent.trim() !== '') {
@@ -263,8 +175,8 @@ export function useTiptapEditor({
         );
 
         console.log('🖼️ [USE_TIPTAP_EDITOR] 마크다운 → HTML 변환:', {
-          before: beforeConversion,
-          after: contentToSet,
+          before: beforeConversion.slice(0, 200),
+          after: contentToSet.slice(0, 200),
           conversionCount: (
             beforeConversion.match(
               /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)\)/g
@@ -285,8 +197,8 @@ export function useTiptapEditor({
 
         setTimeout(() => {
           console.log('📝 [USE_TIPTAP_EDITOR] 내용 설정 후 상태:', {
-            html: editor.getHTML(),
-            markdown: editor.storage.markdown.getMarkdown(),
+            html: editor.getHTML().slice(0, 200),
+            markdown: editor.storage.markdown.getMarkdown().slice(0, 200),
             hasImages: editor.getHTML().includes('<img'),
           });
         }, 100);
@@ -299,7 +211,6 @@ export function useTiptapEditor({
   useEffect(() => {
     return () => {
       if (editor && !editor.isDestroyed) {
-        console.log('🧹 [USE_TIPTAP_EDITOR] 에디터 정리:', paragraphId);
         editor.destroy();
       }
     };

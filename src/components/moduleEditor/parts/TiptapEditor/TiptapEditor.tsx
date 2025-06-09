@@ -25,16 +25,18 @@ function TiptapEditor({
   console.log('📝 [TIPTAP] 렌더링:', {
     paragraphId,
     contentLength: (initialContent || '').length,
+    contentPreview: (initialContent || '').slice(0, 100),
+    hasImages: (initialContent || '').includes('!['),
     isActive,
+    timestamp: Date.now(),
   });
-
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { handleLocalChange, isContentChanged } = useMarkdownEditorState({
     initialContent: initialContent || '',
     onContentChange,
-    debounceDelay: 1000,
+    debounceDelay: 300,
   });
 
   const { handleImageUpload } = useImageUpload({
@@ -50,7 +52,6 @@ function TiptapEditor({
   });
 
   const addImage = useCallback(() => {
-    console.log('🖼️ [TIPTAP] 이미지 추가 버튼 클릭');
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -61,7 +62,6 @@ function TiptapEditor({
 
       urls.forEach((url) => {
         if (url && editor && !editor.isDestroyed) {
-          console.log('✅ [TIPTAP] 이미지 삽입:', url.slice(0, 50) + '...');
           editor
             .chain()
             .focus()
@@ -81,10 +81,8 @@ function TiptapEditor({
   }, [editor, handleImageUpload]);
 
   const addLink = useCallback(() => {
-    console.log('🔗 [TIPTAP] 링크 추가 버튼 클릭');
     const url = window.prompt('링크 URL을 입력하세요:');
     if (url && editor && !editor.isDestroyed) {
-      console.log('✅ [TIPTAP] 링크 설정:', url);
       editor.chain().focus().setLink({ href: url }).run();
     }
   }, [editor]);
@@ -101,7 +99,6 @@ function TiptapEditor({
   }
 
   if (editor.isDestroyed) {
-    console.error('❌ [TIPTAP] 에디터가 파괴된 상태');
     return (
       <div className="flex items-center justify-center p-8 border border-red-200 rounded-lg bg-red-50">
         <span className="text-red-500">

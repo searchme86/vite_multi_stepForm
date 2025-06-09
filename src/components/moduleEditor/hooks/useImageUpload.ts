@@ -14,9 +14,20 @@ export function useImageUpload({
 
   const handleImageUpload = useCallback(
     async (files: File[]): Promise<string[]> => {
-      console.log('🖼️ [USE_IMAGE_UPLOAD] 이미지 업로드 시작:', files.length);
-
+      console.log('🖼️ [USE_IMAGE_UPLOAD] 이미지 업로드 시작:', {
+        fileCount: files.length,
+        fileNames: files.map((f) => f.name),
+        fileSizes: files.map((f) => f.size),
+        fileTypes: files.map((f) => f.type),
+        timestamp: Date.now(),
+      });
       const imageFiles = files.filter(isImageFile);
+
+      console.log('🔍 [USE_IMAGE_UPLOAD] 파일 필터링 결과:', {
+        originalCount: files.length,
+        imageFileCount: imageFiles.length,
+        filteredOut: files.length - imageFiles.length,
+      });
 
       if (imageFiles.length === 0) {
         console.warn('⚠️ [USE_IMAGE_UPLOAD] 이미지 파일 없음');
@@ -27,6 +38,15 @@ export function useImageUpload({
       const oversizedFiles = imageFiles.filter(
         (file) => file.size > 10 * 1024 * 1024
       );
+
+      console.log('📏 [USE_IMAGE_UPLOAD] 파일 크기 검증:', {
+        imageFileCount: imageFiles.length,
+        oversizedCount: oversizedFiles.length,
+        oversizedFiles: oversizedFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+        })),
+      });
 
       if (oversizedFiles.length > 0) {
         console.warn(
@@ -43,14 +63,29 @@ export function useImageUpload({
       console.log('🔄 [USE_IMAGE_UPLOAD] base64 변환 시작');
 
       try {
-        const base64Promises = imageFiles.map(async (file) => {
+        const base64Promises = imageFiles.map(async (file, index) => {
           try {
+            console.log(
+              `🔄 [USE_IMAGE_UPLOAD] 파일 ${index + 1}/${
+                imageFiles.length
+              } 변환 시작:`,
+              file.name
+            );
             const base64Data = await fileToBase64(file);
-            console.log('✅ [USE_IMAGE_UPLOAD] 파일 변환 완료:', file.name);
+            console.log(
+              `✅ [USE_IMAGE_UPLOAD] 파일 ${index + 1}/${
+                imageFiles.length
+              } 변환 완료:`,
+              {
+                fileName: file.name,
+                resultLength: base64Data.length,
+                resultPreview: base64Data.slice(0, 50) + '...',
+              }
+            );
             return base64Data;
           } catch (error) {
             console.error(
-              '❌ [USE_IMAGE_UPLOAD] 파일 변환 실패:',
+              `❌ [USE_IMAGE_UPLOAD] 파일 변환 실패:`,
               file.name,
               error
             );
@@ -60,10 +95,13 @@ export function useImageUpload({
 
         const base64Results = await Promise.all(base64Promises);
 
-        console.log(
-          '✅ [USE_IMAGE_UPLOAD] 모든 이미지 업로드 완료:',
-          imageFiles.length
-        );
+        console.log('✅ [USE_IMAGE_UPLOAD] 모든 이미지 업로드 완료:', {
+          originalFileCount: imageFiles.length,
+          resultCount: base64Results.length,
+          resultSizes: base64Results.map((r) => r.length),
+          timestamp: Date.now(),
+        });
+
         return base64Results;
       } catch (error) {
         console.error('❌ [USE_IMAGE_UPLOAD] 이미지 업로드 실패:', error);
@@ -75,6 +113,7 @@ export function useImageUpload({
         return [];
       } finally {
         setIsUploadingImage(false);
+        console.log('🏁 [USE_IMAGE_UPLOAD] 업로드 프로세스 완료');
       }
     },
     [setIsUploadingImage, setUploadError]

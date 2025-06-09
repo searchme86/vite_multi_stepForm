@@ -9,8 +9,9 @@ function EditorCore({ editor, paragraphId }: EditorCoreProps) {
   console.log('🎯 [EDITOR_CORE] 렌더링:', {
     paragraphId,
     editorDestroyed: editor.isDestroyed,
+    editorHasContent: !editor.isEmpty,
+    timestamp: Date.now(),
   });
-
   return (
     <div className="tiptap-wrapper">
       <EditorContent

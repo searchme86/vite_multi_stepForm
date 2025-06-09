@@ -1,23 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export function useDebounce<T>(value: T, delay: number): T {
-  console.log('🪝 [USE_DEBOUNCE] 훅 초기화:', {
-    delay,
-    valueType: typeof value,
-  });
-
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
-  useEffect(() => {
-    console.log('⏱️ [USE_DEBOUNCE] 디바운스 타이머 시작');
+  console.log('⏱️ [USE_DEBOUNCE] 디바운스 훅 호출:', {
+    valueType: typeof value,
+    valueLength: typeof value === 'string' ? (value as string).length : 'N/A',
+    hasImages:
+      typeof value === 'string' ? (value as string).includes('![') : false,
+    delay,
+    timestamp: Date.now(),
+  });
 
+  useEffect(() => {
     const handler = setTimeout(() => {
-      console.log('✅ [USE_DEBOUNCE] 디바운스 완료, 값 업데이트');
+      console.log('⏱️ [USE_DEBOUNCE] 디바운스 완료, 값 업데이트:', {
+        newValueLength:
+          typeof value === 'string' ? (value as string).length : 'N/A',
+        hasImages:
+          typeof value === 'string' ? (value as string).includes('![') : false,
+        delay,
+        timestamp: Date.now(),
+      });
       setDebouncedValue(value);
     }, delay);
 
     return () => {
-      console.log('🧹 [USE_DEBOUNCE] 타이머 정리');
       clearTimeout(handler);
     };
   }, [value, delay]);

@@ -1,10 +1,7 @@
-// 📁 actions/paragraphActions.ts
-
 import { LocalParagraph } from '../types/paragraph';
 import {
   validateParagraphSelection,
   validateContainerTarget,
-  validateParagraphContent,
 } from '../utils/validation';
 
 export const addLocalParagraph = (
@@ -12,8 +9,6 @@ export const addLocalParagraph = (
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>,
   setInternalState: React.Dispatch<React.SetStateAction<any>>
 ) => {
-  console.log('📄 [LOCAL] 새 단락 추가');
-
   const newParagraph: LocalParagraph = {
     id: `paragraph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     content: '',
@@ -23,15 +18,11 @@ export const addLocalParagraph = (
     updatedAt: new Date(),
   };
 
-  console.log('📄 [LOCAL] 새 단락 생성:', newParagraph.id);
-
   setLocalParagraphs((prev) => [...prev, newParagraph]);
   setInternalState((prev: any) => ({
     ...prev,
     activeParagraphId: newParagraph.id,
   }));
-
-  console.log('📄 [LOCAL] 로컬 단락 생성 완료:', newParagraph.id);
 };
 
 export const updateLocalParagraphContent = (
@@ -42,6 +33,10 @@ export const updateLocalParagraphContent = (
   console.log('✏️ [LOCAL] 로컬 단락 내용 업데이트:', {
     paragraphId,
     contentLength: (content || '').length,
+    contentPreview: (content || '').slice(0, 100),
+    hasImages: (content || '').includes('!['),
+    hasBase64: (content || '').includes('data:image'),
+    timestamp: Date.now(),
   });
 
   setLocalParagraphs((prev) =>
@@ -58,8 +53,6 @@ export const deleteLocalParagraph = (
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>,
   addToast: (toast: any) => void
 ) => {
-  console.log('🗑️ [LOCAL] 로컬 단락 삭제:', paragraphId);
-
   setLocalParagraphs((prev) => prev.filter((p) => p.id !== paragraphId));
 
   addToast({
@@ -73,8 +66,6 @@ export const toggleParagraphSelection = (
   paragraphId: string,
   setInternalState: React.Dispatch<React.SetStateAction<any>>
 ) => {
-  console.log('🎯 [SELECTION] 단락 선택 토글:', paragraphId);
-
   setInternalState((prev: any) => ({
     ...prev,
     selectedParagraphIds: prev.selectedParagraphIds.includes(paragraphId)
@@ -95,8 +86,8 @@ export const addToLocalContainer = (
   console.log('📦 [CONTAINER] 컨테이너에 단락 추가 시작:', {
     selectedCount: selectedParagraphIds.length,
     targetContainerId,
+    timestamp: Date.now(),
   });
-
   if (!validateParagraphSelection(selectedParagraphIds)) {
     addToast({
       title: '선택된 단락 없음',
@@ -127,22 +118,65 @@ export const addToLocalContainer = (
     selectedParagraphIds.includes(p.id)
   );
 
-  console.log('📦 [CONTAINER] 선택된 단락들 처리:', {
+  console.log('📦 [CONTAINER] 선택된 단락들 상태 확인:', {
     selectedCount: selectedParagraphs.length,
+    paragraphStates: selectedParagraphs.map((p) => ({
+      id: p.id,
+      contentLength: p.content.length,
+      hasImages: p.content.includes('!['),
+      preview: p.content.slice(0, 50),
+      isEmpty: !p.content || p.content.trim().length === 0,
+    })),
     lastOrder,
+    timestamp: Date.now(),
   });
 
-  const newParagraphs = selectedParagraphs.map((paragraph, index) => ({
-    ...paragraph,
-    id: `paragraph-copy-${Date.now()}-${index}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`,
-    originalId: paragraph.id,
-    containerId: targetContainerId,
-    order: lastOrder + index + 1,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }));
+  const emptyParagraphs = selectedParagraphs.filter(
+    (p) => !p.content || p.content.trim().length === 0
+  );
+
+  console.log('📦 [CONTAINER] 빈 단락 체크:', {
+    emptyCount: emptyParagraphs.length,
+    emptyParagraphIds: emptyParagraphs.map((p) => p.id),
+    willBlock: emptyParagraphs.length > 0,
+  });
+
+  if (emptyParagraphs.length > 0) {
+    console.log(
+      '❌ [CONTAINER] 빈 단락으로 인한 차단:',
+      emptyParagraphs.length
+    );
+    addToast({
+      title: '빈 단락 포함',
+      description: '내용이 없는 단락은 컨테이너에 추가할 수 없습니다.',
+      color: 'warning',
+    });
+    return;
+  }
+
+  const newParagraphs: LocalParagraph[] = selectedParagraphs.map(
+    (paragraph, index) => {
+      console.log('✅ [CONTAINER] 단락 복사 생성:', {
+        originalId: paragraph.id,
+        contentLength: paragraph.content.length,
+        hasImages: paragraph.content.includes('!['),
+        preview: paragraph.content.slice(0, 100),
+      });
+
+      return {
+        ...paragraph,
+        id: `paragraph-copy-${Date.now()}-${index}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        originalId: paragraph.id,
+        content: paragraph.content,
+        containerId: targetContainerId,
+        order: lastOrder + index + 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+  );
 
   setLocalParagraphs((prev) => [...prev, ...newParagraphs]);
 
@@ -159,11 +193,18 @@ export const addToLocalContainer = (
   console.log('✅ [CONTAINER] 단락 추가 완료:', {
     addedCount: newParagraphs.length,
     targetContainer: targetContainer?.name,
+    addedParagraphs: newParagraphs.map((p) => ({
+      id: p.id,
+      contentLength: p.content.length,
+      hasImages: p.content.includes('!['),
+      preview: p.content.slice(0, 50),
+    })),
+    timestamp: Date.now(),
   });
 
   addToast({
     title: '단락 추가 완료',
-    description: `${selectedParagraphs.length}개의 단락이 ${targetContainer?.name} 컨테이너에 추가되었습니다.`,
+    description: `${newParagraphs.length}개의 단락이 ${targetContainer?.name} 컨테이너에 추가되었습니다.`,
     color: 'success',
   });
 };
@@ -174,11 +215,8 @@ export const moveLocalParagraphInContainer = (
   localParagraphs: LocalParagraph[],
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>
 ) => {
-  console.log('🔄 [MOVE] 단락 이동 시작:', { paragraphId, direction });
-
   const paragraph = localParagraphs.find((p) => p.id === paragraphId);
   if (!paragraph || !paragraph.containerId) {
-    console.log('❌ [MOVE] 단락을 찾을 수 없거나 컨테이너에 할당되지 않음');
     return;
   }
 
@@ -190,26 +228,15 @@ export const moveLocalParagraphInContainer = (
     (p) => p.id === paragraphId
   );
 
-  console.log('🔄 [MOVE] 현재 위치 확인:', {
-    currentIndex,
-    totalParagraphs: containerParagraphs.length,
-  });
-
   if (
     (direction === 'up' && currentIndex === 0) ||
     (direction === 'down' && currentIndex === containerParagraphs.length - 1)
   ) {
-    console.log('❌ [MOVE] 이동할 수 없는 위치');
     return;
   }
 
   const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
   const targetParagraph = containerParagraphs[targetIndex];
-
-  console.log('🔄 [MOVE] 이동 실행:', {
-    fromOrder: paragraph.order,
-    toOrder: targetParagraph.order,
-  });
 
   setLocalParagraphs((prev) =>
     prev.map((p) => {
@@ -222,6 +249,4 @@ export const moveLocalParagraphInContainer = (
       return p;
     })
   );
-
-  console.log('✅ [MOVE] 단락 이동 완료');
 };
