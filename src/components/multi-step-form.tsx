@@ -9,6 +9,11 @@ import UserInfoStep from './user-info-step';
 import BlogBasicStep from './blog-basic-step';
 import BlogContentStep from './blog-content-step';
 import BlogMediaStep from './blog-media-step';
+//====여기부터 수정됨====
+// ✅ 수정: 모듈화된 에디터 컴포넌트 import 추가
+// 이유: 5번째 스텝으로 에디터 기능 추가
+import ModularBlogEditor from './modularBlogEditor';
+//====여기까지 수정됨====
 import PreviewPanel from './preview-panel';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,9 +22,18 @@ import {
   ImageViewConfig,
   CustomGalleryView,
   createDefaultImageViewConfig,
+  //====여기부터 수정됨====
+  // ✅ 수정: 에디터 관련 훅과 타입들 import 추가
+  // 이유: 에디터 상태 관리를 위해 필요
+  useEditorState,
+  EditorState,
+  //====여기까지 수정됨====
 } from './useMultiStepForm';
+import ModularBlogEditorContainer from './moduleEditor/ModularBlogEditorContainer';
 
-// Form validation schema
+//====여기부터 수정됨====
+// ✅ 수정: Form validation schema에 에디터 관련 필드 추가
+// 이유: 에디터 완료 여부를 검증하기 위해
 const formSchema = z.object({
   // Step 1 - User Info
   userImage: z.string().optional(),
@@ -43,7 +57,12 @@ const formSchema = z.object({
   media: z.array(z.string()).optional(),
   mainImage: z.string().nullable().optional(),
   sliderImages: z.array(z.string()).optional(),
+
+  // Step 5 - Modular Editor (새로 추가)
+  editorCompletedContent: z.string().optional(),
+  isEditorCompleted: z.boolean().optional(),
 });
+//====여기까지 수정됨====
 
 type FormSchemaValues = z.infer<typeof formSchema>;
 
@@ -55,98 +74,89 @@ interface ToastOptions {
 }
 
 function MultiStepForm(): React.ReactNode {
+  //====여기부터 수정됨====
+  // ✅ 수정: currentStep 최대값을 4에서 5로 확장
+  // 이유: 모듈화된 에디터 스텝 추가
   const [currentStep, setCurrentStep] = React.useState(1);
+  //====여기까지 수정됨====
   const [showPreview, setShowPreview] = React.useState(false);
   const [progressWidth, setProgressWidth] = React.useState(0);
 
-  //====여기부터 수정됨====
-  // ✅ 수정: PreviewPanel 상태 관리
-  // 이유: Context에서 정의한 타입에 맞게 상태 관리
+  // PreviewPanel 상태 관리
   const [isPreviewPanelOpen, setIsPreviewPanelOpen] = React.useState(false);
 
-  // ✅ 추가: ImageViewConfig 상태 관리
-  // 이유: Context에서 정의한 이미지 뷰 설정 기능을 구현하기 위함
+  // ImageViewConfig 상태 관리
   const [imageViewConfig, setImageViewConfig] = React.useState<ImageViewConfig>(
-    createDefaultImageViewConfig() // Context에서 제공하는 기본값 생성 함수 사용
+    createDefaultImageViewConfig()
   );
 
-  // ✅ 추가: CustomGalleryView 상태 관리
-  // 이유: 사용자가 생성한 갤러리 뷰들을 저장하고 관리하기 위함
+  // CustomGalleryView 상태 관리
   const [customGalleryViews, setCustomGalleryViews] = React.useState<
     CustomGalleryView[]
   >([]);
 
-  // ✅ 추가: 모바일 사이즈 감지
-  // 이유: 반응형 UI 처리를 위해 화면 크기를 감지
+  //====여기부터 수정됨====
+  // ✅ 수정: 에디터 상태 관리 훅 추가
+  // 이유: 모듈화된 에디터의 상태를 관리하기 위해
+  const {
+    editorState,
+    updateEditorContainers,
+    updateEditorParagraphs,
+    updateEditorCompletedContent,
+    setEditorCompleted,
+    resetEditorState,
+  } = useEditorState();
+  //====여기까지 수정됨====
+
+  // 모바일 사이즈 감지
   const [isMobile, setIsMobile] = React.useState(false);
 
-  // ✅ 수정: 모바일 감지 useEffect
-  // 이유: 창 크기 변경 시 실시간으로 모바일 여부를 감지하여 UI 적응
   React.useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 판단
+      setIsMobile(window.innerWidth < 768);
     };
 
-    checkMobile(); // 초기 실행
-    window.addEventListener('resize', checkMobile); // 리사이즈 이벤트 리스너 등록
-    return () => window.removeEventListener('resize', checkMobile); // 클린업 함수
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // ✅ 수정: PreviewPanel 토글 함수
-  // 이유: Context에서 정의한 함수 시그니처에 맞게 구현
+  // PreviewPanel 토글 함수
   const togglePreviewPanel = React.useCallback(() => {
-    setIsPreviewPanelOpen((prev) => !prev); // 이전 상태의 반대값으로 설정
+    setIsPreviewPanelOpen((prev) => !prev);
   }, []);
 
-  // ✅ 추가: CustomGalleryView 추가 함수
-  // 이유: Context에서 정의한 addCustomGalleryView 함수 구현
+  // CustomGalleryView 관련 함수들
   const addCustomGalleryView = React.useCallback((view: CustomGalleryView) => {
     setCustomGalleryViews((prev) => {
-      // 중복 ID 체크
       const existingIndex = prev.findIndex(
         (existing) => existing.id === view.id
       );
       if (existingIndex !== -1) {
-        // 동일한 ID가 있으면 업데이트
         const updated = [...prev];
         updated[existingIndex] = view;
         return updated;
       }
-      // 새로운 갤러리 뷰 추가 (최신순으로 정렬)
       return [view, ...prev];
     });
   }, []);
 
-  // ✅ 추가: CustomGalleryView 제거 함수
-  // 이유: Context에서 정의한 removeCustomGalleryView 함수 구현
   const removeCustomGalleryView = React.useCallback((id: string) => {
-    setCustomGalleryViews(
-      (prev) => prev.filter((view) => view.id !== id) // 해당 ID가 아닌 것들만 필터링
-    );
+    setCustomGalleryViews((prev) => prev.filter((view) => view.id !== id));
   }, []);
 
-  // ✅ 추가: 모든 CustomGalleryView 제거 함수
-  // 이유: Context에서 정의한 clearCustomGalleryViews 함수 구현
   const clearCustomGalleryViews = React.useCallback(() => {
-    setCustomGalleryViews([]); // 빈 배열로 초기화
+    setCustomGalleryViews([]);
   }, []);
 
-  // ✅ 추가: CustomGalleryView 업데이트 함수
-  // 이유: Context에서 정의한 updateCustomGalleryView 함수 구현
   const updateCustomGalleryView = React.useCallback(
     (id: string, updates: Partial<CustomGalleryView>) => {
       setCustomGalleryViews((prev) =>
-        prev.map(
-          (view) =>
-            view.id === id
-              ? { ...view, ...updates } // 해당 ID의 갤러리 뷰를 업데이트
-              : view // 다른 갤러리 뷰는 그대로 유지
-        )
+        prev.map((view) => (view.id === id ? { ...view, ...updates } : view))
       );
     },
     []
   );
-  //====여기까지 수정됨====
 
   const methods = useForm<FormSchemaValues>({
     resolver: zodResolver(formSchema),
@@ -163,6 +173,12 @@ function MultiStepForm(): React.ReactNode {
       media: [],
       mainImage: null,
       sliderImages: [],
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 기본값 추가
+      // 이유: 새로 추가된 에디터 필드들의 초기값 설정
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+      //====여기까지 수정됨====
     },
     mode: 'onChange',
   });
@@ -172,39 +188,56 @@ function MultiStepForm(): React.ReactNode {
     formState: { errors },
     trigger,
     watch,
+    setValue, // ✅ 수정: setValue 추가 (에디터 값 업데이트용)
   } = methods;
 
-  //====여기부터 수정됨====
-  // ✅ 수정: formValues를 Context의 FormValues 타입에 맞게 변환
-  // 이유: Context에서 정의한 FormValues 인터페이스와 일치시키기 위함
+  // 실시간 watch를 통한 formValues 생성
+  const allWatchedValues = watch();
+
   const formValues = React.useMemo(() => {
-    const values = watch();
-    // 안전한 기본값 제공 및 타입 변환
+    console.log('🔄 MultiStepForm formValues 업데이트:', {
+      sliderImagesLength: allWatchedValues.sliderImages?.length || 0,
+      sliderImagesFirst:
+        allWatchedValues.sliderImages?.[0]?.slice(0, 30) + '...' || 'none',
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 값들 디버깅 로그 추가
+      // 이유: 에디터 상태 변화 추적을 위해
+      editorCompletedContent:
+        allWatchedValues.editorCompletedContent?.slice(0, 50) + '...' || 'none',
+      isEditorCompleted: allWatchedValues.isEditorCompleted || false,
+      //====여기까지 수정됨====
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
     return {
-      userImage: values.userImage || '',
-      nickname: values.nickname || '',
-      emailPrefix: values.emailPrefix || '',
-      emailDomain: values.emailDomain || '',
-      bio: values.bio || '',
-      title: values.title || '',
-      description: values.description || '',
-      tags: values.tags || '',
-      content: values.content || '',
-      media: Array.isArray(values.media) ? values.media : [],
-      mainImage: values.mainImage || null,
-      sliderImages: Array.isArray(values.sliderImages)
-        ? values.sliderImages
+      userImage: allWatchedValues.userImage || '',
+      nickname: allWatchedValues.nickname || '',
+      emailPrefix: allWatchedValues.emailPrefix || '',
+      emailDomain: allWatchedValues.emailDomain || '',
+      bio: allWatchedValues.bio || '',
+      title: allWatchedValues.title || '',
+      description: allWatchedValues.description || '',
+      tags: allWatchedValues.tags || '',
+      content: allWatchedValues.content || '',
+      media: Array.isArray(allWatchedValues.media)
+        ? allWatchedValues.media
         : [],
-    } as FormValues; // Context에서 정의한 FormValues 타입으로 캐스팅
-  }, [watch]);
-  //====여기까지 수정됨====
+      mainImage: allWatchedValues.mainImage || null,
+      sliderImages: Array.isArray(allWatchedValues.sliderImages)
+        ? allWatchedValues.sliderImages
+        : [],
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 값들을 formValues에 추가
+      // 이유: Context를 통해 에디터 상태를 다른 컴포넌트에서 접근 가능하게 함
+      editorCompletedContent: allWatchedValues.editorCompletedContent || '',
+      isEditorCompleted: allWatchedValues.isEditorCompleted || false,
+      //====여기까지 수정됨====
+    } as FormValues;
+  }, [allWatchedValues]);
 
   const addToast = React.useCallback((options: ToastOptions) => {
-    // HeroUI의 toast 시스템이 없다면 console.log로 대체
-    // 실제 프로젝트에서는 toast 라이브러리나 상태관리로 구현
     console.log('Toast:', options);
 
-    // 임시 알림 구현 (실제로는 toast 라이브러리 사용)
     if (typeof window !== 'undefined') {
       const toastElement = document.createElement('div');
       toastElement.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
@@ -233,31 +266,51 @@ function MultiStepForm(): React.ReactNode {
   }, []);
 
   //====여기부터 수정됨====
-  // ✅ 수정: Context value에 모든 정의된 함수와 상태 추가
-  // 이유: Context에서 정의한 모든 기능을 Provider에서 제공하기 위함
+  // ✅ 수정: 에디터 상태 변화 감지하여 form 값 업데이트
+  // 이유: 에디터에서 완성된 글을 form 상태와 동기화하기 위해
+  React.useEffect(() => {
+    if (
+      editorState.completedContent !== allWatchedValues.editorCompletedContent
+    ) {
+      setValue('editorCompletedContent', editorState.completedContent);
+    }
+    if (editorState.isCompleted !== allWatchedValues.isEditorCompleted) {
+      setValue('isEditorCompleted', editorState.isCompleted);
+    }
+  }, [
+    editorState.completedContent,
+    editorState.isCompleted,
+    setValue,
+    allWatchedValues.editorCompletedContent,
+    allWatchedValues.isEditorCompleted,
+  ]);
+  //====여기까지 수정됨====
+
+  // Context value에 모든 정의된 함수와 상태 추가
   const contextValue = React.useMemo(
     () => ({
-      // 기존 기능들
       addToast,
       formValues,
-
-      // PreviewPanel 관련 기능
       isPreviewPanelOpen,
       setIsPreviewPanelOpen,
       togglePreviewPanel,
-
-      // ImageViewConfig 관련 기능 (새로 추가)
-      // 이유: ImageViewBuilder 컴포넌트에서 사용할 이미지 뷰 설정 관리
       imageViewConfig,
       setImageViewConfig,
-
-      // CustomGalleryView 관련 기능들 (새로 추가)
-      // 이유: 사용자가 생성한 갤러리 뷰들을 관리하고 PreviewPanel에서 표시하기 위함
       customGalleryViews,
       addCustomGalleryView,
       removeCustomGalleryView,
       clearCustomGalleryViews,
       updateCustomGalleryView,
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 상태와 함수들을 Context에 추가
+      // 이유: 에디터 컴포넌트에서 상태 관리에 접근할 수 있도록 함
+      editorState,
+      updateEditorContainers,
+      updateEditorParagraphs,
+      updateEditorCompletedContent,
+      setEditorCompleted,
+      resetEditorState,
+      //====여기까지 수정됨====
     }),
     [
       addToast,
@@ -272,15 +325,26 @@ function MultiStepForm(): React.ReactNode {
       removeCustomGalleryView,
       clearCustomGalleryViews,
       updateCustomGalleryView,
+      //====여기부터 수정됨====
+      // ✅ 수정: 에디터 관련 dependency 추가
+      // 이유: 에디터 상태 변화시 Context 재생성하도록 함
+      editorState,
+      updateEditorContainers,
+      updateEditorParagraphs,
+      updateEditorCompletedContent,
+      setEditorCompleted,
+      resetEditorState,
+      //====여기까지 수정됨====
     ]
   );
-  //====여기까지 수정됨====
 
   React.useEffect(() => {
-    // Calculate progress based on current step
-    const progress = ((currentStep - 1) / 3) * 100;
+    //====여기부터 수정됨====
+    // ✅ 수정: 진행률 계산을 5단계로 확장
+    // 이유: 에디터 스텝 추가로 총 5단계가 됨
+    const progress = ((currentStep - 1) / 4) * 100; // 4에서 5-1=4로 변경
+    //====여기까지 수정됨====
 
-    // Animate progress width
     const timer = setTimeout(() => {
       setProgressWidth(progress);
     }, 100);
@@ -305,9 +369,26 @@ function MultiStepForm(): React.ReactNode {
       case 3:
         fieldsToValidate = ['content'];
         break;
+      //====여기부터 수정됨====
+      // ✅ 수정: 4번째 스텝을 에디터 유효성 검사로 변경
+      // 이유: 스텝 순서 조정으로 에디터가 4번째로 이동
       case 4:
+        // 에디터에서 완성된 글이 있는지 확인
+        if (!editorState.isCompleted || !editorState.completedContent.trim()) {
+          addToast({
+            title: '에디터 작성 미완료',
+            description: '모듈화된 에디터에서 글 작성을 완료해주세요.',
+            color: 'warning',
+          });
+          return false;
+        }
+        return true;
+      // ✅ 수정: 5번째 스텝을 미디어 스텝으로 변경
+      // 이유: 블로그 미디어가 마지막 단계가 되도록 함
+      case 5:
         // No required fields in media step
         return true;
+      //====여기까지 수정됨====
     }
 
     const isValid = await trigger(fieldsToValidate);
@@ -329,13 +410,24 @@ function MultiStepForm(): React.ReactNode {
     }
 
     return isValid;
-  }, [currentStep, trigger, errors, addToast]);
+  }, [
+    currentStep,
+    trigger,
+    errors,
+    addToast,
+    editorState.isCompleted,
+    editorState.completedContent,
+  ]);
 
   const goToNextStep = React.useCallback(async () => {
     const isValid = await validateCurrentStep();
-    if (isValid && currentStep < 4) {
+    //====여기부터 수정됨====
+    // ✅ 수정: 최대 스텝을 4에서 5로 확장
+    // 이유: 에디터 스텝 추가
+    if (isValid && currentStep < 5) {
       setCurrentStep((prev) => prev + 1);
     }
+    //====여기까지 수정됨====
   }, [validateCurrentStep, currentStep]);
 
   const goToPrevStep = React.useCallback(() => {
@@ -377,17 +469,25 @@ function MultiStepForm(): React.ReactNode {
         return <BlogBasicStep />;
       case 3:
         return <BlogContentStep />;
+      //====여기부터 수정됨====
+      // ✅ 수정: 4번째 스텝을 모듈화된 에디터로 변경
+      // 이유: 블로그 컨텐츠 다음에 모듈화 에디터가 오도록 순서 조정
       case 4:
+        // return <ModularBlogEditor />;
+        return <ModularBlogEditorContainer />;
+      // ✅ 수정: 5번째 스텝을 블로그 미디어로 변경
+      // 이유: 블로그 미디어가 가장 마지막 섹션이 되도록 함
+      case 5:
         return <BlogMediaStep />;
+      //====여기까지 수정됨====
       default:
         return null;
     }
   }, [currentStep]);
 
   return (
-    // ✅ Context Provider로 감싸기 - 모든 기능이 구현된 contextValue 제공
     <MultiStepFormContext.Provider value={contextValue}>
-      <div className="p-2 mx-auto max-w-7xl sm:p-4 md:p-8">
+      <div className="p-2 mx-auto max-w-[1200px] sm:p-4 md:p-8">
         <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
           <h1 className="text-xl font-bold sm:text-2xl">
             새 블로그 포스트 작성
@@ -471,13 +571,30 @@ function MultiStepForm(): React.ReactNode {
                       className="z-10"
                       type="button"
                     >
-                      4. 블로그 미디어
+                      4. 모듈화 에디터
                     </Button>
+
+                    {/*====여기부터 수정됨====*/}
+                    {/* ✅ 수정: 5번째 스텝을 블로그 미디어로 변경 */}
+                    {/* 이유: 블로그 미디어가 마지막 단계가 되도록 순서 조정 */}
+                    <Button
+                      variant={currentStep === 5 ? 'solid' : 'flat'}
+                      color={currentStep === 5 ? 'primary' : 'default'}
+                      onPress={() => goToStep(5)}
+                      className="z-10"
+                      type="button"
+                    >
+                      5. 블로그 미디어
+                    </Button>
+                    {/*====여기까지 수정됨====*/}
                   </div>
 
                   {/* Mobile Navigation - Simplified */}
                   <div className="flex justify-between pb-2 mb-3 overflow-x-auto sm:hidden hide-scrollbar">
-                    {[1, 2, 3, 4].map((step) => (
+                    {/*====여기부터 수정됨====*/}
+                    {/* ✅ 수정: 모바일 네비게이션을 5단계로 확장 */}
+                    {/* 이유: 에디터 스텝 추가 */}
+                    {[1, 2, 3, 4, 5].map((step) => (
                       <Button
                         key={step}
                         variant={currentStep === step ? 'solid' : 'light'}
@@ -498,7 +615,13 @@ function MultiStepForm(): React.ReactNode {
                       {currentStep === 1 && '유저 정보 입력'}
                       {currentStep === 2 && '블로그 기본 정보'}
                       {currentStep === 3 && '블로그 컨텐츠'}
-                      {currentStep === 4 && '블로그 미디어'}
+                      {/*====여기부터 수정됨====*/}
+                      {/* ✅ 수정: 4번째 스텝을 모듈화 에디터로 변경 */}
+                      {/* 이유: 스텝 순서 조정에 따른 모바일 표시 변경 */}
+                      {currentStep === 4 && '모듈화 에디터'}
+                      {/* ✅ 수정: 5번째 스텝을 블로그 미디어로 변경 */}
+                      {currentStep === 5 && '블로그 미디어'}
+                      {/*====여기까지 수정됨====*/}
                     </p>
                   </div>
 
@@ -547,7 +670,10 @@ function MultiStepForm(): React.ReactNode {
                     <span className="inline sm:hidden">이전</span>
                   </Button>
 
-                  {currentStep < 4 ? (
+                  {/*====여기부터 수정됨====*/}
+                  {/* ✅ 수정: 최대 스텝을 4에서 5로 변경 */}
+                  {/* 이유: 에디터 스텝 추가로 총 5단계가 됨 */}
+                  {currentStep < 5 ? (
                     <Button
                       color="primary"
                       onPress={goToNextStep}
@@ -596,7 +722,7 @@ function MultiStepForm(): React.ReactNode {
           )}
         </div>
 
-        {/* ✅ 수정: 모바일에서는 항상 PreviewPanel을 bottom-sheet 형태로 렌더링 */}
+        {/* 모바일에서는 항상 PreviewPanel을 bottom-sheet 형태로 렌더링 */}
         <div className="md:hidden">
           <PreviewPanel />
         </div>

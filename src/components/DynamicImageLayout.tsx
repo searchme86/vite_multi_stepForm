@@ -154,11 +154,11 @@ function DynamicImageLayout({
   if (!safeConfig.selectedImages || safeConfig.selectedImages.length === 0) {
     return (
       <div className={`my-8 not-prose ${className}`}>
-        <div className="p-8 text-center rounded-lg bg-default-100 border border-default-200">
-          <div className="text-4xl mb-3" role="img" aria-label="이미지 없음">
+        <div className="p-8 text-center border rounded-lg bg-default-100 border-default-200">
+          <div className="mb-3 text-4xl" role="img" aria-label="이미지 없음">
             📷
           </div>
-          <h3 className="text-lg font-medium text-default-600 mb-2">
+          <h3 className="mb-2 text-lg font-medium text-default-600">
             표시할 이미지가 없습니다
           </h3>
           <p className="text-sm text-default-500">
@@ -174,35 +174,10 @@ function DynamicImageLayout({
     <div
       className={`my-8 not-prose ${className}`}
       role="region"
-      aria-label="사용자 정의 이미지 갤러리"
+      aria-label="이미지 갤러리"
     >
-      {/* ✅ 수정: 헤더 섹션 접근성 개선 */}
-      <div className="mb-4 flex items-center justify-between">
-        <h3
-          className="text-xl font-bold flex items-center gap-2"
-          id="gallery-title"
-        >
-          <span className="text-primary" role="img" aria-label="카메라 아이콘">
-            📷
-          </span>
-          사용자 정의 이미지 갤러리
-        </h3>
-
-        {/* ✅ 추가: 갤러리 정보 표시 */}
-        <div className="flex items-center gap-2 text-sm text-default-500">
-          <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full">
-            {safeConfig.selectedImages.length}개
-          </span>
-          <span className="px-2 py-1 bg-secondary-100 text-secondary-700 rounded-full">
-            {safeConfig.layout.columns}열
-          </span>
-          <span className="px-2 py-1 bg-warning-100 text-warning-700 rounded-full">
-            {safeConfig.layout.gridType === 'masonry'
-              ? '매스너리'
-              : '균등 그리드'}
-          </span>
-        </div>
-      </div>
+      {/* ✅ 수정: 모든 헤더 섹션, 타이틀, 갤러리 정보 완전 삭제 */}
+      {/* 이유: 사용자 요청에 따라 순수하게 이미지 그리드만 표시 */}
 
       {/* ✅ 수정: 그리드 컨테이너 접근성 및 안전성 개선 */}
       <div
@@ -214,7 +189,7 @@ function DynamicImageLayout({
           gridAutoRows: `${DEFAULT_ROW_HEIGHT}px`,
         }}
         role="grid"
-        aria-labelledby="gallery-title"
+        aria-label="이미지 갤러리"
         aria-rowcount={Math.ceil(
           safeConfig.selectedImages.length / safeConfig.layout.columns
         )}
@@ -269,7 +244,7 @@ function DynamicImageLayout({
               <img
                 src={imageUrl || loadingPlaceholder} // URL이 없으면 대체 이미지 사용
                 alt={altText}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
                 loading="lazy" // 지연 로딩으로 성능 최적화
                 onError={handleImageError} // 이미지 로드 실패 시 처리
                 draggable={false} // 드래그 방지
@@ -278,9 +253,9 @@ function DynamicImageLayout({
 
               {/* ✅ 수정: 순서 번호 표시 접근성 개선 */}
               {showNumbers && orderNumber && (
-                <div className="absolute top-2 left-2 z-10">
+                <div className="absolute z-10 top-2 left-2">
                   <div
-                    className="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white"
+                    className="flex items-center justify-center w-8 h-8 text-sm font-bold text-white border-2 border-white rounded-full shadow-lg bg-primary"
                     role="img"
                     aria-label={`순서: ${orderNumber}번째`}
                   >
@@ -290,11 +265,11 @@ function DynamicImageLayout({
               )}
 
               {/* ✅ 수정: 호버 오버레이 효과 개선 */}
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 pointer-events-none">
+              <div className="absolute inset-0 transition-all duration-300 bg-black bg-opacity-0 pointer-events-none group-hover:bg-opacity-20">
                 {/* 클릭 가능한 경우 호버 시 아이콘 표시 */}
                 {onImageClick && (
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="bg-white bg-opacity-90 rounded-full p-2 shadow-lg">
+                  <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 opacity-0 group-hover:opacity-100">
+                    <div className="p-2 bg-white rounded-full shadow-lg bg-opacity-90">
                       <svg
                         className="w-6 h-6 text-primary"
                         fill="none"
@@ -318,47 +293,8 @@ function DynamicImageLayout({
         })}
       </div>
 
-      {/* ✅ 수정: 갤러리 정보 표시 영역 접근성 개선 */}
-      <div
-        className="mt-4 p-3 bg-default-50 rounded-lg border border-default-200"
-        role="complementary"
-        aria-label="갤러리 정보"
-      >
-        <div className="flex flex-wrap items-center gap-4 text-sm text-default-600">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">이미지:</span>
-            <span className="px-2 py-1 bg-white rounded border">
-              {safeConfig.selectedImages.length}개
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="font-medium">레이아웃:</span>
-            <span className="px-2 py-1 bg-white rounded border">
-              {safeConfig.layout.columns}열 그리드
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="font-medium">타입:</span>
-            <span className="px-2 py-1 bg-white rounded border">
-              {safeConfig.layout.gridType === 'masonry'
-                ? '매스너리 레이아웃'
-                : '균등 그리드'}
-            </span>
-          </div>
-
-          {/* ✅ 추가: 순서 표시 여부 정보 */}
-          {showNumbers && (
-            <div className="flex items-center gap-2">
-              <span className="font-medium">순서 표시:</span>
-              <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded border">
-                활성화
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* ✅ 수정: 갤러리 정보 표시 영역 완전 삭제 */}
+      {/* 이유: 사용자 요청에 따라 모든 갤러리 정보 및 메타데이터 제거 */}
     </div>
   );
 }
