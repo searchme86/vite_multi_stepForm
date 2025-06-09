@@ -1,44 +1,201 @@
 import { useState, useEffect, useCallback } from 'react';
 import { EditorInternalState } from '../types/editor';
-import { LocalParagraph } from '../types/paragraph';
-import { Container } from '../types/container';
-import { useParagraphActions } from './useParagraphActions';
-import { useContainerActions } from './useContainerActions';
 import {
-  handleStructureComplete,
-  goToStructureStep,
-  activateEditor,
-  togglePreview,
-  saveAllToContext,
-  completeEditor,
+  Container,
+  ParagraphBlock,
+  MultiStepFormContextType,
+  ToastOptions,
   generateCompletedContent,
-} from '../actions/editorActions';
+  createContainer,
+} from '../../useMultiStepForm';
 
-interface EditorState {
-  containers: Container[];
-  paragraphs: LocalParagraph[];
-  completedContent: string;
-  isCompleted: boolean;
-}
-
-interface ToastConfig {
-  title: string;
-  description: string;
-  color: string;
-}
-
-interface MultiStepFormContext {
-  editorState: EditorState;
-  updateEditorContainers: (containers: Container[]) => void;
-  updateEditorParagraphs: (paragraphs: LocalParagraph[]) => void;
-  updateEditorCompletedContent: (content: string) => void;
-  setEditorCompleted: (completed: boolean) => void;
-  addToast: (toast: ToastConfig) => void;
-}
+type LocalParagraph = ParagraphBlock;
 
 interface UseEditorStateProps {
-  context: MultiStepFormContext;
+  context: MultiStepFormContextType;
 }
+
+// 내부 액션 함수들을 직접 정의 (타입 불일치 해결)
+const handleStructureComplete = (
+  validInputs: string[],
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>,
+  setLocalContainers: React.Dispatch<React.SetStateAction<Container[]>>,
+  addToast: (options: ToastOptions) => void
+) => {
+  console.log('🎉 [ACTION] 구조 완료 처리 시작:', validInputs);
+
+  if (validInputs.length < 2) {
+    addToast({
+      title: '구조 설정 오류',
+      description: '최소 2개 이상의 섹션 이름을 입력해주세요.',
+      color: 'warning',
+    });
+    return;
+  }
+
+  setInternalState((prev) => ({ ...prev, isTransitioning: true }));
+
+  const containers = validInputs.map((name, index) =>
+    createContainer(name, index)
+  );
+  setLocalContainers(containers);
+  console.log('📦 [ACTION] 로컬 컨테이너 생성:', containers);
+
+  setTimeout(() => {
+    setInternalState((prev) => ({
+      ...prev,
+      currentSubStep: 'writing',
+      isTransitioning: false,
+    }));
+  }, 300);
+
+  addToast({
+    title: '구조 설정 완료',
+    description: `${validInputs.length}개의 섹션이 생성되었습니다.`,
+    color: 'success',
+  });
+};
+
+const goToStructureStep = (
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
+) => {
+  setInternalState((prev) => ({
+    ...prev,
+    isTransitioning: true,
+  }));
+
+  setTimeout(() => {
+    setInternalState((prev) => ({
+      ...prev,
+      currentSubStep: 'structure',
+      isTransitioning: false,
+    }));
+  }, 300);
+};
+
+const activateEditor = (
+  paragraphId: string,
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
+) => {
+  console.log('🎯 [ACTION] 에디터 활성화 시도:', paragraphId);
+
+  setInternalState((prev) => ({
+    ...prev,
+    activeParagraphId: paragraphId,
+  }));
+
+  setTimeout(() => {
+    const targetElement = document.querySelector(
+      `[data-paragraph-id="${paragraphId}"]`
+    );
+
+    if (targetElement) {
+      const scrollContainer = targetElement.closest('.overflow-y-auto');
+
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elementRect = targetElement.getBoundingClientRect();
+        const offsetTop =
+          elementRect.top - containerRect.top + scrollContainer.scrollTop;
+
+        scrollContainer.scrollTo({
+          top: Math.max(0, offsetTop - 20),
+          behavior: 'smooth',
+        });
+      } else {
+        targetElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      }
+    }
+  }, 200);
+};
+
+const togglePreview = (
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
+) => {
+  setInternalState((prev) => ({
+    ...prev,
+    isPreviewOpen: !prev.isPreviewOpen,
+  }));
+};
+
+const saveAllToContext = (
+  localContainers: Container[],
+  localParagraphs: LocalParagraph[],
+  updateEditorContainers: (containers: Container[]) => void,
+  updateEditorParagraphs: (paragraphs: ParagraphBlock[]) => void,
+  addToast: (options: ToastOptions) => void
+) => {
+  console.log('💾 [ACTION] 전체 Context 저장 시작');
+
+  updateEditorContainers(localContainers);
+
+  const contextParagraphs = localParagraphs.map((p) => ({
+    ...p,
+  }));
+  updateEditorParagraphs(contextParagraphs);
+
+  console.log('💾 [ACTION] Context 저장 완료:', {
+    containers: localContainers.length,
+    paragraphs: localParagraphs.length,
+  });
+
+  addToast({
+    title: '저장 완료',
+    description: '모든 내용이 저장되었습니다.',
+    color: 'success',
+  });
+};
+
+const completeEditor = (
+  localContainers: Container[],
+  localParagraphs: LocalParagraph[],
+  saveAllToContextWrapper: () => void,
+  updateEditorCompletedContent: (content: string) => void,
+  setEditorCompleted: (completed: boolean) => void,
+  addToast: (options: ToastOptions) => void
+) => {
+  console.log('🎉 [ACTION] 에디터 완성 처리');
+
+  saveAllToContextWrapper();
+
+  const completedContent = generateCompletedContent(
+    localContainers,
+    localParagraphs
+  );
+
+  // 간단한 유효성 검사
+  if (localContainers.length === 0) {
+    addToast({
+      title: '에디터 미완성',
+      description: '최소 1개 이상의 컨테이너가 필요합니다.',
+      color: 'warning',
+    });
+    return;
+  }
+
+  const assignedParagraphs = localParagraphs.filter((p) => p.containerId);
+  if (assignedParagraphs.length === 0) {
+    addToast({
+      title: '에디터 미완성',
+      description: '최소 1개 이상의 할당된 단락이 필요합니다.',
+      color: 'warning',
+    });
+    return;
+  }
+
+  updateEditorCompletedContent(completedContent);
+  setEditorCompleted(true);
+
+  addToast({
+    title: '에디터 완성',
+    description: '모듈화된 글 작성이 완료되었습니다!',
+    color: 'success',
+  });
+};
 
 export const useEditorState = ({ context }: UseEditorStateProps) => {
   console.log('🎛️ [HOOK] useEditorState 초기화');
@@ -98,19 +255,6 @@ export const useEditorState = ({ context }: UseEditorStateProps) => {
       window.removeEventListener('resize', checkMobile);
     };
   }, []);
-
-  const paragraphActions = useParagraphActions({
-    localParagraphs,
-    setLocalParagraphs,
-    setInternalState,
-    localContainers,
-    addToast,
-  });
-
-  const containerActions = useContainerActions({
-    localParagraphs,
-    localContainers,
-  });
 
   const addLocalParagraph = useCallback(() => {
     console.log('📄 [LOCAL] 새 단락 추가');
@@ -362,7 +506,6 @@ export const useEditorState = ({ context }: UseEditorStateProps) => {
       localContainers,
       localParagraphs,
       saveAllToContextWrapper,
-      generateCompletedContent,
       updateEditorCompletedContent,
       setEditorCompleted,
       addToast
@@ -439,8 +582,6 @@ export const useEditorState = ({ context }: UseEditorStateProps) => {
     moveLocalParagraphInContainer,
     getLocalUnassignedParagraphs,
     getLocalParagraphsByContainer,
-    ...paragraphActions,
-    ...containerActions,
     handleStructureComplete: handleStructureCompleteWrapper,
     goToStructureStep: goToStructureStepWrapper,
     activateEditor: activateEditorWrapper,
