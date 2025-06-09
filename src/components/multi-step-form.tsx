@@ -29,6 +29,7 @@ import {
   EditorState,
   //====여기까지 수정됨====
 } from './useMultiStepForm';
+import ModularBlogEditorContainer from './moduleEditor/ModularBlogEditorContainer';
 
 //====여기부터 수정됨====
 // ✅ 수정: Form validation schema에 에디터 관련 필드 추가
@@ -201,7 +202,8 @@ function MultiStepForm(): React.ReactNode {
       //====여기부터 수정됨====
       // ✅ 수정: 에디터 관련 값들 디버깅 로그 추가
       // 이유: 에디터 상태 변화 추적을 위해
-      editorCompletedContent: allWatchedValues.editorCompletedContent?.slice(0, 50) + '...' || 'none',
+      editorCompletedContent:
+        allWatchedValues.editorCompletedContent?.slice(0, 50) + '...' || 'none',
       isEditorCompleted: allWatchedValues.isEditorCompleted || false,
       //====여기까지 수정됨====
       timestamp: new Date().toLocaleTimeString(),
@@ -267,13 +269,21 @@ function MultiStepForm(): React.ReactNode {
   // ✅ 수정: 에디터 상태 변화 감지하여 form 값 업데이트
   // 이유: 에디터에서 완성된 글을 form 상태와 동기화하기 위해
   React.useEffect(() => {
-    if (editorState.completedContent !== allWatchedValues.editorCompletedContent) {
+    if (
+      editorState.completedContent !== allWatchedValues.editorCompletedContent
+    ) {
       setValue('editorCompletedContent', editorState.completedContent);
     }
     if (editorState.isCompleted !== allWatchedValues.isEditorCompleted) {
       setValue('isEditorCompleted', editorState.isCompleted);
     }
-  }, [editorState.completedContent, editorState.isCompleted, setValue, allWatchedValues.editorCompletedContent, allWatchedValues.isEditorCompleted]);
+  }, [
+    editorState.completedContent,
+    editorState.isCompleted,
+    setValue,
+    allWatchedValues.editorCompletedContent,
+    allWatchedValues.isEditorCompleted,
+  ]);
   //====여기까지 수정됨====
 
   // Context value에 모든 정의된 함수와 상태 추가
@@ -400,7 +410,14 @@ function MultiStepForm(): React.ReactNode {
     }
 
     return isValid;
-  }, [currentStep, trigger, errors, addToast, editorState.isCompleted, editorState.completedContent]);
+  }, [
+    currentStep,
+    trigger,
+    errors,
+    addToast,
+    editorState.isCompleted,
+    editorState.completedContent,
+  ]);
 
   const goToNextStep = React.useCallback(async () => {
     const isValid = await validateCurrentStep();
@@ -456,7 +473,8 @@ function MultiStepForm(): React.ReactNode {
       // ✅ 수정: 4번째 스텝을 모듈화된 에디터로 변경
       // 이유: 블로그 컨텐츠 다음에 모듈화 에디터가 오도록 순서 조정
       case 4:
-        return <ModularBlogEditor />;
+        // return <ModularBlogEditor />;
+        return <ModularBlogEditorContainer />;
       // ✅ 수정: 5번째 스텝을 블로그 미디어로 변경
       // 이유: 블로그 미디어가 가장 마지막 섹션이 되도록 함
       case 5:
@@ -577,7 +595,6 @@ function MultiStepForm(): React.ReactNode {
                     {/* ✅ 수정: 모바일 네비게이션을 5단계로 확장 */}
                     {/* 이유: 에디터 스텝 추가 */}
                     {[1, 2, 3, 4, 5].map((step) => (
-
                       <Button
                         key={step}
                         variant={currentStep === step ? 'solid' : 'light'}
@@ -657,7 +674,6 @@ function MultiStepForm(): React.ReactNode {
                   {/* ✅ 수정: 최대 스텝을 4에서 5로 변경 */}
                   {/* 이유: 에디터 스텝 추가로 총 5단계가 됨 */}
                   {currentStep < 5 ? (
-
                     <Button
                       color="primary"
                       onPress={goToNextStep}
