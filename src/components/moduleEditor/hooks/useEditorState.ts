@@ -14,8 +14,30 @@ import {
   generateCompletedContent,
 } from '../actions/editorActions';
 
+interface EditorState {
+  containers: Container[];
+  paragraphs: LocalParagraph[];
+  completedContent: string;
+  isCompleted: boolean;
+}
+
+interface ToastConfig {
+  title: string;
+  description: string;
+  color: string;
+}
+
+interface MultiStepFormContext {
+  editorState: EditorState;
+  updateEditorContainers: (containers: Container[]) => void;
+  updateEditorParagraphs: (paragraphs: LocalParagraph[]) => void;
+  updateEditorCompletedContent: (content: string) => void;
+  setEditorCompleted: (completed: boolean) => void;
+  addToast: (toast: ToastConfig) => void;
+}
+
 interface UseEditorStateProps {
-  context: any;
+  context: MultiStepFormContext;
 }
 
 export const useEditorState = ({ context }: UseEditorStateProps) => {

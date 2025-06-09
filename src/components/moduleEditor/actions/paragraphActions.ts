@@ -1,4 +1,6 @@
 import { LocalParagraph } from '../types/paragraph';
+import { Container } from '../types/container';
+import { EditorInternalState } from '../types/editor';
 import {
   validateParagraphSelection,
   validateContainerTarget,
@@ -7,7 +9,7 @@ import {
 export const addLocalParagraph = (
   localParagraphs: LocalParagraph[],
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>,
-  setInternalState: React.Dispatch<React.SetStateAction<any>>
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
 ) => {
   const newParagraph: LocalParagraph = {
     id: `paragraph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -19,7 +21,7 @@ export const addLocalParagraph = (
   };
 
   setLocalParagraphs((prev) => [...prev, newParagraph]);
-  setInternalState((prev: any) => ({
+  setInternalState((prev: EditorInternalState) => ({
     ...prev,
     activeParagraphId: newParagraph.id,
   }));
@@ -51,7 +53,11 @@ export const updateLocalParagraphContent = (
 export const deleteLocalParagraph = (
   paragraphId: string,
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>,
-  addToast: (toast: any) => void
+  addToast: (toast: {
+    title: string;
+    description: string;
+    color: string;
+  }) => void
 ) => {
   setLocalParagraphs((prev) => prev.filter((p) => p.id !== paragraphId));
 
@@ -64,9 +70,9 @@ export const deleteLocalParagraph = (
 
 export const toggleParagraphSelection = (
   paragraphId: string,
-  setInternalState: React.Dispatch<React.SetStateAction<any>>
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
 ) => {
-  setInternalState((prev: any) => ({
+  setInternalState((prev: EditorInternalState) => ({
     ...prev,
     selectedParagraphIds: prev.selectedParagraphIds.includes(paragraphId)
       ? prev.selectedParagraphIds.filter((id: string) => id !== paragraphId)
@@ -78,10 +84,14 @@ export const addToLocalContainer = (
   selectedParagraphIds: string[],
   targetContainerId: string,
   localParagraphs: LocalParagraph[],
-  localContainers: any[],
+  localContainers: Container[],
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>,
-  setInternalState: React.Dispatch<React.SetStateAction<any>>,
-  addToast: (toast: any) => void
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>,
+  addToast: (toast: {
+    title: string;
+    description: string;
+    color: string;
+  }) => void
 ) => {
   console.log('📦 [CONTAINER] 컨테이너에 단락 추가 시작:', {
     selectedCount: selectedParagraphIds.length,
@@ -180,7 +190,7 @@ export const addToLocalContainer = (
 
   setLocalParagraphs((prev) => [...prev, ...newParagraphs]);
 
-  setInternalState((prev: any) => ({
+  setInternalState((prev: EditorInternalState) => ({
     ...prev,
     selectedParagraphIds: [],
     targetContainerId: '',

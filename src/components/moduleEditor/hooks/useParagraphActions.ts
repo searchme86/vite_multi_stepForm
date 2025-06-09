@@ -1,8 +1,7 @@
-// 📁 hooks/useParagraphActions.ts
-
 import { useCallback } from 'react';
 import { LocalParagraph } from '../types/paragraph';
 import { Container } from '../types/container';
+import { EditorInternalState } from '../types/editor';
 import {
   addLocalParagraph,
   updateLocalParagraphContent,
@@ -12,12 +11,18 @@ import {
   moveLocalParagraphInContainer,
 } from '../actions/paragraphActions';
 
+interface Toast {
+  title: string;
+  description: string;
+  color: 'success' | 'warning' | 'error' | string;
+}
+
 interface UseParagraphActionsProps {
   localParagraphs: LocalParagraph[];
   setLocalParagraphs: React.Dispatch<React.SetStateAction<LocalParagraph[]>>;
-  setInternalState: React.Dispatch<React.SetStateAction<any>>;
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
   localContainers: Container[];
-  addToast: (toast: any) => void;
+  addToast: (toast: Toast) => void;
 }
 
 export const useParagraphActions = ({
