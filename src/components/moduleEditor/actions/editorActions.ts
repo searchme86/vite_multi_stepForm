@@ -224,7 +224,11 @@ export const generateCompletedContent = (
   const sortedContainers = [...containers].sort((a, b) => a.order - b.order);
   let completedContent = '';
 
-  sortedContainers.forEach((container, containerIndex) => {
+  //====여기부터 수정됨====
+  // TypeScript 미사용 변수 경고 해결: containerIndex를 _로 변경
+  sortedContainers.forEach((container, _) => {
+    //====여기까지 수정됨====
+
     const containerParagraphs = paragraphs
       .filter((p) => p.containerId === container.id)
       .sort((a, b) => a.order - b.order);
@@ -237,7 +241,11 @@ export const generateCompletedContent = (
 
       completedContent += `\n\n## ${container.name}\n\n`;
 
-      containerParagraphs.forEach((paragraph, paragraphIndex) => {
+      //====여기부터 수정됨====
+      // TypeScript 미사용 변수 경고 해결: paragraphIndex를 _로 변경
+      containerParagraphs.forEach((paragraph, _) => {
+        //====여기까지 수정됨====
+
         if (paragraph.content && paragraph.content.trim()) {
           completedContent += paragraph.content.trim() + '\n\n';
 
