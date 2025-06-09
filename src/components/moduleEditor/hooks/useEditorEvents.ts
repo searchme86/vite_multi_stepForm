@@ -1,6 +1,8 @@
 // 📁 hooks/useEditorEvents.ts
 
 import { useCallback } from 'react';
+import { EditorView } from '@tiptap/pm/view';
+import { Slice } from '@tiptap/pm/model';
 import { validateImageFiles } from '../utils/validation';
 
 interface UseEditorEventsProps {
@@ -13,7 +15,7 @@ export const useEditorEvents = ({
   console.log('🎮 [HOOK] useEditorEvents 초기화');
 
   const handleDrop = useCallback(
-    (view: any, event: DragEvent, _slice: any, moved: boolean) => {
+    (view: EditorView, event: DragEvent, _slice: Slice, moved: boolean) => {
       console.log('🎮 [EVENTS] handleDrop 이벤트 발생:', {
         moved,
         hasFiles: !!event.dataTransfer?.files?.length,
@@ -96,7 +98,7 @@ export const useEditorEvents = ({
   );
 
   const handlePaste = useCallback(
-    (view: any, event: ClipboardEvent, _slice: any) => {
+    (view: EditorView, event: ClipboardEvent, _slice: Slice) => {
       console.log('🎮 [EVENTS] handlePaste 이벤트 발생');
 
       const items = Array.from(event.clipboardData?.items || []);
