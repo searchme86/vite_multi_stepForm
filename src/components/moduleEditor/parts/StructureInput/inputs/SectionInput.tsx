@@ -1,6 +1,5 @@
 // 📁 parts/StructureInput/inputs/SectionInput.tsx
 import React from 'react';
-import InputField from './InputField';
 import IMEHandler from './IMEHandler';
 
 interface SectionInputProps {

@@ -1,3 +1,5 @@
+import { EditorView } from '@tiptap/pm/view';
+import { Slice } from '@tiptap/pm/model';
 import { isImageFile } from '../../utils/imageUpload';
 
 interface ImageDropZoneHandlers {
@@ -9,7 +11,12 @@ export function createDropHandler({
 }: ImageDropZoneHandlers) {
   console.log('🎯 [DROP_ZONE] Drop 핸들러 생성');
 
-  return (view: any, event: DragEvent, _slice: any, moved: boolean) => {
+  return (
+    view: EditorView,
+    event: DragEvent,
+    _slice: Slice,
+    moved: boolean
+  ) => {
     console.log('📂 [DROP_ZONE] Drop 이벤트 발생:', {
       moved,
       hasFiles: !!(
@@ -80,7 +87,7 @@ export function createPasteHandler({
 }: ImageDropZoneHandlers) {
   console.log('📋 [DROP_ZONE] Paste 핸들러 생성');
 
-  return (view: any, event: ClipboardEvent, _slice: any) => {
+  return (view: EditorView, event: ClipboardEvent, _slice: Slice) => {
     console.log('📋 [DROP_ZONE] Paste 이벤트 발생');
 
     const items = Array.from(event.clipboardData?.items || []);

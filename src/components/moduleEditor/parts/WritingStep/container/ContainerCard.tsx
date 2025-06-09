@@ -1,10 +1,12 @@
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import ContainerHeader from './ContainerHeader';
+import { Container } from '../../../types/container';
+import { LocalParagraph } from '../../../types/paragraph';
 
 interface ContainerCardProps {
-  container: any;
-  containerParagraphs: any[];
+  container: Container;
+  containerParagraphs: LocalParagraph[];
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
 }
@@ -31,7 +33,7 @@ function ContainerCard({
     moveLocalParagraphInContainer(paragraphId, 'down');
   };
 
-  const handleEditParagraph = (paragraph: any) => {
+  const handleEditParagraph = (paragraph: LocalParagraph) => {
     console.log('✏️ [CONTAINER_CARD] 단락 편집:', {
       paragraphId: paragraph.id,
       originalId: paragraph.originalId,
