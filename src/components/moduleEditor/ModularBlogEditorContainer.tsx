@@ -1,7 +1,17 @@
+// 📁 components/moduleEditor/ModularBlogEditorContainer.tsx
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMultiStepForm } from '../useMultiStepForm';
-import { useEditorState } from './hooks/useEditorState';
+
+//====여기부터 수정됨====
+// 기존: context를 사용하는 방식
+// import { useMultiStepForm } from '../useMultiStepForm';
+
+// 새로운: zustand store 직접 사용 (필요한 경우에만)
+// Context 기능이 필요하다면 여기서 zustand store를 import할 수 있지만,
+// 현재는 useEditorState에서 모든 것을 처리하므로 불필요
+//====여기까지 수정됨====
+
+import { useEditorState } from './hooks/useEditorStateZustand';
 import { renderMarkdown } from './utils/markdown';
 import ProgressSteps from './parts/ProgressSteps';
 import StructureInputForm from './parts/StructureInput/StructureInputForm';
@@ -15,22 +25,34 @@ function ModularBlogEditorContainer(): React.ReactNode {
     renderCount.current
   );
 
-  const context = useMultiStepForm();
+  //====여기부터 수정됨====
+  // 기존: context를 사용하는 방식
+  // const context = useMultiStepForm();
+  //
+  // if (!context) {
+  //   console.log('❌ [CONTAINER] Context 없음');
+  //   return (
+  //     <div className="flex items-center justify-center p-8">
+  //       <p className="text-red-500">
+  //         에디터를 사용하려면 MultiStepForm Context가 필요합니다.
+  //       </p>
+  //     </div>
+  //   );
+  // }
+  //
+  // console.log('✅ [CONTAINER] Context 확인 완료');
 
-  if (!context) {
-    console.log('❌ [CONTAINER] Context 없음');
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-red-500">
-          에디터를 사용하려면 MultiStepForm Context가 필요합니다.
-        </p>
-      </div>
-    );
-  }
+  // 새로운: zustand는 항상 사용 가능하므로 null 체크 불필요
+  console.log('✅ [CONTAINER] Zustand Store 확인 완료');
+  //====여기까지 수정됨====
 
-  console.log('✅ [CONTAINER] Context 확인 완료');
+  //====여기부터 수정됨====
+  // 기존: context를 매개변수로 전달하는 방식
+  // const editorState = useEditorState({ context });
 
-  const editorState = useEditorState({ context });
+  // 새로운: zustand store를 내부적으로 사용하도록 매개변수 없이 호출
+  const editorState = useEditorState();
+  //====여기까지 수정됨====
 
   console.log('🎛️ [CONTAINER] useEditorState 훅 사용 완료:', {
     currentSubStep: editorState.internalState.currentSubStep,
