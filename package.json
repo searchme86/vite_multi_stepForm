@@ -26,7 +26,8 @@
     "source-map-js": "^1.2.1",
     "swiper": "^11.2.8",
     "tiptap-markdown": "^0.8.10",
-    "zod": "^3.25.51"
+    "zod": "^3.25.51",
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.26.10",
