@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { EditorInternalState } from '../../types/editor';
 import { Container } from '../../store/shared/commonTypes';
 
-// ✨ [원본과 동일한 import 방식] store들을 직접 import하여 반응성 보장
+// store들을 직접 import하여 반응성 보장
 import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
 import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
 import { useToastStore } from '../../store/toast/toastStore';
@@ -56,7 +56,7 @@ import {
 // 저장/완료 관련
 import { saveCurrentProgress, finishEditing } from './editorStatePersistence';
 
-// ✨ [함수 오버로드] 원본과 동일한 오버로드 구조 유지
+// 함수 오버로드 - 타입 안정성을 위한 다중 시그니처 정의
 export function useEditorState(): ReturnType<typeof useEditorStateImpl>;
 export function useEditorState(
   props: UseEditorStateProps
@@ -65,50 +65,44 @@ export function useEditorState(props?: UseEditorStateProps) {
   return useEditorStateImpl(props);
 }
 
-// ✨ [메인 훅 구현] 원본과 동일한 구조와 로직으로 작성
+// 메인 훅 구현 - 에디터 상태 관리의 핵심 로직
 const useEditorStateImpl = (props?: UseEditorStateProps) => {
-  console.log('🎛️ [HOOK] useEditorState 초기화');
-
-  // ✨ [Store 액션들] 원본과 동일하게 직접 훅 호출 - 반응성 보장
+  // Store 액션들 - zustand store의 액션 함수들을 직접 호출하여 반응성 보장
   const editorCoreStoreActions = useEditorCoreStore();
   const editorUIStoreActions = useEditorUIStore();
   const toastStoreActions = useToastStore();
 
-  // ✨ [Context 처리] 원본과 동일한 context 처리 로직
+  // 구조분해할당으로 필요한 함수들 추출
+  const { setContainers, setParagraphs, setCompletedContent, setIsCompleted } =
+    editorCoreStoreActions;
+
+  const {
+    getCurrentSubStep,
+    getIsTransitioning,
+    getActiveParagraphId,
+    getIsPreviewOpen,
+    getSelectedParagraphIds,
+    getTargetContainerId,
+  } = editorUIStoreActions;
+
+  const { addToast } = toastStoreActions;
+
+  // Context 처리 - 외부에서 주입된 context가 있는지 확인
   const contextProvided = props?.context;
   const hasContext = Boolean(contextProvided);
 
-  // ✨ [에디터 상태] 원본과 동일한 상태 설정 방식
-  const currentEditorState = contextProvided?.editorState ?? {
-    containers: editorCoreStoreActions.getContainers(),
-    paragraphs: editorCoreStoreActions.getParagraphs(),
-    completedContent: editorCoreStoreActions.getCompletedContent(),
-    isCompleted: editorCoreStoreActions.getIsCompleted(),
-  };
-
-  // ✨ [업데이트 함수들] 원본과 동일한 함수 설정 방식
+  // 업데이트 함수들 - context 또는 store의 업데이트 함수 선택
   const updateContainersFunction =
-    contextProvided?.updateEditorContainers ??
-    editorCoreStoreActions.setContainers;
+    contextProvided?.updateEditorContainers ?? setContainers;
   const updateParagraphsFunction =
-    contextProvided?.updateEditorParagraphs ??
-    editorCoreStoreActions.setParagraphs;
+    contextProvided?.updateEditorParagraphs ?? setParagraphs;
   const updateCompletedContentFunction =
-    contextProvided?.updateEditorCompletedContent ??
-    editorCoreStoreActions.setCompletedContent;
+    contextProvided?.updateEditorCompletedContent ?? setCompletedContent;
   const setCompletedStatusFunction =
-    contextProvided?.setEditorCompleted ??
-    editorCoreStoreActions.setIsCompleted;
-  const showToastFunction =
-    contextProvided?.addToast ?? toastStoreActions.addToast;
+    contextProvided?.setEditorCompleted ?? setIsCompleted;
+  const showToastFunction = contextProvided?.addToast ?? addToast;
 
-  console.log('🎛️ [HOOK] Context 상태 확인:', {
-    containers: currentEditorState.containers.length,
-    paragraphs: currentEditorState.paragraphs.length,
-    isCompleted: currentEditorState.isCompleted,
-  });
-
-  // ✨ [로컬 상태 초기화] 원본과 동일한 초기화 방식
+  // 로컬 상태 초기화 - 컴포넌트 내부에서 사용할 상태들
   const [editorInternalState, setEditorInternalState] =
     useState<EditorInternalState>(
       createInitialInternalState(hasContext, editorUIStoreActions)
@@ -124,42 +118,31 @@ const useEditorStateImpl = (props?: UseEditorStateProps) => {
 
   const [isOnMobileDevice, setIsOnMobileDevice] = useState(false);
 
-  // ✨ [구조분해할당] 원본과 동일한 내부 상태 구조분해할당
+  // 구조분해할당 - 내부 상태의 각 속성을 개별 변수로 추출 (액션 함수에서 직접 사용)
   const {
-    currentSubStep: currentEditorStep,
-    isTransitioning: isStepTransitioning,
-    activeParagraphId: activeElementId,
-    isPreviewOpen: previewModeActive,
     selectedParagraphIds: selectedElementIds,
     targetContainerId: targetDestinationId,
   } = editorInternalState;
 
-  console.log('🎛️ [HOOK] 로컬 상태 초기화 완료:', {
-    currentSubStep: currentEditorStep,
-    localParagraphs: currentParagraphs.length,
-    localContainers: currentContainers.length,
-    isMobile: isOnMobileDevice,
-  });
-
-  // ✨ [디바이스 감지] 원본과 동일한 effect
+  // 디바이스 감지 - 모바일 환경 감지를 위한 커스텀 훅
   useDeviceDetection(setIsOnMobileDevice);
 
-  // ✨ [Store 동기화] 원본과 동일한 zustand store 동기화 effect
+  // Store 동기화 - zustand store 상태와 로컬 상태 동기화
   useEffect(() => {
     if (!hasContext) {
       setEditorInternalState((previousInternalState) => ({
         ...previousInternalState,
-        currentSubStep: editorUIStoreActions.getCurrentSubStep(),
-        isTransitioning: editorUIStoreActions.getIsTransitioning(),
-        activeParagraphId: editorUIStoreActions.getActiveParagraphId(),
-        isPreviewOpen: editorUIStoreActions.getIsPreviewOpen(),
-        selectedParagraphIds: editorUIStoreActions.getSelectedParagraphIds(),
-        targetContainerId: editorUIStoreActions.getTargetContainerId(),
+        currentSubStep: getCurrentSubStep(),
+        isTransitioning: getIsTransitioning(),
+        activeParagraphId: getActiveParagraphId(),
+        isPreviewOpen: getIsPreviewOpen(),
+        selectedParagraphIds: getSelectedParagraphIds(),
+        targetContainerId: getTargetContainerId(),
       }));
     }
   }, [hasContext, editorUIStoreActions]);
 
-  // ✨ [액션 함수들 생성] 분할된 함수들을 원본과 동일한 방식으로 조합
+  // 액션 함수들 생성 - 분할된 함수들을 조합하여 최종 액션 함수 생성
   const addLocalParagraph = createNewParagraph(
     currentParagraphs,
     setCurrentParagraphs,
@@ -266,25 +249,7 @@ const useEditorStateImpl = (props?: UseEditorStateProps) => {
     showToastFunction
   );
 
-  console.log('✅ [HOOK] useEditorState 훅 준비 완료:', {
-    internalState: {
-      currentSubStep: currentEditorStep,
-      isTransitioning: isStepTransitioning,
-      activeParagraphId: activeElementId,
-      isPreviewOpen: previewModeActive,
-      selectedCount: selectedElementIds.length,
-      targetContainerId: targetDestinationId,
-    },
-    localData: {
-      paragraphs: currentParagraphs.length,
-      containers: currentContainers.length,
-    },
-    deviceInfo: {
-      isMobile: isOnMobileDevice,
-    },
-  });
-
-  // ✨ [반환 객체] 원본과 완전히 동일한 반환 객체 구조
+  // 반환 객체 - 훅 사용자가 필요한 모든 상태와 함수들을 제공
   return {
     // 상태 데이터
     internalState: editorInternalState,
