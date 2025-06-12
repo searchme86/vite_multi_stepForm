@@ -1,5 +1,5 @@
 //====여기부터 수정됨====
-// 미리보기 패널 메인 컨테이너 - 누락된 기능들 추가
+// 미리보기 패널 메인 컨테이너 - 무한 렌더링 해결
 import { ReactNode } from 'react';
 import { Button, Modal, ModalContent, ModalBody } from '@heroui/react';
 import { Icon } from '@iconify/react';
@@ -20,13 +20,17 @@ import DesktopContentComponent from './parts/DesktopContentComponent';
 function PreviewPanelContainer(): ReactNode {
   console.log('🎯 PreviewPanelContainer 렌더링 시작');
 
+  // 모바일 감지 훅 - 메모이제이션 적용
   const { isMobile } = useMobileDetection();
+
+  // 스토어 데이터 훅 - 메모이제이션 적용하여 무한 렌더링 방지
   const storeData = useStoreData();
 
-  // 추가 상태 관리
+  // 추가 상태 관리 - 메모이제이션 적용
   const { hasTabChanged, setHasTabChanged, isMountedRef } =
     useAdditionalState();
 
+  // 스토어 데이터 구조분해할당 - 이미 메모이제이션된 데이터 사용
   const {
     formData,
     isPreviewPanelOpen,
@@ -38,14 +42,14 @@ function PreviewPanelContainer(): ReactNode {
     isEditorCompleted,
   } = storeData;
 
-  // localStorage 기능 추가
+  // localStorage 기능 - 메모이제이션된 함수들 사용하여 무한 렌더링 방지
   useLocalStorage({
     isMobile,
     isPreviewPanelOpen,
     setIsPreviewPanelOpen,
   });
-  //====여기까지 수정됨====
 
+  // 데이터 변환 훅 - 메모이제이션 적용하여 불필요한 재계산 방지
   const transformedData = useDataTransformers({
     formData,
     editorCompletedContent,
@@ -54,6 +58,7 @@ function PreviewPanelContainer(): ReactNode {
     editorParagraphs,
   });
 
+  // 변환된 데이터 구조분해할당 - 이미 메모이제이션된 데이터 사용
   const {
     currentFormValues,
     displayContent,
@@ -67,12 +72,14 @@ function PreviewPanelContainer(): ReactNode {
     currentDate,
   } = transformedData;
 
+  // 패널 상태 관리 훅 - 메모이제이션 적용
   const { selectedMobileSize, setSelectedMobileSize } = usePreviewPanelState({
     isMobile,
     isPreviewPanelOpen,
     setIsPreviewPanelOpen,
   });
 
+  // 터치 핸들러 훅 - 메모이제이션 적용하여 이벤트 핸들러 최적화
   const {
     handleTouchStart,
     handleTouchMove,
@@ -80,6 +87,7 @@ function PreviewPanelContainer(): ReactNode {
     handleHeaderClick,
   } = useTouchHandlers();
 
+  // 모달 핸들러 훅 - 메모이제이션 적용하여 모달 상태 최적화
   const {
     isMobileModalOpen,
     isDesktopModalOpen,
@@ -310,3 +318,4 @@ function PreviewPanelContainer(): ReactNode {
 }
 
 export default PreviewPanelContainer;
+//====여기까지 수정됨====

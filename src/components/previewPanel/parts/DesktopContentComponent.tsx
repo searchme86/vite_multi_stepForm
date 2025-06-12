@@ -7,7 +7,7 @@ import {
   AvatarProps,
 } from '../types/previewPanel.types';
 import { DEFAULT_DESKTOP_HERO_IMAGE } from '../utils/constants';
-import { renderMarkdown } from '../utils/markdownRenderer';
+import { renderMarkdown } from '../utils/markdownRenderer.tsx';
 import SwiperGalleryComponent from './SwiperGalleryComponent';
 import CustomImageGalleryComponent from './CustomImageGalleryComponent';
 
