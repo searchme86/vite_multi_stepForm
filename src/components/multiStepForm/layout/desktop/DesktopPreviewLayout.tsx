@@ -1,23 +1,12 @@
-//====여기부터 수정됨====
-// ✅ 수정: React import 추가
-// 이유: React.ReactNode 타입을 사용하기 위해 React를 import해야 함
-// 의미: JSX 사용 및 React 타입 정의시 필수적인 import
 import React from 'react';
-//====여기까지 수정됨====
-import DesktopPreviewPanel from './DesktopPreviewPanel';
+import { useMultiStepFormStore } from '../../store/multiStepForm/multiStepFormStore';
 
 interface DesktopPreviewLayoutProps {
-  showPreview: boolean;
   children: React.ReactNode;
 }
 
-function DesktopPreviewLayout({
-  showPreview,
-  children,
-}: DesktopPreviewLayoutProps) {
-  console.log('🖥️ DesktopPreviewLayout: 데스크탑 프리뷰 레이아웃 렌더링', {
-    showPreview,
-  });
+function DesktopPreviewLayout({ children }: DesktopPreviewLayoutProps) {
+  const showPreview = useMultiStepFormStore((state) => state.showPreview);
 
   return (
     <div
@@ -32,7 +21,6 @@ function DesktopPreviewLayout({
       >
         {children}
       </div>
-      <DesktopPreviewPanel showPreview={showPreview} />
     </div>
   );
 }

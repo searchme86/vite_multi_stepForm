@@ -16,21 +16,38 @@ function MobileStepButtons({
 
   const steps: StepNumber[] = [1, 2, 3, 4, 5];
 
+  const handleStepChange = (step: StepNumber) => {
+    console.log('📱 MobileStepButtons: 스텝 변경 시도', {
+      fromStep: currentStep,
+      toStep: step,
+    });
+    onStepChange(step);
+  };
+
   return (
     <div className="flex justify-between pb-2 mb-3 overflow-x-auto sm:hidden hide-scrollbar">
-      {steps.map((step) => (
-        <Button
-          key={step}
-          variant={currentStep === step ? 'solid' : 'light'}
-          color={currentStep === step ? 'primary' : 'default'}
-          onPress={() => onStepChange(step)}
-          className="flex-shrink-0 mr-2"
-          size="sm"
-          type="button"
-        >
-          {step}
-        </Button>
-      ))}
+      {steps.map((step) => {
+        const isCurrentStep = currentStep === step;
+
+        console.log('📱 MobileStepButtons: 버튼 렌더링', {
+          step,
+          isCurrentStep,
+        });
+
+        return (
+          <Button
+            key={step}
+            variant={isCurrentStep ? 'solid' : 'light'}
+            color={isCurrentStep ? 'primary' : 'default'}
+            onPress={() => handleStepChange(step)}
+            className="flex-shrink-0 mr-2"
+            size="sm"
+            type="button"
+          >
+            {step}
+          </Button>
+        );
+      })}
     </div>
   );
 }

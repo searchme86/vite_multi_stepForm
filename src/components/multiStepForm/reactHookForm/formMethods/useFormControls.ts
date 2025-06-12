@@ -6,7 +6,6 @@ export const useFormControls = (methods: UseFormReturn<FormSchemaValues>) => {
   console.log('📝 useFormControls: 폼 컨트롤 초기화');
 
   const {
-    handleSubmit,
     formState: { errors, isValid, isSubmitting, isDirty },
     trigger,
     watch,
@@ -48,7 +47,6 @@ export const useFormControls = (methods: UseFormReturn<FormSchemaValues>) => {
   }, [reset]);
 
   return {
-    handleSubmit,
     errors,
     isValid,
     isSubmitting,

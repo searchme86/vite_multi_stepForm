@@ -13,7 +13,9 @@ function DesktopNavigationContainer({
 }: DesktopNavigationContainerProps) {
   console.log(
     '🖥️ DesktopNavigationContainer: 데스크탑 네비게이션 컨테이너 렌더링',
-    { currentStep }
+    {
+      currentStep,
+    }
   );
 
   return (

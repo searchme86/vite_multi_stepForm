@@ -16,6 +16,7 @@ function NavigationButtons({
 }: NavigationButtonsProps) {
   console.log('🎯 NavigationButtons: 네비게이션 버튼들 렌더링', {
     currentStep,
+    isLastStep: currentStep === 5,
   });
 
   return (

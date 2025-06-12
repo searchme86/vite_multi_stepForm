@@ -13,7 +13,9 @@ function MobileNavigationContainer({
 }: MobileNavigationContainerProps) {
   console.log(
     '📱 MobileNavigationContainer: 모바일 네비게이션 컨테이너 렌더링',
-    { currentStep }
+    {
+      currentStep,
+    }
   );
 
   return (

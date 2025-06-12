@@ -17,24 +17,38 @@ function DesktopStepButtons({
 
   const steps: StepNumber[] = [1, 2, 3, 4, 5];
 
-  return (
-    <div className="relative justify-between hidden mb-2 sm:flex">
-      {/* 연결선 배경 */}
-      <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-default-200 -translate-y-1/2 z-0"></div>
+  const handleStepChange = (step: StepNumber) => {
+    console.log('🖥️ DesktopStepButtons: 스텝 변경 시도', {
+      fromStep: currentStep,
+      toStep: step,
+    });
+    onStepChange(step);
+  };
 
-      {steps.map((step) => (
-        <Button
-          key={step}
-          variant={currentStep === step ? 'solid' : 'flat'}
-          color={currentStep === step ? 'primary' : 'default'}
-          onPress={() => onStepChange(step)}
-          className="z-10"
-          type="button"
-        >
-          {step}. {getStepTitle(step)}
-        </Button>
-      ))}
-    </div>
+  return (
+    <>
+      {steps.map((step) => {
+        const isCurrentStep = currentStep === step;
+
+        console.log('🖥️ DesktopStepButtons: 버튼 렌더링', {
+          step,
+          isCurrentStep,
+        });
+
+        return (
+          <Button
+            key={step}
+            variant={isCurrentStep ? 'solid' : 'flat'}
+            color={isCurrentStep ? 'primary' : 'default'}
+            onPress={() => handleStepChange(step)}
+            className="z-10"
+            type="button"
+          >
+            {step}. {getStepTitle(step)}
+          </Button>
+        );
+      })}
+    </>
   );
 }
 

@@ -16,6 +16,7 @@ function StepNavigationWrapper({
 }: StepNavigationWrapperProps) {
   console.log('🧭 StepNavigationWrapper: 스텝 네비게이션 래퍼 렌더링', {
     currentStep,
+    progressWidth,
   });
 
   return (

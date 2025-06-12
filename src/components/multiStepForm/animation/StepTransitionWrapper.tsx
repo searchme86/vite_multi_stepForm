@@ -12,6 +12,7 @@ function StepTransitionWrapper({
 }: StepTransitionWrapperProps) {
   console.log('🎬 StepTransitionWrapper: 스텝 전환 애니메이션 래퍼 렌더링', {
     currentStep,
+    hasChildren: !!children,
   });
 
   return (
