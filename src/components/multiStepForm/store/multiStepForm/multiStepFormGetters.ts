@@ -1,9 +1,10 @@
 import { MultiStepFormState } from './initialMultiStepFormState';
 import { FormValues } from '../../types/formTypes';
+import { StepNumber } from '../../types/stepTypes';
 
 export interface MultiStepFormGetters {
   getFormValues: () => FormValues;
-  getCurrentStep: () => number;
+  getCurrentStep: () => StepNumber;
   getProgressWidth: () => number;
   getShowPreview: () => boolean;
   getEditorCompletedContent: () => string;

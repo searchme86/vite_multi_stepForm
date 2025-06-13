@@ -76,7 +76,6 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
             set({ toasts: [] });
           },
 
-          // Context 호환성을 위한 별칭 함수들 추가
           setIsPreviewPanelOpen: (open: boolean) => set({ showPreview: open }),
           togglePreviewPanel: () =>
             set((state) => ({ showPreview: !state.showPreview })),

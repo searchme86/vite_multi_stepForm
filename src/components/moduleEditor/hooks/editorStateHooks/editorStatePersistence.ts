@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Container, ToastOptions } from '../../store/shared/commonTypes';
+import { Container, ToastOptions } from '../../../../store/shared/commonTypes';
 import { LocalParagraph } from './editorStateTypes';
 import { generateCompletedContent } from './editorStateHelpers';
 

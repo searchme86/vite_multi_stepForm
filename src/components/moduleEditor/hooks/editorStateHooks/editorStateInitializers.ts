@@ -1,5 +1,5 @@
 import { EditorInternalState } from '../../types/editor';
-import { Container } from '../../store/shared/commonTypes';
+import { Container } from '../../../../store/shared/commonTypes';
 import {
   LocalParagraph,
   EditorUIStoreActions,

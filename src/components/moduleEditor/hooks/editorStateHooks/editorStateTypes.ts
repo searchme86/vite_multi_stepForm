@@ -2,7 +2,7 @@ import {
   Container,
   ParagraphBlock,
   ToastOptions,
-} from '../../store/shared/commonTypes';
+} from '../../../../store/shared/commonTypes';
 import { SubStep } from '../../types/editor';
 
 // MultiStepForm에서 사용하는 context 타입 정의

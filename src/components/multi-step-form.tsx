@@ -5,10 +5,10 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import StepNavigation from './step-navigation';
-import UserInfoStep from './user-info-step';
-import BlogBasicStep from './blog-basic-step';
-import BlogContentStep from './blog-content-step';
-import BlogMediaStep from './blog-media-step';
+import UserInfoStep from './multiStepForm/steps/user-info-step';
+import BlogBasicStep from './multiStepForm/steps/stepsSections/blog-basic-step';
+import BlogContentStep from './multiStepForm/steps/stepsSections/blog-content-step';
+import BlogMediaStep from './multiStepForm/steps/blog-media-step';
 //====여기부터 수정됨====
 // ✅ 수정: 모듈화된 에디터 컴포넌트 import 추가
 // 이유: 5번째 스텝으로 에디터 기능 추가
@@ -25,10 +25,12 @@ import {
   //====여기부터 수정됨====
   // ✅ 수정: 에디터 관련 훅과 타입들 import 추가
   // 이유: 에디터 상태 관리를 위해 필요
-  useEditorState,
+  // useEditorState,
   EditorState,
   //====여기까지 수정됨====
 } from './useMultiStepForm';
+// import { useEditorState } from './hooks/editorStateHooks/useEditorStateMain';
+import { useEditorState } from '../components/moduleEditor/hooks/editorStateHooks/useEditorStateMain';
 import ModularBlogEditorContainer from './moduleEditor/ModularBlogEditorContainer';
 
 //====여기부터 수정됨====

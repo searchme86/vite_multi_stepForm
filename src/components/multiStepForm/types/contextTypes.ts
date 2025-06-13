@@ -1,7 +1,7 @@
 import { FormValues } from './formTypes';
 import { ImageViewConfig, CustomGalleryView } from './galleryTypes';
 import { EditorState, EditorActions } from './editorTypes';
-import { ToastOptions } from './toastTypes';
+import { ToastOptions } from '../../toaster/types/toastTypes';
 
 export interface MultiStepFormContextType {
   // Form values

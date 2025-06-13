@@ -1,8 +1,9 @@
 import { FormValues } from '../../types/formTypes';
+import { StepNumber, MIN_STEP } from '../../types/stepTypes';
 
 export interface MultiStepFormState {
   formValues: FormValues;
-  currentStep: number;
+  currentStep: StepNumber;
   progressWidth: number;
   showPreview: boolean;
   editorCompletedContent: string;
@@ -26,7 +27,7 @@ export const initialMultiStepFormState: MultiStepFormState = {
     editorCompletedContent: '',
     isEditorCompleted: false,
   },
-  currentStep: 1,
+  currentStep: MIN_STEP,
   progressWidth: 0,
   showPreview: false,
   editorCompletedContent: '',

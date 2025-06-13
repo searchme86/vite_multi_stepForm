@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { EditorInternalState } from '../../types/editor';
-import { Container } from '../../store/shared/commonTypes';
+import { Container } from '../../../../store/shared/commonTypes';
 
 // store들을 직접 import하여 반응성 보장
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
-import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
-import { useToastStore } from '../../store/toast/toastStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
+import { useToastStore } from '../../../../store/toast/toastStore';
 
 // 타입 정의
 import { UseEditorStateProps, LocalParagraph } from './editorStateTypes';

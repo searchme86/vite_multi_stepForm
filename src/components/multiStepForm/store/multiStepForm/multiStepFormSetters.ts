@@ -1,5 +1,12 @@
 import { MultiStepFormState } from './initialMultiStepFormState';
 import { FormValues } from '../../types/formTypes';
+import {
+  StepNumber,
+  MAX_STEP,
+  MIN_STEP,
+  TOTAL_STEPS,
+  isValidStepNumber,
+} from '../../types/stepTypes';
 
 export interface MultiStepFormSetters {
   setFormValues: (formValues: FormValues) => void;
@@ -7,13 +14,13 @@ export interface MultiStepFormSetters {
     key: K,
     value: FormValues[K]
   ) => void;
-  setCurrentStep: (step: number) => void;
+  setCurrentStep: (step: StepNumber) => void;
   setProgressWidth: (width: number) => void;
   setShowPreview: (show: boolean) => void;
   togglePreview: () => void;
   goToNextStep: () => void;
   goToPrevStep: () => void;
-  goToStep: (step: number) => void;
+  goToStep: (step: StepNumber) => void;
   updateEditorContent: (content: string) => void;
   setEditorCompleted: (completed: boolean) => void;
 }
@@ -42,7 +49,7 @@ export const createMultiStepFormSetters = (
       }));
     },
 
-    setCurrentStep: (step: number) => {
+    setCurrentStep: (step: StepNumber) => {
       set({ currentStep: step });
     },
 
@@ -60,8 +67,12 @@ export const createMultiStepFormSetters = (
 
     goToNextStep: () => {
       set((state) => {
-        const nextStep = Math.min(state.currentStep + 1, 5);
-        const progress = ((nextStep - 1) / 4) * 100;
+        const nextStepNumber = state.currentStep + 1;
+        const nextStep: StepNumber =
+          nextStepNumber <= MAX_STEP && isValidStepNumber(nextStepNumber)
+            ? nextStepNumber
+            : state.currentStep;
+        const progress = ((nextStep - MIN_STEP) / (TOTAL_STEPS - 1)) * 100;
         return {
           currentStep: nextStep,
           progressWidth: progress,
@@ -71,8 +82,12 @@ export const createMultiStepFormSetters = (
 
     goToPrevStep: () => {
       set((state) => {
-        const prevStep = Math.max(state.currentStep - 1, 1);
-        const progress = ((prevStep - 1) / 4) * 100;
+        const prevStepNumber = state.currentStep - 1;
+        const prevStep: StepNumber =
+          prevStepNumber >= MIN_STEP && isValidStepNumber(prevStepNumber)
+            ? prevStepNumber
+            : state.currentStep;
+        const progress = ((prevStep - MIN_STEP) / (TOTAL_STEPS - 1)) * 100;
         return {
           currentStep: prevStep,
           progressWidth: progress,
@@ -80,10 +95,12 @@ export const createMultiStepFormSetters = (
       });
     },
 
-    goToStep: (step: number) => {
+    goToStep: (step: StepNumber) => {
       set(() => {
-        const targetStep = Math.max(1, Math.min(step, 5));
-        const progress = ((targetStep - 1) / 4) * 100;
+        const targetStep: StepNumber = isValidStepNumber(step)
+          ? step
+          : MIN_STEP;
+        const progress = ((targetStep - MIN_STEP) / (TOTAL_STEPS - 1)) * 100;
         return {
           currentStep: targetStep,
           progressWidth: progress,

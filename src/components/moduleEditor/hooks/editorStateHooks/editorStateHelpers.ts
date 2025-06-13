@@ -1,4 +1,7 @@
-import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
+import {
+  Container,
+  ParagraphBlock,
+} from '../../../../store/shared/commonTypes';
 import { EditorUIStoreActions } from './editorStateTypes';
 
 // ✨ [헬퍼 함수] 컨테이너 생성 함수 - 새로운 섹션 컨테이너를 만들 때 사용

@@ -6,10 +6,10 @@ import {
   Container,
   ParagraphBlock,
   ToastOptions,
-} from '../store/shared/commonTypes';
-import { useEditorCoreStore } from '../store/editorCore/editorCoreStore';
-import { useEditorUIStore } from '../store/editorUI/editorUIStore';
-import { useToastStore } from '../store/toast/toastStore';
+} from '../../../store/shared/commonTypes';
+import { useEditorCoreStore } from '../../../store/editorCore/editorCoreStore';
+import { useEditorUIStore } from '../../../store/editorUI/editorUIStore';
+import { useToastStore } from '../../../store/toast/toastStore';
 
 // MultiStepFormContextType는 context 전용 타입이므로 optional로 처리
 interface MultiStepFormContextType {

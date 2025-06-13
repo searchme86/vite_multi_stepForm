@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { EditorInternalState } from '../../types/editor';
-import { Container, ToastOptions } from '../../store/shared/commonTypes';
+import { Container, ToastOptions } from '../../../../store/shared/commonTypes';
 import { EditorUIStoreActions } from './editorStateTypes';
 import {
   createContainer,
