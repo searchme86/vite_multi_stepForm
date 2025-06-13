@@ -1,5 +1,5 @@
 import React from 'react';
-import { ToastOptions } from '../../../types/toastTypes';
+import { ToastOptions } from '../types/toastTypes';
 
 interface ToastItem {
   id: string;

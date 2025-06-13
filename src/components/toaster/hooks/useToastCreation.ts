@@ -1,6 +1,6 @@
 import React from 'react';
-import { ToastOptions } from '../../../types/toastTypes';
-import { logToast } from '../../../utils/debugUtils';
+import { ToastOptions } from '../types/toastTypes';
+import { logToast } from '../utils/debugToast';
 
 export const useToastCreation = () => {
   const addToast = React.useCallback((options: ToastOptions) => {

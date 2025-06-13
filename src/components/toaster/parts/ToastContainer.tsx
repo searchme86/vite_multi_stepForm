@@ -1,11 +1,5 @@
-import React from 'react';
 import ToastElement from './ToastElement';
-import { ToastOptions } from '../../../types/toastTypes';
-
-interface ToastItem {
-  id: string;
-  options: ToastOptions;
-}
+import type { ToastItem } from '../../../store/shared/commonTypes';
 
 interface ToastContainerProps {
   toasts: ToastItem[];
@@ -18,11 +12,6 @@ function ToastContainer({
   onRemoveToast,
   position = 'top-right',
 }: ToastContainerProps) {
-  console.log('🔔 ToastContainer: 토스트 컨테이너 렌더링', {
-    toastCount: toasts.length,
-    position,
-  });
-
   const getPositionClasses = () => {
     switch (position) {
       case 'top-left':
@@ -37,7 +26,7 @@ function ToastContainer({
     }
   };
 
-  if (toasts.length === 0) {
+  if (!toasts || toasts.length === 0) {
     return null;
   }
 
@@ -52,7 +41,10 @@ function ToastContainer({
           }}
         >
           <ToastElement
-            {...toast.options}
+            title={toast.title}
+            description={toast.description}
+            color={toast.color}
+            hideCloseButton={toast.hideCloseButton}
             onClose={() => onRemoveToast(toast.id)}
           />
         </div>

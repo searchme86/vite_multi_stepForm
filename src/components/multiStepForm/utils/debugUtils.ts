@@ -10,9 +10,9 @@ export const logFormValuesUpdate = (formValues: any) => {
   });
 };
 
-export const logToast = (options: any) => {
-  console.log('🔔 Toast:', options);
-};
+// export const logToast = (options: any) => {
+//   console.log('🔔 Toast:', options);
+// };
 
 export const logStepChange = (
   currentStep: number,
