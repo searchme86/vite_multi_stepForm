@@ -1,12 +1,13 @@
 import React from 'react';
-import UserInfoStep from '../steps/user-info-step';
+// import UserInfoStepContainer from '../steps/user-info-step';
+import UserInfoStepContainer from '../steps/stepsSections/userInfoStep/UserInfoStepContainer';
 import BlogBasicStep from '../steps/blog-basic-step';
 import BlogContentStep from '../steps/blog-content-step';
 import BlogMediaStep from '../steps/blog-media-step';
 import ModularBlogEditorContainer from '../../moduleEditor/ModularBlogEditorContainer';
 
 export const STEP_COMPONENTS = {
-  UserInfoStep,
+  UserInfoStepContainer,
   BlogBasicStep,
   BlogContentStep,
   ModularBlogEditorContainer,
@@ -33,7 +34,7 @@ export const STEP_CONFIG = createStepConfig({
   1: {
     title: '유저 정보 입력',
     description: '기본 사용자 정보를 입력합니다',
-    component: 'UserInfoStep',
+    component: 'UserInfoStepContainer',
     validation: ['nickname', 'emailPrefix', 'emailDomain'] as const,
   },
   2: {
