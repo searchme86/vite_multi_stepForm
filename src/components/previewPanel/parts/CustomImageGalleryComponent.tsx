@@ -1,5 +1,5 @@
 // 커스텀 이미지 갤러리 컴포넌트
-import DynamicImageLayout from '../../DynamicImageLayout';
+import DynamicImageLayout from '../../multiStepForm/steps/DynamicImageLayout';
 import { CustomGalleryView } from '../types/previewPanel.types';
 
 interface CustomImageGalleryComponentProps {

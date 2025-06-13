@@ -1,5 +1,4 @@
 // 모바일 콘텐츠 컴포넌트
-import React from 'react';
 import { Tabs, Tab, Chip, Badge, Avatar } from '@heroui/react';
 import type { Key } from '@react-types/shared';
 import {
