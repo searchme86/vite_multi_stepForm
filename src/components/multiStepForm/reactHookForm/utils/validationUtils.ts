@@ -1,25 +1,13 @@
 import { FormSchemaValues } from '../../types/formTypes';
-import { StepNumber } from '../../types/stepTypes';
+import { StepNumber, getStepValidationFields } from '../../types/stepTypes';
+import { filterValidFormFields } from '../utils/validationHelpers';
 
 export const getFieldsToValidate = (
   step: StepNumber
 ): (keyof FormSchemaValues)[] => {
   console.log('✅ validationUtils: 검증할 필드 가져오기', step);
-
-  switch (step) {
-    case 1:
-      return ['nickname', 'emailPrefix', 'emailDomain'];
-    case 2:
-      return ['title', 'description'];
-    case 3:
-      return ['content'];
-    case 4:
-      return [];
-    case 5:
-      return [];
-    default:
-      return [];
-  }
+  const rawFields = getStepValidationFields(step);
+  return filterValidFormFields(rawFields);
 };
 
 export const validateEmail = (

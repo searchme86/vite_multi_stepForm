@@ -1,6 +1,6 @@
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
-import { StepNumber } from '../../types/stepTypes';
+import { StepNumber, isFirstStep } from '../../types/stepTypes';
 
 interface PrevButtonProps {
   currentStep: StepNumber;
@@ -15,7 +15,7 @@ function PrevButton({ currentStep, onPrev }: PrevButtonProps) {
       variant="flat"
       color="default"
       onPress={onPrev}
-      isDisabled={currentStep === 1}
+      isDisabled={isFirstStep(currentStep)}
       startContent={
         <Icon icon="lucide:arrow-left" className="hidden sm:inline" />
       }

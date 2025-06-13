@@ -1,4 +1,7 @@
 // 📁 파일 위치: multiStepForm/layout/mobile/MobilePreviewContainer.tsx
+
+import PreviewPanelContainer from '../../../previewPanel/PreviewPanelContainer';
+
 function MobilePreviewContainer({ children }: { children: React.ReactNode }) {
   console.log('📱 MobilePreviewContainer: 모바일 프리뷰 컨테이너 렌더링');
 
@@ -16,7 +19,7 @@ function MobilePreviewPanel() {
   return (
     <div className="md:hidden">
       {/* PreviewPanel 컴포넌트는 내부적으로 Zustand Store를 사용할 예정 */}
-      <PreviewPanel />
+      <PreviewPanelContainer />
     </div>
   );
 }

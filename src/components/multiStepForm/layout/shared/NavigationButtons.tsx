@@ -1,7 +1,7 @@
 import PrevButton from './PrevButton';
 import NextButton from './NextButton';
 import SubmitButton from './SubmitButton';
-import { StepNumber } from '../../types/stepTypes';
+import { StepNumber, isLastStep } from '../../types/stepTypes';
 
 interface NavigationButtonsProps {
   currentStep: StepNumber;
@@ -16,13 +16,17 @@ function NavigationButtons({
 }: NavigationButtonsProps) {
   console.log('🎯 NavigationButtons: 네비게이션 버튼들 렌더링', {
     currentStep,
-    isLastStep: currentStep === 5,
+    isLastStep: isLastStep(currentStep),
   });
 
   return (
     <div className="flex justify-between">
       <PrevButton currentStep={currentStep} onPrev={onPrev} />
-      {currentStep < 5 ? <NextButton onNext={onNext} /> : <SubmitButton />}
+      {!isLastStep(currentStep) ? (
+        <NextButton onNext={onNext} />
+      ) : (
+        <SubmitButton />
+      )}
     </div>
   );
 }

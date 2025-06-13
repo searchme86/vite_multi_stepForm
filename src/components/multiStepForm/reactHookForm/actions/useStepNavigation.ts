@@ -1,10 +1,15 @@
 import React from 'react';
-import { StepNumber } from '../../types/stepTypes';
+import {
+  StepNumber,
+  MIN_STEP,
+  getNextStep,
+  getPreviousStep,
+} from '../../types/stepTypes';
 import { calculateProgress } from '../utils/stepUtils';
 import { logStepChange } from '../../utils/debugUtils';
 
 export const useStepNavigation = () => {
-  const [currentStep, setCurrentStep] = React.useState<StepNumber>(1);
+  const [currentStep, setCurrentStep] = React.useState<StepNumber>(MIN_STEP);
   const [progressWidth, setProgressWidth] = React.useState(0);
 
   React.useEffect(() => {
@@ -20,8 +25,8 @@ export const useStepNavigation = () => {
 
   const goToNextStep = React.useCallback(() => {
     console.log('➡️ goToNextStep: 다음 스텝으로 이동');
-    if (currentStep < 5) {
-      const nextStep = (currentStep + 1) as StepNumber;
+    const nextStep = getNextStep(currentStep);
+    if (nextStep) {
       logStepChange(nextStep, 'next');
       setCurrentStep(nextStep);
     }
@@ -29,8 +34,8 @@ export const useStepNavigation = () => {
 
   const goToPrevStep = React.useCallback(() => {
     console.log('⬅️ goToPrevStep: 이전 스텝으로 이동');
-    if (currentStep > 1) {
-      const prevStep = (currentStep - 1) as StepNumber;
+    const prevStep = getPreviousStep(currentStep);
+    if (prevStep) {
       logStepChange(prevStep, 'prev');
       setCurrentStep(prevStep);
     }

@@ -1,5 +1,4 @@
-import { StepNumber } from '../../types/stepTypes';
-import { getStepTitle } from '../../reactHookForm/utils/stepUtils';
+import { StepNumber, getStepTitle } from '../../types/stepTypes';
 
 interface MobileStepIndicatorProps {
   currentStep: StepNumber;

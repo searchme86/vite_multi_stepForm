@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { StepNumber } from '../types/stepTypes';
+import { ANIMATION_DURATION } from './animationUtils';
 
 interface StepTransitionWrapperProps {
   currentStep: StepNumber;
@@ -22,7 +23,7 @@ function StepTransitionWrapper({
         initial={{ x: 100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: -100, opacity: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: ANIMATION_DURATION.NORMAL }}
       >
         {children}
       </motion.div>

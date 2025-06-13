@@ -1,4 +1,6 @@
 import { FormSchemaValues } from '../../types/formTypes';
+import { getStepValidationFields, StepNumber } from '../../types/stepTypes';
+import { filterValidFormFields } from '../utils/validationHelpers';
 
 export const getEmailFromForm = (formValues: FormSchemaValues): string => {
   console.log('📧 formUtils: 이메일 생성');
@@ -48,27 +50,31 @@ export const sanitizeFormData = (
 };
 
 export const isStepComplete = (
-  step: number,
+  step: StepNumber,
   formValues: FormSchemaValues
 ): boolean => {
   console.log('✅ formUtils: 스텝 완료 여부 확인', step);
 
-  switch (step) {
-    case 1:
-      return !!(
-        formValues.nickname &&
-        formValues.emailPrefix &&
-        formValues.emailDomain
-      );
-    case 2:
-      return !!(formValues.title && formValues.description);
-    case 3:
-      return !!formValues.content;
-    case 4:
-      return !!formValues.isEditorCompleted;
-    case 5:
-      return true;
-    default:
-      return false;
+  const rawValidationFields = getStepValidationFields(step);
+  const validationFields = filterValidFormFields(rawValidationFields);
+
+  if (validationFields.length === 0) {
+    return true;
   }
+
+  const hasEditorValidation = rawValidationFields.some(
+    (field) => field === 'editorCompleted' || field === 'editor'
+  );
+
+  if (hasEditorValidation) {
+    return !!formValues.isEditorCompleted;
+  }
+
+  return validationFields.every((field) => {
+    const value = formValues[field];
+    if (field === 'isEditorCompleted') {
+      return !!value;
+    }
+    return value && String(value).trim().length > 0;
+  });
 };

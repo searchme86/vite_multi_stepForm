@@ -1,29 +1,32 @@
 import { FormSchemaValues } from '../../types/formTypes';
+import { isValidFormSchemaKey } from '../utils/validationHelpers';
+
+const DEFAULT_FORM_VALUES: FormSchemaValues = {
+  userImage: '',
+  nickname: '',
+  emailPrefix: '',
+  emailDomain: '',
+  bio: '',
+  title: '',
+  description: '',
+  tags: '',
+  content: '',
+  media: [],
+  mainImage: null,
+  sliderImages: [],
+  editorCompletedContent: '',
+  isEditorCompleted: false,
+};
 
 export const resetForm = (
   setValue: (name: keyof FormSchemaValues, value: any) => void
 ) => {
   console.log('📝 formActions: 폼 초기화');
 
-  const defaultValues = {
-    userImage: '',
-    nickname: '',
-    emailPrefix: '',
-    emailDomain: '',
-    bio: '',
-    title: '',
-    description: '',
-    tags: '',
-    content: '',
-    media: [],
-    mainImage: null,
-    sliderImages: [],
-    editorCompletedContent: '',
-    isEditorCompleted: false,
-  };
-
-  Object.entries(defaultValues).forEach(([key, value]) => {
-    setValue(key as keyof FormSchemaValues, value);
+  Object.entries(DEFAULT_FORM_VALUES).forEach(([key, value]) => {
+    if (isValidFormSchemaKey(key)) {
+      setValue(key, value);
+    }
   });
 };
 

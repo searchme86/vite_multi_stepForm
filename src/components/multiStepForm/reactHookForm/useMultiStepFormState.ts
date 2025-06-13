@@ -1,8 +1,13 @@
-import React from 'react';
+import { useCallback } from 'react';
 import { useFormMethods } from './formMethods/useFormMethods';
 import { useValidation } from './validation/useValidation';
 import { useFormSubmit } from './actions/useFormSubmit';
 import { useMultiStepFormStore } from '../store/multiStepForm/multiStepFormStore';
+import {
+  TOTAL_STEPS,
+  MAX_STEP,
+  isValidStepNumber,
+} from '../types/stepTypes.ts';
 
 export const useMultiStepFormState = () => {
   const { methods, handleSubmit, errors, trigger } = useFormMethods();
@@ -39,19 +44,32 @@ export const useMultiStepFormState = () => {
 
   const { onSubmit } = useFormSubmit({ addToast });
 
-  const enhancedGoToNextStep = React.useCallback(async () => {
-    const isValid = await validateCurrentStep(currentStep as 1 | 2 | 3 | 4 | 5);
-    if (isValid && currentStep < 5) {
+  const enhancedGoToNextStep = useCallback(async () => {
+    if (!isValidStepNumber(currentStep)) {
+      console.error(`Invalid current step: ${currentStep}`);
+      return;
+    }
+
+    const isValid = await validateCurrentStep(currentStep);
+    if (isValid && currentStep < MAX_STEP) {
       goToNextStep();
     }
   }, [validateCurrentStep, currentStep, goToNextStep]);
 
-  const enhancedGoToStep = React.useCallback(
+  const enhancedGoToStep = useCallback(
     async (step: number) => {
+      if (!isValidStepNumber(step)) {
+        console.error(`Invalid target step: ${step}`);
+        return;
+      }
+
+      if (!isValidStepNumber(currentStep)) {
+        console.error(`Invalid current step: ${currentStep}`);
+        return;
+      }
+
       if (step > currentStep) {
-        const isValid = await validateCurrentStep(
-          currentStep as 1 | 2 | 3 | 4 | 5
-        );
+        const isValid = await validateCurrentStep(currentStep);
         if (!isValid) return;
       }
       goToStep(step);
@@ -59,10 +77,10 @@ export const useMultiStepFormState = () => {
     [currentStep, validateCurrentStep, goToStep]
   );
 
-  const getFormAnalytics = React.useCallback(() => {
+  const getFormAnalytics = useCallback(() => {
     return {
       currentStep,
-      totalSteps: 5,
+      totalSteps: TOTAL_STEPS,
       errorCount: Object.keys(errors).length,
       hasUnsavedChanges: false,
       isFormValid: Object.keys(errors).length === 0,

@@ -1,6 +1,10 @@
 import { FormSchemaValues } from '../../types/formTypes';
 import { StepNumber } from '../../types/stepTypes';
 import { getFieldsToValidate } from '../utils/validationUtils';
+import {
+  filterDefinedStrings,
+  isValidFormSchemaKey,
+} from '../utils/validationHelpers';
 
 export const triggerStepValidation = async (
   step: StepNumber,
@@ -26,10 +30,16 @@ export const extractValidationErrors = (
 ): string[] => {
   console.log('❌ validationActions: 에러 메시지 추출');
 
-  const errorMessages = Object.entries(errors)
-    .filter(([key]) => fieldsToValidate.includes(key as keyof FormSchemaValues))
-    .map(([_, value]: [string, any]) => value?.message || '알 수 없는 오류')
-    .filter(Boolean);
+  const rawErrorMessages = Object.entries(errors)
+    .filter(([key]) => {
+      return (
+        isValidFormSchemaKey(key) &&
+        fieldsToValidate.includes(key as keyof FormSchemaValues)
+      );
+    })
+    .map(([_, value]: [string, any]) => value?.message);
+
+  const errorMessages = filterDefinedStrings(rawErrorMessages);
 
   console.log('❌ validationActions: 에러 메시지들', errorMessages);
   return errorMessages;
