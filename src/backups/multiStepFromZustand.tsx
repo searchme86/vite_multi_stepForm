@@ -4,13 +4,13 @@ import { Icon } from '@iconify/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import UserInfoStep from './multiStepForm/steps/user-info-step';
+import UserInfoStep from '../components/multiStepForm/steps/user-info-step';
 import BlogBasicStep from './multiStepForm/steps/stepsSections/blog-basic-step';
 import BlogContentStep from './multiStepForm/steps/stepsSections/blog-content-step';
-import BlogMediaStep from './multiStepForm/steps/blog-media-step';
-import ModularBlogEditorContainer from './moduleEditor/ModularBlogEditorContainer';
+import BlogMediaStep from '../components/multiStepForm/steps/blog-media-step';
+import ModularBlogEditorContainer from '../components/moduleEditor/ModularBlogEditorContainer';
 // import PreviewPanel from './preview-panel';
-import PreviewPanel from './previewPanel/PreviewPanelContainer';
+import PreviewPanel from '../components/previewPanel/PreviewPanelContainer';
 
 import { motion, AnimatePresence } from 'framer-motion';
 

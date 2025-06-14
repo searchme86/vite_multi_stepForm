@@ -41,7 +41,7 @@ import 'swiper/css/autoplay';
 import 'swiper/css/effect-fade';
 
 // 간소화된 DynamicImageLayout import
-import DynamicImageLayout from './multiStepForm/steps/DynamicImageLayout';
+import DynamicImageLayout from '../components/multiStepForm/steps/DynamicImageLayout';
 
 // MultiStepForm Context 사용
 import { useMultiStepForm } from './useMultiStepForm';
