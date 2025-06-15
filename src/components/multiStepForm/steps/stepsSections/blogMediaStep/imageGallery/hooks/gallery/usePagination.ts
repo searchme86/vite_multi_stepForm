@@ -1,9 +1,7 @@
-// blogMediaStep/imageGallery/hooks/gallery/usePagination.ts - ImageGallery 컴포넌트
+// blogMediaStep/imageGallery/hooks/gallery/usePagination.ts
 
-import { useCallback, useMemo } from 'react';
-// import { useBlogMediaStepState } from '../../../hooks/useBlogMediaStepState';
+import { useCallback } from 'react';
 import { useBlogMediaStepState } from '../../../hooks/useBlogMediaStepState';
-// import { ImageFileInfo } from '../utils/galleryUtils';
 
 export interface PaginationState {
   visibleFilesCount: number;
@@ -134,10 +132,6 @@ export const usePagination = (): PaginationActions => {
     },
     [visibleFilesCount]
   );
-
-  const paginationState = useMemo(() => {
-    return calculatePaginationState(0);
-  }, [calculatePaginationState]);
 
   console.log('✅ usePagination 초기화 완료:', {
     visibleFilesCount,

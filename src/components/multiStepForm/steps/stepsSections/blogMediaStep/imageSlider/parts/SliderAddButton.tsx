@@ -1,7 +1,8 @@
 // blogMediaStep/imageSlider/parts/SliderAddButton.tsx
 
 import React from 'react';
-import { Button, Icon } from '@heroui/react';
+import { Button } from '@heroui/react';
+import { Icon } from '@iconify/react';
 
 interface SliderAddButtonProps {
   selectedCount: number;

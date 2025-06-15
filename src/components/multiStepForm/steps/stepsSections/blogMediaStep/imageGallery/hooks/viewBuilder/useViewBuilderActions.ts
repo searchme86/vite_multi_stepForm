@@ -1,4 +1,4 @@
-// blogMediaStep/imageGallery/hooks/viewBuilder/useViewBuilderActions.ts - ImageGallery 컴포넌트
+// blogMediaStep/imageGallery/hooks/viewBuilder/useViewBuilderActions.ts
 
 import { useCallback } from 'react';
 import { useImageGalleryStore } from '../../../../../../../../store/imageGallery/imageGalleryStore';
@@ -9,6 +9,22 @@ import {
   resetViewBuilderSelection,
   ImageSelectionUpdate,
 } from '../../utils/viewBuilderUtils';
+
+interface ImageViewConfig {
+  selectedImages: string[];
+  clickOrder: number[];
+  layout: {
+    columns: number;
+    gridType: 'grid' | 'masonry';
+  };
+  filter: 'all' | 'available';
+}
+
+interface ImageGalleryStoreType {
+  getImageViewConfig: () => ImageViewConfig | null;
+  updateImageViewConfig: (config: Partial<ImageViewConfig>) => void;
+  addCustomGalleryView: (config: unknown) => void;
+}
 
 export interface ViewBuilderActionsResult {
   handleImageClick: (imageUrl: string) => void;
@@ -23,26 +39,23 @@ export interface ViewBuilderActionsResult {
 export const useViewBuilderActions = (): ViewBuilderActionsResult => {
   console.log('🔧 useViewBuilderActions 훅 초기화');
 
-  const imageViewConfig = useImageGalleryStore((state) =>
-    state.getImageViewConfig()
-  );
-  const updateImageViewConfig = useImageGalleryStore(
-    (state) => state.updateImageViewConfig
-  );
-  const addCustomGalleryView = useImageGalleryStore(
-    (state) => state.addCustomGalleryView
-  );
+  const rawImageGalleryStore = useImageGalleryStore();
+  const imageGalleryStore = rawImageGalleryStore as ImageGalleryStoreType;
+
+  const imageViewConfig = imageGalleryStore?.getImageViewConfig?.() || null;
+  const updateImageViewConfig = imageGalleryStore?.updateImageViewConfig;
+  const addCustomGalleryView = imageGalleryStore?.addCustomGalleryView;
 
   const { addToast } = useBlogMediaStepState();
 
-  const safeImageViewConfig = imageViewConfig || {
+  const safeImageViewConfig: ImageViewConfig = imageViewConfig || {
     selectedImages: [],
     clickOrder: [],
     layout: {
       columns: 3,
-      gridType: 'grid' as const,
+      gridType: 'grid',
     },
-    filter: 'available' as const,
+    filter: 'available',
   };
 
   const handleImageClick = useCallback(
@@ -83,7 +96,14 @@ export const useViewBuilderActions = (): ViewBuilderActionsResult => {
     }
 
     const resetState = resetViewBuilderSelection();
-    updateImageViewConfig(resetState);
+    const resetConfig: Partial<ImageViewConfig> = {
+      selectedImages: resetState.selectedImages,
+      clickOrder: resetState.clickOrder,
+      layout: resetState.layout,
+      filter: 'available',
+    };
+
+    updateImageViewConfig(resetConfig);
 
     addToast({
       title: '선택 초기화',

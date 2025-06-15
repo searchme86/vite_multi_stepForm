@@ -1,7 +1,8 @@
 // blogMediaStep/imageSlider/parts/SliderImageSelector.tsx
 
 import React from 'react';
-import { Card, CardBody, Checkbox, Icon } from '@heroui/react';
+import { Card, CardBody, Checkbox } from '@heroui/react';
+import { Icon } from '@iconify/react';
 
 interface SliderImageSelectorProps {
   mediaFiles: string[];

@@ -1,7 +1,8 @@
 // blogMediaStep/imageSlider/parts/SelectedSliderImages.tsx
 
 import React from 'react';
-import { Button, Icon } from '@heroui/react';
+import { Button } from '@heroui/react';
+import { Icon } from '@iconify/react';
 
 interface SelectedSliderImagesProps {
   localSliderImages: string[];
@@ -61,7 +62,11 @@ function SelectedSliderImages({
                       aria-label={`슬라이더 이미지 ${index + 1} 첫 번째로 이동`}
                       title="첫 번째로 이동"
                     >
-                      <Icon icon="lucide:chevrons-left" size={12} />
+                      <Icon
+                        icon="lucide:chevrons-left"
+                        width={12}
+                        height={12}
+                      />
                     </Button>
                   )}
 
@@ -75,7 +80,7 @@ function SelectedSliderImages({
                     aria-label={`슬라이더 이미지 ${index + 1} 삭제`}
                     title="슬라이더에서 제거"
                   >
-                    <Icon icon="lucide:trash-2" size={12} />
+                    <Icon icon="lucide:trash-2" width={12} height={12} />
                   </Button>
 
                   {showOrderControls &&
@@ -93,7 +98,11 @@ function SelectedSliderImages({
                         } 마지막으로 이동`}
                         title="마지막으로 이동"
                       >
-                        <Icon icon="lucide:chevrons-right" size={12} />
+                        <Icon
+                          icon="lucide:chevrons-right"
+                          width={12}
+                          height={12}
+                        />
                       </Button>
                     )}
                 </div>
@@ -113,7 +122,7 @@ function SelectedSliderImages({
                         onClick={() => onMoveToFirst?.(imageUrl)}
                         aria-label="위로 이동"
                       >
-                        <Icon icon="lucide:chevron-up" size={8} />
+                        <Icon icon="lucide:chevron-up" width={8} height={8} />
                       </button>
                     )}
                     {index < localSliderImages.length - 1 && (
@@ -123,7 +132,7 @@ function SelectedSliderImages({
                         onClick={() => onMoveToLast?.(imageUrl)}
                         aria-label="아래로 이동"
                       >
-                        <Icon icon="lucide:chevron-down" size={8} />
+                        <Icon icon="lucide:chevron-down" width={8} height={8} />
                       </button>
                     )}
                   </div>

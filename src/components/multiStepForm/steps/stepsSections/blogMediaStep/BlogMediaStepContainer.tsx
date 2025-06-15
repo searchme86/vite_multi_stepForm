@@ -1,78 +1,238 @@
-// blogMediaStep/BlogMediaStepContainer.tsx - BlogMediaStep 컴포넌트
-
-/**
- * BlogMediaStep 컴포넌트 - 메인 통합 컨테이너
- * 4개 기능 컨테이너(업로드, 갤러리, 메인이미지, 슬라이더)를 조합하여 완전한 미디어 관리 기능 제공
- * 기존 BlogMediaStep 컴포넌트의 구조와 기능을 유지하면서 모듈화된 형태로 재구성
- */
+// src/components/multiStepForm/steps/stepsSections/blogMediaStep/BlogMediaStepContainer.tsx
 
 import React from 'react';
-import { Button, Icon } from '@heroui/react';
-import AccordionField from '../components/accordion-field';
+import { Icon } from '@iconify/react';
+
+import AccordionField from '../../../../accordion-field';
 import { useBlogMediaStepState } from './hooks/useBlogMediaStepState';
 
-// ✅ 4개 기능 컨테이너들 import
 import ImageUploadContainer from './imageUpload/ImageUploadContainer';
 import ImageGalleryContainer from './imageGallery/ImageGalleryContainer';
 import ImageSliderContainer from './imageSlider/ImageSliderContainer';
-import ImageViewBuilder from './components/multiStepForm/steps/ImageViewBuilder';
+import MainImageContainer from './mainImage/MainImageContainer';
+import DynamicLayoutRenderer from './imageGallery/parts/layout/DynamicLayoutRenderer';
+import ImageViewBuilderPanel from './imageGallery/parts/viewBuilder/ImageViewBuilderPanel';
 
-// ✅ 컨테이너 props 타입 (기존과 동일하게 빈 props)
-interface BlogMediaStepContainerProps {}
+interface ImageViewConfig {
+  selectedImages: string[];
+  clickOrder: number[];
+  layout: {
+    columns: number;
+    gridType: 'grid' | 'masonry';
+  };
+  filter: string;
+}
 
-/**
- * BlogMediaStep 메인 컨테이너 컴포넌트
- * 4개 기능 컨테이너를 AccordionField로 구성하여 통합 관리
- */
-function BlogMediaStepContainer(
-  props: BlogMediaStepContainerProps
-): React.ReactNode {
-  console.log('🔧 BlogMediaStepContainer 렌더링 시작:', {
-    timestamp: new Date().toLocaleTimeString(),
-  }); // 디버깅용
+interface GalleryStoreWithMethods {
+  togglePreviewPanel?: () => void;
+  getImageViewConfig?: () => ImageViewConfig | null;
+}
 
-  // ✅ 통합 상태 관리 훅
-  const { formValues, uiState, imageGalleryStore } = useBlogMediaStepState();
+function isGalleryStoreWithMethods(
+  obj: unknown
+): obj is GalleryStoreWithMethods {
+  if (obj === null || typeof obj !== 'object') {
+    return false;
+  }
 
-  const { media: mediaFiles, mainImage, sliderImages } = formValues;
-  const { isMobile } = uiState;
+  const hasTogglePreviewPanel =
+    'togglePreviewPanel' in obj &&
+    typeof obj['togglePreviewPanel'] === 'function';
+  const hasGetImageViewConfig =
+    'getImageViewConfig' in obj &&
+    typeof obj['getImageViewConfig'] === 'function';
 
-  // ✅ 미리보기 패널 토글 함수 (기존 로직 유지)
-  const togglePreviewPanel = imageGalleryStore.togglePreviewPanel;
+  return hasTogglePreviewPanel || hasGetImageViewConfig;
+}
 
-  console.log('📊 BlogMediaStepContainer 상태:', {
-    mediaCount: mediaFiles.length,
-    hasMainImage: !!mainImage,
-    sliderCount: sliderImages.length,
-    isMobile,
-  }); // 디버깅용
+function isValidImageViewConfig(obj: unknown): obj is ImageViewConfig {
+  if (obj === null || typeof obj !== 'object') {
+    return false;
+  }
 
-  return (
-    <>
-      {/* ✅ 모바일 미리보기 토글 버튼 (기존 위치와 스타일 유지) */}
+  const hasSelectedImages =
+    'selectedImages' in obj && Array.isArray(obj['selectedImages']);
+  const hasClickOrder = 'clickOrder' in obj && Array.isArray(obj['clickOrder']);
+  const hasLayout =
+    'layout' in obj &&
+    obj['layout'] !== null &&
+    typeof obj['layout'] === 'object';
+  const hasFilter = 'filter' in obj && typeof obj['filter'] === 'string';
+
+  if (!hasSelectedImages || !hasClickOrder || !hasLayout || !hasFilter) {
+    return false;
+  }
+
+  const layoutObject = obj['layout'];
+  if (layoutObject === null || typeof layoutObject !== 'object') {
+    return false;
+  }
+
+  const hasColumns =
+    'columns' in layoutObject && typeof layoutObject['columns'] === 'number';
+  const hasGridType =
+    'gridType' in layoutObject &&
+    (layoutObject['gridType'] === 'grid' ||
+      layoutObject['gridType'] === 'masonry');
+
+  return hasColumns && hasGridType;
+}
+
+function BlogMediaStepContainer(): React.ReactNode {
+  const blogMediaStepState = useBlogMediaStepState();
+
+  const {
+    formValues: currentFormValues,
+    uiState: userInterfaceState,
+    imageGalleryStore: galleryStoreInstance,
+  } = blogMediaStepState;
+
+  const {
+    media: uploadedMediaFiles,
+    mainImage: selectedMainImageUrl,
+    sliderImages: configuredSliderImages,
+  } = currentFormValues;
+
+  const { isMobile: isMobileViewport } = userInterfaceState;
+
+  const handlePreviewPanelToggle = () => {
+    try {
+      if (isGalleryStoreWithMethods(galleryStoreInstance)) {
+        const toggleFunction = galleryStoreInstance.togglePreviewPanel;
+        if (toggleFunction) {
+          toggleFunction();
+        }
+      } else {
+        console.warn('togglePreviewPanel function not available');
+      }
+    } catch (error) {
+      console.warn('Preview panel toggle failed:', error);
+    }
+  };
+
+  const createDefaultImageViewConfig = (): ImageViewConfig => {
+    return {
+      selectedImages: [],
+      clickOrder: [],
+      layout: {
+        columns: 3,
+        gridType: 'grid',
+      },
+      filter: 'available',
+    };
+  };
+
+  const getImageViewConfig = (): ImageViewConfig => {
+    try {
+      if (isGalleryStoreWithMethods(galleryStoreInstance)) {
+        const configFunction = galleryStoreInstance.getImageViewConfig;
+        if (configFunction) {
+          const result = configFunction();
+          if (isValidImageViewConfig(result)) {
+            return result;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to get image view config:', error);
+    }
+
+    return createDefaultImageViewConfig();
+  };
+
+  const handleDynamicLayoutImageClick = (
+    clickedImageUrl: string,
+    clickedImageIndex: number
+  ) => {
+    console.log('동적 레이아웃 이미지 클릭됨:', {
+      imageUrl: clickedImageUrl,
+      imageIndex: clickedImageIndex,
+    });
+  };
+
+  const handleKeyboardInteraction = (
+    keyboardInteractionEvent: React.KeyboardEvent
+  ) => {
+    const { key: pressedKey } = keyboardInteractionEvent;
+    if (pressedKey === 'Enter' || pressedKey === ' ') {
+      keyboardInteractionEvent.preventDefault();
+      handlePreviewPanelToggle();
+    }
+  };
+
+  const getUploadedImagesDescription = (): string => {
+    const imageCount = uploadedMediaFiles.length;
+    return imageCount > 0
+      ? `업로드된 이미지가 아래에 표시됩니다. (${imageCount}개)`
+      : '업로드된 이미지가 여기에 표시됩니다.';
+  };
+
+  const getMainImageIndex = (): number => {
+    if (!selectedMainImageUrl) {
+      return -1;
+    }
+    return uploadedMediaFiles.indexOf(selectedMainImageUrl);
+  };
+
+  const getMainImageUrl = (): string => {
+    return selectedMainImageUrl || '';
+  };
+
+  const shouldShowImageSections = (): boolean => {
+    return uploadedMediaFiles.length > 0;
+  };
+
+  const renderMobilePreviewButton = () => {
+    return (
       <button
         type="button"
         className={`absolute top-0 right-0 bg-primary text-white px-4 py-2 rounded-full shadow-lg transition-all hover:bg-primary-600 active:scale-95 flex items-center gap-2 ${
-          isMobile ? 'block' : 'hidden'
+          isMobileViewport ? 'block' : 'hidden'
         }`}
-        onClick={togglePreviewPanel}
-        aria-label="미리보기 패널 토글"
+        onClick={handlePreviewPanelToggle}
+        aria-label="미리보기 패널 토글 버튼"
+        aria-expanded={false}
+        aria-controls="preview-panel"
+        role="button"
+        tabIndex={0}
+        onKeyDown={handleKeyboardInteraction}
       >
-        <Icon icon="lucide:eye" />
+        <Icon icon="lucide:eye" aria-hidden="true" role="presentation" />
         <span className="text-sm font-medium">미리보기</span>
       </button>
+    );
+  };
 
-      {/* ✅ 안내 메시지 (기존과 동일) */}
-      <div className="relative p-4 mb-6 mt-[46px] rounded-lg bg-default-50">
-        <h3 className="mb-2 text-lg font-medium">블로그 미디어 입력 안내</h3>
-        <p className="text-default-600">
+  const renderGuideSection = () => {
+    return (
+      <section
+        className="relative p-4 mb-6 mt-[46px] rounded-lg bg-default-50"
+        role="region"
+        aria-labelledby="media-guide-title"
+      >
+        <h3
+          id="media-guide-title"
+          className="mb-2 text-lg font-medium"
+          role="heading"
+          aria-level={3}
+        >
+          블로그 미디어 입력 안내
+        </h3>
+        <p
+          className="text-default-600"
+          id="media-guide-description"
+          role="text"
+        >
           블로그에 첨부할 이미지를 업로드해주세요. 파일을 드래그하여
           업로드하거나 파일 선택 버튼을 클릭하여 업로드할 수 있습니다. 지원
           형식: JPG, PNG, SVG (최대 10MB).
         </p>
-      </div>
+      </section>
+    );
+  };
 
-      {/* ✅ 1. 이미지 업로드 섹션 */}
+  const renderUploadSection = () => {
+    return (
       <AccordionField
         title="미디어 업로드"
         description="이미지 파일을 업로드해주세요."
@@ -81,30 +241,82 @@ function BlogMediaStepContainer(
       >
         <ImageUploadContainer />
       </AccordionField>
+    );
+  };
 
-      {/* ✅ 2. 업로드된 이미지 갤러리 섹션 */}
+  const renderGallerySection = () => {
+    return (
       <AccordionField
         title="업로드된 이미지"
-        description={
-          mediaFiles.length > 0
-            ? `업로드된 이미지가 아래에 표시됩니다. (${mediaFiles.length}개)`
-            : '업로드된 이미지가 여기에 표시됩니다.'
-        }
+        description={getUploadedImagesDescription()}
         defaultExpanded={true}
       >
-        <ImageGalleryContainer />
-      </AccordionField>
-
-      {/* ✅ 3. 이미지 뷰 빌더 섹션 (기존 조건부 렌더링 유지) */}
-      {mediaFiles.length > 0 && (
-        <ImageViewBuilder
-          mediaFiles={mediaFiles}
-          mainImage={mainImage}
-          sliderImages={sliderImages}
+        <ImageGalleryContainer
+          mediaFiles={uploadedMediaFiles}
+          mainImage={selectedMainImageUrl}
+          sliderImages={configuredSliderImages}
         />
-      )}
+      </AccordionField>
+    );
+  };
 
-      {/* ✅ 4. 이미지 슬라이더 섹션 */}
+  const renderMainImageSection = () => {
+    return (
+      <AccordionField
+        title="메인 이미지 관리"
+        description="블로그 대표 이미지를 설정하고 관리해주세요."
+        defaultExpanded={true}
+      >
+        <MainImageContainer
+          imageUrl={getMainImageUrl()}
+          imageIndex={getMainImageIndex()}
+        />
+      </AccordionField>
+    );
+  };
+
+  const renderImageViewBuilderSection = () => {
+    if (!shouldShowImageSections()) {
+      return null;
+    }
+
+    return (
+      <AccordionField
+        title="이미지 뷰 만들기"
+        description="사용 가능한 이미지로 나만의 갤러리를 만들어보세요."
+        defaultExpanded={true}
+      >
+        <ImageViewBuilderPanel
+          mediaFiles={uploadedMediaFiles}
+          mainImage={selectedMainImageUrl}
+          sliderImages={configuredSliderImages}
+        />
+      </AccordionField>
+    );
+  };
+
+  const renderDynamicLayoutSection = () => {
+    if (!shouldShowImageSections()) {
+      return null;
+    }
+
+    return (
+      <AccordionField
+        title="동적 이미지 레이아웃"
+        description="선택된 이미지들을 다양한 레이아웃으로 미리보기할 수 있습니다."
+        defaultExpanded={false}
+      >
+        <DynamicLayoutRenderer
+          config={getImageViewConfig()}
+          showNumbers={true}
+          onImageClick={handleDynamicLayoutImageClick}
+        />
+      </AccordionField>
+    );
+  };
+
+  const renderSliderSection = () => {
+    return (
       <AccordionField
         title="이미지 슬라이더"
         description="블로그 하단에 표시될 이미지 슬라이더를 위한 이미지들을 선택해주세요."
@@ -112,7 +324,20 @@ function BlogMediaStepContainer(
       >
         <ImageSliderContainer />
       </AccordionField>
-    </>
+    );
+  };
+
+  return (
+    <main role="main" aria-label="블로그 미디어 관리">
+      {renderMobilePreviewButton()}
+      {renderGuideSection()}
+      {renderUploadSection()}
+      {renderGallerySection()}
+      {renderMainImageSection()}
+      {renderImageViewBuilderSection()}
+      {renderDynamicLayoutSection()}
+      {renderSliderSection()}
+    </main>
   );
 }
 

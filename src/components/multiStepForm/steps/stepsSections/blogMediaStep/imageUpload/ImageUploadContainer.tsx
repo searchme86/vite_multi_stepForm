@@ -1,11 +1,5 @@
 // blogMediaStep/imageUpload/ImageUploadContainer.tsx
 
-/**
- * ImageUpload - 이미지 업로드 메인 컨테이너 컴포넌트
- * 드래그앤드롭, 파일 선택, 업로드 진행률, 검증 메시지를 통합 관리
- * 기존 BlogMediaStep의 업로드 기능을 완전히 대체하는 컨테이너
- */
-
 import React, { useRef, useCallback, useEffect } from 'react';
 import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
 import { useImageUpload } from './hooks/useImageUpload';
@@ -19,258 +13,262 @@ import FileSelectButton, {
 import UploadProgressList from './parts/UploadProgressList';
 import FileValidationMessage from './parts/FileValidationMessage';
 
-// ✅ 컨테이너 props 타입 (현재는 빈 인터페이스)
-interface ImageUploadContainerProps {}
-
-/**
- * 이미지 업로드 메인 컨테이너 컴포넌트
- * 모든 업로드 관련 기능을 통합하여 관리하는 최상위 컨테이너
- */
-function ImageUploadContainer(
-  props: ImageUploadContainerProps
-): React.ReactNode {
+function ImageUploadContainer(): React.ReactNode {
   console.log('🔧 ImageUploadContainer 렌더링 시작:', {
     timestamp: new Date().toLocaleTimeString(),
-  }); // 디버깅용 - 컨테이너 렌더링 시작을 로깅
+  });
 
-  // ✅ 전체 상태 관리 훅에서 필요한 상태와 함수들 가져오기
-  const { formValues, uiState, setMediaValue, setSelectedFileNames, addToast } =
-    useBlogMediaStepState();
+  const {
+    formValues: currentFormValues,
+    uiState: currentUiState,
+    setMediaValue: updateMediaValue,
+    setSelectedFileNames: updateSelectedFileNames,
+    addToast: showToastMessage,
+    selectionState: currentSelectionState,
+  } = useBlogMediaStepState();
 
-  // 폼 값에서 현재 미디어 파일들과 파일명들 추출
-  const { media: currentMediaFiles } = formValues;
-  const { dragActive, isMobile } = uiState;
+  const { media: currentMediaFilesList } = currentFormValues;
+  const { dragActive: isDragActive, isMobile: isMobileDevice } = currentUiState;
+  const { selectedFileNames: currentSelectedFileNames } = currentSelectionState;
 
-  // ✅ 파일 선택 버튼 참조 (FileSelectButton 컴포넌트 제어용)
   const fileSelectButtonRef = useRef<FileSelectButtonRef>(null);
 
-  // ✅ 업로드 진행률 관리 훅 초기화
   const {
-    progressState,
-    startFileUpload,
-    updateProgress,
-    setFileStatus,
-    completeFileUpload,
-    resetUploadState,
-    isUploading,
-    hasActiveUploads,
-    getUploadSummary,
+    progressState: uploadProgressState,
+    startFileUpload: initializeFileUpload,
+    updateProgress: updateUploadProgress,
+    setFileStatus: updateFileStatus,
+    resetUploadState: clearUploadState,
+    isUploading: isCurrentlyUploading,
+    hasActiveUploads: hasOngoingUploads,
+    getUploadSummary: retrieveUploadSummary,
   } = useUploadProgress();
 
-  const { uploading, uploadStatus } = progressState;
-
-  // ✅ 파일 검증 관리 훅 초기화
   const {
-    validationState,
-    validateFiles,
-    clearValidationResults,
-    getValidationMessage,
+    uploading: currentlyUploadingFiles,
+    uploadStatus: fileUploadStatuses,
+  } = uploadProgressState;
+
+  const {
+    validationState: fileValidationState,
+    validateFiles: performFileValidation,
+    clearValidationResults: resetValidationResults,
   } = useFileValidation();
 
-  // ✅ 이미지 업로드 처리 훅 초기화 (콜백 함수들 정의)
-  const imageUpload = useImageUpload({
-    // 업로드 진행률 업데이트 콜백
+  const imageUploadHandler = useImageUpload({
     onProgress: useCallback(
-      (fileId: string, progress: number) => {
-        console.log('📊 업로드 진행률 업데이트:', { fileId, progress }); // 디버깅용
-        updateProgress(fileId, progress);
+      (fileIdentifier: string, uploadProgress: number) => {
+        console.log('📊 업로드 진행률 업데이트:', {
+          fileIdentifier,
+          uploadProgress,
+        });
+        updateUploadProgress(fileIdentifier, uploadProgress);
       },
-      [updateProgress]
+      [updateUploadProgress]
     ),
 
-    // 업로드 상태 변경 콜백
     onStatusChange: useCallback(
-      (fileName: string, status: 'uploading' | 'success' | 'error') => {
-        console.log('🔄 업로드 상태 변경:', { fileName, status }); // 디버깅용
-        setFileStatus(fileName, status);
+      (
+        targetFileName: string,
+        newStatus: 'uploading' | 'success' | 'error'
+      ) => {
+        console.log('🔄 업로드 상태 변경:', { targetFileName, newStatus });
+        updateFileStatus(targetFileName, newStatus);
       },
-      [setFileStatus]
+      [updateFileStatus]
     ),
 
-    // 업로드 완료 콜백 (파일을 미디어 목록에 추가)
     onComplete: useCallback(
-      (result: string, fileName: string) => {
+      (uploadResult: string, completedFileName: string) => {
         console.log('✅ 파일 업로드 완료:', {
-          fileName,
-          resultLength: result.length,
-        }); // 디버깅용
+          completedFileName,
+          resultLength: uploadResult.length,
+        });
 
         try {
-          // 기존 미디어 파일 목록에 새 파일 추가
-          const newMediaFiles = [...currentMediaFiles, result];
-          setMediaValue(newMediaFiles);
+          const updatedMediaFilesList = [
+            ...currentMediaFilesList,
+            uploadResult,
+          ];
+          updateMediaValue(updatedMediaFilesList);
 
-          // 파일명 목록도 업데이트 (기존 로직 유지)
-          setSelectedFileNames((prevNames: string[]) => [
-            ...prevNames,
-            fileName,
-          ]);
+          const updatedSelectedFileNames = [
+            ...currentSelectedFileNames,
+            completedFileName,
+          ];
+          updateSelectedFileNames(updatedSelectedFileNames);
 
-          // 성공 토스트 메시지 표시
-          addToast({
+          showToastMessage({
             title: '업로드 완료',
-            description: `${fileName} 파일이 성공적으로 업로드되었습니다.`,
+            description: `${completedFileName} 파일이 성공적으로 업로드되었습니다.`,
             color: 'success',
           });
 
           console.log('📁 미디어 파일 추가 완료:', {
-            fileName,
-            totalFiles: newMediaFiles.length,
-          }); // 디버깅용
-        } catch (error) {
-          console.error('❌ 파일 추가 중 오류:', { fileName, error }); // 디버깅용
+            completedFileName,
+            totalFiles: updatedMediaFilesList.length,
+          });
+        } catch (uploadError) {
+          console.error('❌ 파일 추가 중 오류:', {
+            completedFileName,
+            uploadError,
+          });
 
-          // 에러 토스트 메시지 표시
-          addToast({
+          showToastMessage({
             title: '파일 추가 실패',
-            description: `${fileName} 파일을 추가하는 중 오류가 발생했습니다.`,
+            description: `${completedFileName} 파일을 추가하는 중 오류가 발생했습니다.`,
             color: 'danger',
           });
         }
       },
-      [currentMediaFiles, setMediaValue, setSelectedFileNames, addToast]
+      [
+        currentMediaFilesList,
+        updateMediaValue,
+        updateSelectedFileNames,
+        showToastMessage,
+        currentSelectedFileNames,
+      ]
     ),
 
-    // 업로드 에러 콜백
     onError: useCallback(
-      (fileName: string, error: string) => {
-        console.error('❌ 업로드 에러:', { fileName, error }); // 디버깅용
+      (failedFileName: string, errorMessage: string) => {
+        console.error('❌ 업로드 에러:', { failedFileName, errorMessage });
 
-        // 에러 토스트 메시지 표시
-        addToast({
+        showToastMessage({
           title: '업로드 실패',
-          description: error,
+          description: errorMessage,
           color: 'danger',
         });
       },
-      [addToast]
+      [showToastMessage]
     ),
   });
 
-  // ✅ 파일 드롭 이벤트 핸들러 (드래그앤드롭으로 파일을 추가할 때)
   const handleFilesDropped = useCallback(
-    (droppedFiles: File[]) => {
+    (droppedFilesList: File[]) => {
       console.log('🔧 handleFilesDropped 호출:', {
-        fileCount: droppedFiles.length,
-        fileNames: droppedFiles.map((f) => f.name),
-      }); // 디버깅용
+        fileCount: droppedFilesList.length,
+        fileNames: droppedFilesList.map((droppedFile) => droppedFile.name),
+      });
 
-      if (droppedFiles.length === 0) {
-        console.log('⚠️ 드롭된 파일이 없음'); // 디버깅용
+      if (droppedFilesList.length === 0) {
+        console.log('⚠️ 드롭된 파일이 없음');
         return;
       }
 
-      // 검증 결과 초기화
-      clearValidationResults();
-
-      // 파일 검증 후 업로드 처리
-      handleFileSelection(droppedFiles);
+      resetValidationResults();
+      handleFileSelection(droppedFilesList);
     },
-    [clearValidationResults]
+    [resetValidationResults]
   );
 
-  // ✅ 파일 선택 이벤트 핸들러 (파일 선택 버튼으로 파일을 선택할 때)
   const handleFileSelection = useCallback(
-    async (selectedFiles: File[]) => {
+    async (selectedFilesList: File[]) => {
       console.log('🔧 handleFileSelection 호출:', {
-        fileCount: selectedFiles.length,
+        fileCount: selectedFilesList.length,
         timestamp: new Date().toLocaleTimeString(),
-      }); // 디버깅용
+      });
 
-      if (selectedFiles.length === 0) {
-        console.log('⚠️ 선택된 파일이 없음'); // 디버깅용
+      if (selectedFilesList.length === 0) {
+        console.log('⚠️ 선택된 파일이 없음');
         return;
       }
 
       try {
-        // 파일 목록을 FileList 형태로 변환 (검증을 위해)
         const fileListForValidation = {
-          length: selectedFiles.length,
-          item: (index: number) => selectedFiles[index] || null,
+          length: selectedFilesList.length,
+          item: (itemIndex: number) => selectedFilesList[itemIndex] || null,
           [Symbol.iterator]: function* () {
-            for (let i = 0; i < selectedFiles.length; i++) {
-              yield selectedFiles[i];
+            for (
+              let iteratorIndex = 0;
+              iteratorIndex < selectedFilesList.length;
+              iteratorIndex++
+            ) {
+              yield selectedFilesList[iteratorIndex];
             }
           },
         } as FileList;
 
-        // 파일 검증 수행
-        console.log('🔍 파일 검증 시작:', { fileCount: selectedFiles.length }); // 디버깅용
-        const { validFiles, invalidFiles } = await validateFiles(
-          fileListForValidation
-        );
+        console.log('🔍 파일 검증 시작:', {
+          fileCount: selectedFilesList.length,
+        });
 
-        // 검증 결과 로깅
+        const { validFiles: validatedFiles, invalidFiles: rejectedFiles } =
+          await performFileValidation(fileListForValidation);
+
         console.log('📊 파일 검증 완료:', {
-          totalFiles: selectedFiles.length,
-          validFiles: validFiles.length,
-          invalidFiles: invalidFiles.length,
-        }); // 디버깅용
+          totalFiles: selectedFilesList.length,
+          validFiles: validatedFiles.length,
+          invalidFiles: rejectedFiles.length,
+        });
 
-        // 무효한 파일이 있으면 에러 메시지 표시
-        if (invalidFiles.length > 0) {
-          addToast({
+        if (rejectedFiles.length > 0) {
+          showToastMessage({
             title: '파일 검증 실패',
-            description: `${invalidFiles.length}개의 파일이 지원되지 않거나 크기 제한을 초과합니다.`,
+            description: `${rejectedFiles.length}개의 파일이 지원되지 않거나 크기 제한을 초과합니다.`,
             color: 'warning',
           });
         }
 
-        // 유효한 파일들만 업로드 처리
-        if (validFiles.length > 0) {
+        if (validatedFiles.length > 0) {
           console.log('📤 유효한 파일들 업로드 시작:', {
-            validFileCount: validFiles.length,
-            fileNames: validFiles.map((f) => f.name),
-          }); // 디버깅용
-
-          // 각 유효한 파일에 대해 업로드 시작 알림
-          validFiles.forEach((file) => {
-            const fileId = `file-${Date.now()}-${Math.random()
-              .toString(36)
-              .substring(2, 9)}`;
-            startFileUpload(fileId, file.name);
+            validFileCount: validatedFiles.length,
+            fileNames: validatedFiles.map((validFile) => validFile.name),
           });
 
-          // 실제 파일 업로드 처리 (기존 handleFiles 로직과 동일)
+          validatedFiles.forEach((validFile) => {
+            const uniqueFileId = `file-${Date.now()}-${Math.random()
+              .toString(36)
+              .substring(2, 9)}`;
+            initializeFileUpload(uniqueFileId, validFile.name);
+          });
+
           const fileListForUpload = {
-            length: validFiles.length,
-            item: (index: number) => validFiles[index] || null,
+            length: validatedFiles.length,
+            item: (itemIndex: number) => validatedFiles[itemIndex] || null,
             [Symbol.iterator]: function* () {
-              for (let i = 0; i < validFiles.length; i++) {
-                yield validFiles[i];
+              for (
+                let iteratorIndex = 0;
+                iteratorIndex < validatedFiles.length;
+                iteratorIndex++
+              ) {
+                yield validatedFiles[iteratorIndex];
               }
             },
           } as FileList;
 
-          imageUpload.handleFiles(fileListForUpload);
+          imageUploadHandler.handleFiles(fileListForUpload);
 
-          // 성공 토스트 메시지
-          addToast({
+          showToastMessage({
             title: '업로드 시작',
-            description: `${validFiles.length}개의 파일 업로드를 시작합니다.`,
+            description: `${validatedFiles.length}개의 파일 업로드를 시작합니다.`,
             color: 'primary',
           });
         }
-      } catch (error) {
-        console.error('❌ 파일 선택 처리 중 오류:', error); // 디버깅용
+      } catch (selectionError) {
+        console.error('❌ 파일 선택 처리 중 오류:', selectionError);
 
-        addToast({
+        showToastMessage({
           title: '파일 처리 오류',
           description: '파일을 처리하는 중 오류가 발생했습니다.',
           color: 'danger',
         });
       }
     },
-    [validateFiles, addToast, startFileUpload, imageUpload]
+    [
+      performFileValidation,
+      showToastMessage,
+      initializeFileUpload,
+      imageUploadHandler,
+    ]
   );
 
-  // ✅ 파일 선택 버튼 클릭 핸들러
   const handleFileSelectClick = useCallback(() => {
-    console.log('🔧 handleFileSelectClick 호출'); // 디버깅용
+    console.log('🔧 handleFileSelectClick 호출');
 
-    if (isUploading) {
-      console.log('⚠️ 업로드 중이므로 파일 선택 무시'); // 디버깅용
-      addToast({
+    if (isCurrentlyUploading) {
+      console.log('⚠️ 업로드 중이므로 파일 선택 무시');
+      showToastMessage({
         title: '업로드 진행 중',
         description: '현재 업로드가 진행 중입니다. 완료 후 다시 시도해주세요.',
         color: 'warning',
@@ -278,124 +276,141 @@ function ImageUploadContainer(
       return;
     }
 
-    // 파일 선택 버튼 클릭 이벤트 트리거
     fileSelectButtonRef.current?.clickFileInput();
-  }, [isUploading, addToast]);
+  }, [isCurrentlyUploading, showToastMessage]);
 
-  // ✅ FileSelectButton의 파일 변경 이벤트 핸들러
   const handleFileChange = useCallback(
-    (files: FileList) => {
-      console.log('🔧 handleFileChange 호출:', { fileCount: files.length }); // 디버깅용
+    (changedFileList: FileList) => {
+      console.log('🔧 handleFileChange 호출:', {
+        fileCount: changedFileList.length,
+      });
 
-      if (files.length > 0) {
-        // FileList를 File 배열로 변환 후 처리
-        const filesArray = Array.from(files);
+      if (changedFileList.length > 0) {
+        const filesArray = Array.from(changedFileList);
         handleFileSelection(filesArray);
       }
     },
     [handleFileSelection]
   );
 
-  // ✅ 검증 메시지 닫기 핸들러
   const handleDismissValidationMessage = useCallback(
-    (fileName: string) => {
-      console.log('🔧 handleDismissValidationMessage 호출:', { fileName }); // 디버깅용
-      // 현재는 개별 메시지 제거 기능이 없으므로 전체 초기화
-      clearValidationResults();
+    (dismissedFileName: string) => {
+      console.log('🔧 handleDismissValidationMessage 호출:', {
+        dismissedFileName,
+      });
+      resetValidationResults();
     },
-    [clearValidationResults]
+    [resetValidationResults]
   );
 
-  // ✅ 업로드 상태 변경 시 로깅 및 완료 처리
   useEffect(() => {
-    const summary = getUploadSummary();
+    const uploadSummary = retrieveUploadSummary();
 
     console.log('📈 업로드 상태 업데이트:', {
-      ...summary,
-      hasActiveUploads,
+      ...uploadSummary,
+      hasOngoingUploads,
       timestamp: new Date().toLocaleTimeString(),
-    }); // 디버깅용
+    });
 
-    // 모든 업로드가 완료되면 진행률 정리
-    if (!hasActiveUploads && summary.completed > 0) {
-      console.log('🎉 모든 업로드 완료, 5초 후 상태 정리'); // 디버깅용
+    if (!hasOngoingUploads && uploadSummary.completed > 0) {
+      console.log('🎉 모든 업로드 완료, 5초 후 상태 정리');
 
-      // 5초 후 업로드 상태 초기화 (사용자가 결과를 볼 시간 제공)
       setTimeout(() => {
-        resetUploadState();
-        console.log('🧹 업로드 상태 정리 완료'); // 디버깅용
+        clearUploadState();
+        console.log('🧹 업로드 상태 정리 완료');
       }, 5000);
     }
-  }, [hasActiveUploads, getUploadSummary, resetUploadState]);
+  }, [hasOngoingUploads, retrieveUploadSummary, clearUploadState]);
 
-  // ✅ 컨테이너 상태 로깅
   console.log('📊 ImageUploadContainer 현재 상태:', {
-    currentMediaCount: currentMediaFiles.length,
-    isUploading,
-    hasActiveUploads,
-    validationIssues: Object.keys(validationState.validationResults).length,
-    dragActive,
-    isMobile,
-  }); // 디버깅용
+    currentMediaCount: currentMediaFilesList.length,
+    isCurrentlyUploading,
+    hasOngoingUploads,
+    validationIssues: Object.keys(fileValidationState.validationResults).length,
+    isDragActive,
+    isMobileDevice,
+  });
+
+  const hasValidationErrors =
+    Object.keys(fileValidationState.validationResults).length > 0;
+  const hasActiveUploadProgress =
+    hasOngoingUploads || Object.keys(currentlyUploadingFiles).length > 0;
 
   return (
-    <div className="space-y-4">
-      {/* ✅ 파일 드래그앤드롭 영역 */}
+    <div
+      className="space-y-4"
+      role="region"
+      aria-labelledby="image-upload-section"
+      aria-describedby="image-upload-description"
+    >
+      <h2 id="image-upload-section" className="sr-only">
+        이미지 업로드 섹션
+      </h2>
+      <p id="image-upload-description" className="sr-only">
+        드래그 앤 드롭 또는 파일 선택 버튼을 통해 이미지를 업로드할 수 있습니다.
+      </p>
+
       <FileDropZone
-        dragActive={dragActive}
-        setDragActive={() => {}} // dragActive는 useBlogMediaStepState에서 관리
+        dragActive={isDragActive}
+        setDragActive={() => {}}
         onFilesDropped={handleFilesDropped}
         onFileSelectClick={handleFileSelectClick}
-        isUploading={isUploading}
+        isUploading={isCurrentlyUploading}
         className="transition-all duration-200"
       />
 
-      {/* ✅ 숨겨진 파일 선택 버튼 */}
       <FileSelectButton
         ref={fileSelectButtonRef}
         onFileChange={handleFileChange}
         multiple={true}
-        disabled={isUploading}
+        disabled={isCurrentlyUploading}
       />
 
-      {/* ✅ 파일 검증 메시지 표시 (에러가 있을 때만) */}
-      {Object.keys(validationState.validationResults).length > 0 && (
-        <FileValidationMessage
-          validationResults={validationState.validationResults}
-          showSuccessMessages={false}
-          maxMessages={5}
-          onDismiss={handleDismissValidationMessage}
-          className="mt-4"
-        />
-      )}
-
-      {/* ✅ 업로드 진행률 표시 (업로드 중일 때만) */}
-      {(hasActiveUploads || Object.keys(uploading).length > 0) && (
-        <UploadProgressList
-          uploading={uploading}
-          uploadStatus={uploadStatus}
-          className="mt-4"
-          showCompleted={true}
-          maxItems={10}
-        />
-      )}
-
-      {/* ✅ 모바일에서 추가 안내 메시지 */}
-      {isMobile && (
-        <div className="p-3 text-sm text-blue-700 rounded-lg bg-blue-50">
-          <p className="font-medium">모바일 팁:</p>
-          <p>
-            여러 파일을 한 번에 선택하려면 파일 선택 시 여러 개를 선택하세요.
-          </p>
+      {hasValidationErrors && (
+        <div role="alert" aria-labelledby="validation-errors-heading">
+          <h3 id="validation-errors-heading" className="sr-only">
+            파일 검증 오류
+          </h3>
+          <FileValidationMessage
+            validationResults={fileValidationState.validationResults}
+            showSuccessMessages={false}
+            maxMessages={5}
+            onDismiss={handleDismissValidationMessage}
+            className="mt-4"
+          />
         </div>
       )}
 
-      {/* ✅ 업로드 완료 후 요약 정보 (개발용) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="p-2 text-xs bg-gray-100 rounded">
+      {hasActiveUploadProgress && (
+        <div
+          role="status"
+          aria-labelledby="upload-progress-heading"
+          aria-live="polite"
+        >
+          <h3 id="upload-progress-heading" className="sr-only">
+            업로드 진행 상황
+          </h3>
+          <UploadProgressList
+            uploading={currentlyUploadingFiles}
+            uploadStatus={fileUploadStatuses}
+            className="mt-4"
+            showCompleted={true}
+            maxItems={10}
+          />
+        </div>
+      )}
+
+      {isMobileDevice && (
+        <div
+          className="p-3 text-sm text-blue-700 rounded-lg bg-blue-50"
+          role="note"
+          aria-labelledby="mobile-tip-heading"
+        >
+          <p id="mobile-tip-heading" className="font-medium">
+            모바일 팁:
+          </p>
           <p>
-            개발 정보: 총 미디어 {currentMediaFiles.length}개, 활성 업로드{' '}
-            {Object.keys(uploading).length}개
+            여러 파일을 한 번에 선택하려면 파일 선택 시 여러 개를 선택하세요.
           </p>
         </div>
       )}

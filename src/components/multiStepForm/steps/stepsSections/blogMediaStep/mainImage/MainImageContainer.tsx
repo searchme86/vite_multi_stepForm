@@ -3,9 +3,9 @@
 import React from 'react';
 import { useMainImageManagement } from './hooks/useMainImageManagement';
 import { useMainImageValidation } from './hooks/useMainImageValidation';
-import MainImageSetButton from './hooks/parts/MainImageSetButton';
-import MainImageCancelButton from './hooks/parts/MainImageCancelButton';
-import MainImageIndicator from './hooks/parts/MainImageIndicator';
+import MainImageSetButton from './parts/MainImageSetButton';
+import MainImageCancelButton from './parts/MainImageCancelButton';
+import MainImageIndicator from './parts/MainImageIndicator';
 
 interface MainImageContainerProps {
   imageUrl: string;

@@ -1,7 +1,8 @@
 // blogMediaStep/imageSlider/parts/SliderImageItem.tsx
 
 import React from 'react';
-import { Button, Icon } from '@heroui/react';
+import { Button } from '@heroui/react';
+import { Icon } from '@iconify/react';
 
 interface SliderImageItemProps {
   imageUrl: string;
@@ -100,7 +101,7 @@ function SliderImageItem({
                   aria-label="첫 번째로 이동"
                   title="첫 번째로 이동"
                 >
-                  <Icon icon="lucide:chevrons-left" size={10} />
+                  <Icon icon="lucide:chevrons-left" width={10} height={10} />
                 </Button>
               )}
 
@@ -115,7 +116,7 @@ function SliderImageItem({
                   aria-label="위로 이동"
                   title="위로 이동"
                 >
-                  <Icon icon="lucide:chevron-left" size={10} />
+                  <Icon icon="lucide:chevron-left" width={10} height={10} />
                 </Button>
               )}
             </>
@@ -131,7 +132,7 @@ function SliderImageItem({
             aria-label={`슬라이더 이미지 ${index + 1} 삭제`}
             title="슬라이더에서 제거"
           >
-            <Icon icon="lucide:trash-2" size={10} />
+            <Icon icon="lucide:trash-2" width={10} height={10} />
           </Button>
 
           {showOrderControls && (
@@ -147,7 +148,7 @@ function SliderImageItem({
                   aria-label="아래로 이동"
                   title="아래로 이동"
                 >
-                  <Icon icon="lucide:chevron-right" size={10} />
+                  <Icon icon="lucide:chevron-right" width={10} height={10} />
                 </Button>
               )}
 
@@ -162,7 +163,7 @@ function SliderImageItem({
                   aria-label="마지막으로 이동"
                   title="마지막으로 이동"
                 >
-                  <Icon icon="lucide:chevrons-right" size={10} />
+                  <Icon icon="lucide:chevrons-right" width={10} height={10} />
                 </Button>
               )}
             </>

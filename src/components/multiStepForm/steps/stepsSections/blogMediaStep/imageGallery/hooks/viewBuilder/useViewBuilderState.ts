@@ -1,21 +1,30 @@
-// blogMediaStep/imageGallery/hooks/viewBuilder/useViewBuilderState.ts - ImageGallery 컴포넌트
+// blogMediaStep/imageGallery/hooks/viewBuilder/useViewBuilderState.ts
 
 import { useState, useCallback, useMemo } from 'react';
 import { useImageGalleryStore } from '../../../../../../../../store/imageGallery/imageGalleryStore';
 import { useBlogMediaStepState } from '../../../hooks/useBlogMediaStepState';
 import { processImageFiles, ImageFileInfo } from '../../utils/galleryUtils';
-import {
-  ViewBuilderState,
-  createDefaultViewBuilderState,
-} from '../../utils/viewBuilderUtils';
+import { createDefaultViewBuilderState } from '../../utils/viewBuilderUtils';
+
+interface ImageViewConfig {
+  selectedImages: string[];
+  clickOrder: number[];
+  layout: {
+    columns: number;
+    gridType: 'grid' | 'masonry';
+  };
+  filter: 'all' | 'available';
+}
+
+interface ImageGalleryStoreType {
+  getImageViewConfig: () => ImageViewConfig | null;
+}
 
 export interface ViewBuilderStateResult {
   view: 'grid' | 'masonry';
   sortBy: 'index' | 'name' | 'size';
   sortOrder: 'asc' | 'desc';
-  safeImageViewConfig: ReturnType<
-    typeof useImageGalleryStore
-  >['getImageViewConfig'];
+  safeImageViewConfig: ImageViewConfig;
   filteredAndSortedImages: ImageFileInfo[];
   isImageSelected: (imageUrl: string) => boolean;
   getSelectedCount: () => number;
@@ -32,16 +41,23 @@ export const useViewBuilderState = (): ViewBuilderStateResult => {
   const [sortBy, setSortBy] = useState<'index' | 'name' | 'size'>('index');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const imageViewConfig = useImageGalleryStore((state) =>
-    state.getImageViewConfig()
-  );
+  const rawImageGalleryStore = useImageGalleryStore();
+  const imageGalleryStore = rawImageGalleryStore as ImageGalleryStoreType;
+
+  const imageViewConfig = imageGalleryStore?.getImageViewConfig?.() || null;
   const { formValues } = useBlogMediaStepState();
   const { media, mainImage, sliderImages } = formValues;
 
   const safeImageViewConfig = useMemo(() => {
     console.log('🔧 safeImageViewConfig 메모이제이션 계산');
 
-    const config = imageViewConfig || createDefaultViewBuilderState();
+    const defaultState = createDefaultViewBuilderState();
+    const config: ImageViewConfig = imageViewConfig || {
+      selectedImages: defaultState.selectedImages,
+      clickOrder: defaultState.clickOrder,
+      layout: defaultState.layout,
+      filter: 'available',
+    };
 
     console.log('✅ safeImageViewConfig 결과:', {
       selectedCount: config.selectedImages.length,

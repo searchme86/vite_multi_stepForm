@@ -1,35 +1,28 @@
-// blogMediaStep/utils/fileFormatUtils.ts - BlogMediaStep 컴포넌트
+// src/components/multiStepForm/steps/stepsSections/blogMediaStep/utils/fileFormatUtils.ts
 
-/**
- * BlogMediaStep 컴포넌트 - 파일 형식 관련 유틸리티 함수들
- * 파일 확장자, MIME 타입, 형식 변환 관련 로직을 제공
- */
-
-// ✅ 지원되는 이미지 형식 정의
 export const SUPPORTED_IMAGE_FORMATS = {
   JPEG: {
-    extensions: ['jpg', 'jpeg'],
-    mimeTypes: ['image/jpeg', 'image/jpg'],
+    extensions: ['jpg', 'jpeg'] as string[],
+    mimeTypes: ['image/jpeg', 'image/jpg'] as string[],
     description: 'JPEG 이미지',
   },
   PNG: {
-    extensions: ['png'],
-    mimeTypes: ['image/png'],
+    extensions: ['png'] as string[],
+    mimeTypes: ['image/png'] as string[],
     description: 'PNG 이미지',
   },
   SVG: {
-    extensions: ['svg'],
-    mimeTypes: ['image/svg+xml'],
+    extensions: ['svg'] as string[],
+    mimeTypes: ['image/svg+xml'] as string[],
     description: 'SVG 벡터 이미지',
   },
   GIF: {
-    extensions: ['gif'],
-    mimeTypes: ['image/gif'],
+    extensions: ['gif'] as string[],
+    mimeTypes: ['image/gif'] as string[],
     description: 'GIF 애니메이션',
   },
-} as const;
+};
 
-// ✅ 파일 형식 정보 타입
 export interface FileFormatInfo {
   extension: string;
   mimeType: string;
@@ -38,199 +31,187 @@ export interface FileFormatInfo {
   isSupported: boolean;
 }
 
-/**
- * 파일명에서 확장자 추출
- * @param fileName - 파일명
- * @returns 소문자 확장자 또는 null
- */
-export const extractFileExtension = (fileName: string): string | null => {
-  console.log('🔧 extractFileExtension 호출:', { fileName }); // 디버깅용
+export const extractFileExtension = (
+  originalFileName: string
+): string | null => {
+  console.log('🔧 extractFileExtension 호출:', { fileName: originalFileName });
 
-  const extension = fileName.split('.').pop()?.toLowerCase() || null;
+  const fileNameParts = originalFileName.split('.');
+  const extractedExtension = fileNameParts.pop()?.toLowerCase() || null;
 
-  console.log('✅ extractFileExtension 결과:', { fileName, extension }); // 디버깅용
-  return extension;
+  console.log('✅ extractFileExtension 결과:', {
+    fileName: originalFileName,
+    extension: extractedExtension,
+  });
+
+  return extractedExtension;
 };
 
-/**
- * 확장자로 형식 정보 조회
- * @param extension - 파일 확장자
- * @returns 형식 정보 또는 null
- */
 export const getFormatInfoByExtension = (
-  extension: string
+  fileExtensionInput: string
 ): FileFormatInfo | null => {
-  console.log('🔧 getFormatInfoByExtension 호출:', { extension }); // 디버깅용
+  console.log('🔧 getFormatInfoByExtension 호출:', {
+    extension: fileExtensionInput,
+  });
 
-  const lowerExtension = extension.toLowerCase();
+  const normalizedExtension = fileExtensionInput.toLowerCase();
 
-  for (const [formatType, formatData] of Object.entries(
-    SUPPORTED_IMAGE_FORMATS
-  )) {
-    if (formatData.extensions.includes(lowerExtension)) {
-      const formatInfo: FileFormatInfo = {
-        extension: lowerExtension,
-        mimeType: formatData.mimeTypes[0], // 첫 번째 MIME 타입 사용
-        formatType: formatType as keyof typeof SUPPORTED_IMAGE_FORMATS,
-        description: formatData.description,
+  const formatEntries = Object.entries(SUPPORTED_IMAGE_FORMATS);
+
+  for (const [formatTypeName, formatConfiguration] of formatEntries) {
+    const { extensions, mimeTypes, description } = formatConfiguration;
+
+    if (extensions.includes(normalizedExtension)) {
+      const [primaryMimeType] = mimeTypes;
+
+      const detectedFormatInfo: FileFormatInfo = {
+        extension: normalizedExtension,
+        mimeType: primaryMimeType,
+        formatType: formatTypeName as keyof typeof SUPPORTED_IMAGE_FORMATS,
+        description,
         isSupported: true,
       };
 
-      console.log('✅ getFormatInfoByExtension 찾음:', formatInfo); // 디버깅용
-      return formatInfo;
+      console.log('✅ getFormatInfoByExtension 찾음:', detectedFormatInfo);
+      return detectedFormatInfo;
     }
   }
 
-  // 지원되지 않는 형식
-  const unsupportedInfo: FileFormatInfo = {
-    extension: lowerExtension,
+  const unsupportedFormatInfo: FileFormatInfo = {
+    extension: normalizedExtension,
     mimeType: 'unknown',
-    formatType: 'JPEG', // 기본값
+    formatType: 'JPEG',
     description: '지원되지 않는 형식',
     isSupported: false,
   };
 
   console.log(
     '⚠️ getFormatInfoByExtension 지원되지 않는 형식:',
-    unsupportedInfo
-  ); // 디버깅용
-  return unsupportedInfo;
+    unsupportedFormatInfo
+  );
+  return unsupportedFormatInfo;
 };
 
-/**
- * MIME 타입으로 형식 정보 조회
- * @param mimeType - MIME 타입
- * @returns 형식 정보 또는 null
- */
 export const getFormatInfoByMimeType = (
-  mimeType: string
+  inputMimeType: string
 ): FileFormatInfo | null => {
-  console.log('🔧 getFormatInfoByMimeType 호출:', { mimeType }); // 디버깅용
+  console.log('🔧 getFormatInfoByMimeType 호출:', { mimeType: inputMimeType });
 
-  for (const [formatType, formatData] of Object.entries(
-    SUPPORTED_IMAGE_FORMATS
-  )) {
-    if (formatData.mimeTypes.includes(mimeType)) {
-      const formatInfo: FileFormatInfo = {
-        extension: formatData.extensions[0], // 첫 번째 확장자 사용
-        mimeType,
-        formatType: formatType as keyof typeof SUPPORTED_IMAGE_FORMATS,
-        description: formatData.description,
+  const formatEntries = Object.entries(SUPPORTED_IMAGE_FORMATS);
+
+  for (const [formatTypeName, formatConfiguration] of formatEntries) {
+    const { extensions, mimeTypes, description } = formatConfiguration;
+
+    if (mimeTypes.includes(inputMimeType)) {
+      const [primaryExtension] = extensions;
+
+      const detectedFormatInfo: FileFormatInfo = {
+        extension: primaryExtension,
+        mimeType: inputMimeType,
+        formatType: formatTypeName as keyof typeof SUPPORTED_IMAGE_FORMATS,
+        description,
         isSupported: true,
       };
 
-      console.log('✅ getFormatInfoByMimeType 찾음:', formatInfo); // 디버깅용
-      return formatInfo;
+      console.log('✅ getFormatInfoByMimeType 찾음:', detectedFormatInfo);
+      return detectedFormatInfo;
     }
   }
 
-  console.log('⚠️ getFormatInfoByMimeType 지원되지 않는 MIME:', { mimeType }); // 디버깅용
+  console.log('⚠️ getFormatInfoByMimeType 지원되지 않는 MIME:', {
+    mimeType: inputMimeType,
+  });
   return null;
 };
 
-/**
- * 파일 객체에서 형식 정보 추출
- * @param file - File 객체
- * @returns 파일 형식 정보
- */
-export const getFileFormatInfo = (file: File): FileFormatInfo => {
+export const getFileFormatInfo = (uploadedFile: File): FileFormatInfo => {
+  const { name: fileName, type: fileMimeType } = uploadedFile;
+
   console.log('🔧 getFileFormatInfo 호출:', {
-    fileName: file.name,
-    mimeType: file.type,
-  }); // 디버깅용
+    fileName,
+    mimeType: fileMimeType,
+  });
 
-  // 우선 MIME 타입으로 조회
-  let formatInfo = getFormatInfoByMimeType(file.type);
+  let detectedFormatInfo = getFormatInfoByMimeType(fileMimeType);
 
-  // MIME 타입으로 찾지 못하면 확장자로 조회
-  if (!formatInfo) {
-    const extension = extractFileExtension(file.name);
-    if (extension) {
-      formatInfo = getFormatInfoByExtension(extension);
+  if (!detectedFormatInfo) {
+    const extractedExtension = extractFileExtension(fileName);
+    if (extractedExtension) {
+      detectedFormatInfo = getFormatInfoByExtension(extractedExtension);
     }
   }
 
-  // 그래도 찾지 못하면 기본값
-  if (!formatInfo) {
-    formatInfo = {
+  if (!detectedFormatInfo) {
+    detectedFormatInfo = {
       extension: 'unknown',
-      mimeType: file.type || 'unknown',
+      mimeType: fileMimeType || 'unknown',
       formatType: 'JPEG',
       description: '알 수 없는 형식',
       isSupported: false,
     };
   }
 
-  console.log('✅ getFileFormatInfo 결과:', formatInfo); // 디버깅용
-  return formatInfo;
+  console.log('✅ getFileFormatInfo 결과:', detectedFormatInfo);
+  return detectedFormatInfo;
 };
 
-/**
- * 지원되는 형식인지 확인
- * @param file - File 객체
- * @returns 지원 여부
- */
-export const isImageFormatSupported = (file: File): boolean => {
-  console.log('🔧 isImageFormatSupported 호출:', {
-    fileName: file.name,
-    mimeType: file.type,
-  }); // 디버깅용
+export const isImageFormatSupported = (inputFile: File): boolean => {
+  const { name: fileName, type: fileMimeType } = inputFile;
 
-  const formatInfo = getFileFormatInfo(file);
-  const isSupported = formatInfo.isSupported;
+  console.log('🔧 isImageFormatSupported 호출:', {
+    fileName,
+    mimeType: fileMimeType,
+  });
+
+  const formatInfo = getFileFormatInfo(inputFile);
+  const { isSupported: formatIsSupported } = formatInfo;
 
   console.log('✅ isImageFormatSupported 결과:', {
-    fileName: file.name,
-    isSupported,
-  }); // 디버깅용
+    fileName,
+    isSupported: formatIsSupported,
+  });
 
-  return isSupported;
+  return formatIsSupported;
 };
 
-/**
- * 지원되는 모든 확장자 목록 반환
- * @returns 확장자 배열
- */
 export const getAllSupportedExtensions = (): string[] => {
-  console.log('🔧 getAllSupportedExtensions 호출'); // 디버깅용
+  console.log('🔧 getAllSupportedExtensions 호출');
 
-  const extensions: string[] = [];
+  const collectedExtensions: string[] = [];
+  const formatValues = Object.values(SUPPORTED_IMAGE_FORMATS);
 
-  for (const formatData of Object.values(SUPPORTED_IMAGE_FORMATS)) {
-    extensions.push(...formatData.extensions);
+  for (const formatConfiguration of formatValues) {
+    const { extensions } = formatConfiguration;
+    collectedExtensions.push(...extensions);
   }
 
-  console.log('✅ getAllSupportedExtensions 결과:', extensions); // 디버깅용
-  return extensions;
+  console.log('✅ getAllSupportedExtensions 결과:', collectedExtensions);
+  return collectedExtensions;
 };
 
-/**
- * 지원되는 모든 MIME 타입 목록 반환
- * @returns MIME 타입 배열
- */
 export const getAllSupportedMimeTypes = (): string[] => {
-  console.log('🔧 getAllSupportedMimeTypes 호출'); // 디버깅용
+  console.log('🔧 getAllSupportedMimeTypes 호출');
 
-  const mimeTypes: string[] = [];
+  const collectedMimeTypes: string[] = [];
+  const formatValues = Object.values(SUPPORTED_IMAGE_FORMATS);
 
-  for (const formatData of Object.values(SUPPORTED_IMAGE_FORMATS)) {
-    mimeTypes.push(...formatData.mimeTypes);
+  for (const formatConfiguration of formatValues) {
+    const { mimeTypes } = formatConfiguration;
+    collectedMimeTypes.push(...mimeTypes);
   }
 
-  console.log('✅ getAllSupportedMimeTypes 결과:', mimeTypes); // 디버깅용
-  return mimeTypes;
+  console.log('✅ getAllSupportedMimeTypes 결과:', collectedMimeTypes);
+  return collectedMimeTypes;
 };
 
-/**
- * HTML input accept 속성용 문자열 생성
- * @returns accept 속성 값
- */
 export const generateAcceptString = (): string => {
-  console.log('🔧 generateAcceptString 호출'); // 디버깅용
+  console.log('🔧 generateAcceptString 호출');
 
-  const extensions = getAllSupportedExtensions();
-  const acceptString = extensions.map((ext) => `.${ext}`).join(',');
+  const supportedExtensions = getAllSupportedExtensions();
+  const formattedAcceptString = supportedExtensions
+    .map((extensionName) => `.${extensionName}`)
+    .join(',');
 
-  console.log('✅ generateAcceptString 결과:', acceptString); // 디버깅용
-  return acceptString;
+  console.log('✅ generateAcceptString 결과:', formattedAcceptString);
+  return formattedAcceptString;
 };

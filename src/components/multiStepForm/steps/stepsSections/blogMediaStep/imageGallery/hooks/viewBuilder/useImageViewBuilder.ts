@@ -1,4 +1,4 @@
-// blogMediaStep/imageGallery/hooks/viewBuilder/useImageViewBuilder.ts - ImageGallery 컴포넌트
+// blogMediaStep/imageGallery/hooks/viewBuilder/useImageViewBuilder.ts
 
 import { useCallback, useMemo } from 'react';
 import { useImageGalleryStore } from '../../../../../../../../store/imageGallery/imageGalleryStore';
@@ -9,14 +9,28 @@ import {
   validateViewBuilderSelection,
   generateSuccessMessage,
   resetViewBuilderSelection,
-} from '../../utils/viewBuilderUtils.ts';
+} from '../../utils/viewBuilderUtils';
 
 import { processImageFiles, ImageFileInfo } from '../../utils/galleryUtils';
 
+interface ImageViewConfig {
+  selectedImages: string[];
+  clickOrder: number[];
+  layout: {
+    columns: number;
+    gridType: 'grid' | 'masonry';
+  };
+  filter: 'all' | 'available';
+}
+
+interface ImageGalleryStoreType {
+  getImageViewConfig: () => ImageViewConfig | null;
+  updateImageViewConfig: (config: Partial<ImageViewConfig>) => void;
+  addCustomGalleryView: (config: unknown) => void;
+}
+
 export interface ViewBuilderResult {
-  safeImageViewConfig: ReturnType<
-    typeof useImageGalleryStore
-  >['getImageViewConfig'];
+  safeImageViewConfig: ImageViewConfig;
   filteredAndSortedImages: ImageFileInfo[];
   handleImageClick: (imageUrl: string) => void;
   resetSelection: () => void;
@@ -32,15 +46,12 @@ export const useImageViewBuilder = (
 ): ViewBuilderResult => {
   console.log('🔧 useImageViewBuilder 훅 초기화:', { view, sortBy, sortOrder });
 
-  const imageViewConfig = useImageGalleryStore((state) =>
-    state.getImageViewConfig()
-  );
-  const updateImageViewConfig = useImageGalleryStore(
-    (state) => state.updateImageViewConfig
-  );
-  const addCustomGalleryView = useImageGalleryStore(
-    (state) => state.addCustomGalleryView
-  );
+  const rawImageGalleryStore = useImageGalleryStore();
+  const imageGalleryStore = rawImageGalleryStore as ImageGalleryStoreType;
+
+  const imageViewConfig = imageGalleryStore?.getImageViewConfig?.() || null;
+  const updateImageViewConfig = imageGalleryStore?.updateImageViewConfig;
+  const addCustomGalleryView = imageGalleryStore?.addCustomGalleryView;
 
   const { formValues, addToast } = useBlogMediaStepState();
   const { media, mainImage, sliderImages } = formValues;
@@ -48,14 +59,14 @@ export const useImageViewBuilder = (
   const safeImageViewConfig = useMemo(() => {
     console.log('🔧 safeImageViewConfig 메모이제이션 계산');
 
-    const config = imageViewConfig || {
+    const config: ImageViewConfig = imageViewConfig || {
       selectedImages: [],
       clickOrder: [],
       layout: {
         columns: 3,
-        gridType: 'grid' as const,
+        gridType: 'grid',
       },
-      filter: 'available' as const,
+      filter: 'available',
     };
 
     console.log('✅ safeImageViewConfig 결과:', {
@@ -123,7 +134,14 @@ export const useImageViewBuilder = (
     }
 
     const resetState = resetViewBuilderSelection();
-    updateImageViewConfig(resetState);
+    const resetConfig: Partial<ImageViewConfig> = {
+      selectedImages: resetState.selectedImages,
+      clickOrder: resetState.clickOrder,
+      layout: resetState.layout,
+      filter: 'available',
+    };
+
+    updateImageViewConfig(resetConfig);
 
     addToast({
       title: '선택 초기화',
