@@ -9,7 +9,7 @@ import {
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { useFormContext } from 'react-hook-form';
-import AccordionField from '../../accordion-field';
+import AccordionField from '../components/accordion-field';
 
 const UserInfoStep: React.FC = () => {
   const {

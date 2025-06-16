@@ -5,7 +5,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import StepNavigation from './step-navigation';
-import UserInfoStep from '../components/multiStepForm/steps/user-info-step';
+import UserInfoStep from './user-info-step';
 import BlogBasicStep from './multiStepForm/steps/stepsSections/blog-basic-step';
 import BlogContentStep from './multiStepForm/steps/stepsSections/blog-content-step';
 import BlogMediaStep from '../components/multiStepForm/steps/blog-media-step';
