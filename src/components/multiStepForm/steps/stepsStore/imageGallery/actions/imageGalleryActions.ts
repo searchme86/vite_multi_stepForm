@@ -1,7 +1,7 @@
 import {
   ImageViewConfig,
   CustomGalleryView,
-} from '../../../types/galleryTypes';
+} from '../../../../types/galleryTypes.ts';
 
 export const validateImageUrl = (url: string): boolean => {
   console.log('🖼️ imageGalleryActions: 이미지 URL 검증', url);

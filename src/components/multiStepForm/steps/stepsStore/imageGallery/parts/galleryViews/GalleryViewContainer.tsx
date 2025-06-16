@@ -1,5 +1,5 @@
 import React from 'react';
-import { CustomGalleryView } from '../../../../types/galleryTypes';
+import { CustomGalleryView } from '../../../../../types/galleryTypes';
 import CustomGalleryManager from './CustomGalleryManager';
 
 interface GalleryViewContainerProps {

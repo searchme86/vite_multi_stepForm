@@ -2,7 +2,7 @@
 // ✅ 수정: 파일 전체 교체 - 실제 CustomGalleryManager 구현
 // 이유: 기존 내용이 GalleryViewContainer와 동일했음
 import React from 'react';
-import { CustomGalleryView } from '../../../../types/galleryTypes';
+import { CustomGalleryView } from '../../../../../types/galleryTypes';
 
 interface CustomGalleryManagerProps {
   galleryViews: CustomGalleryView[];

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ImageViewConfig } from '../../../../types/galleryTypes';
+import { ImageViewConfig } from '../../../../../types/galleryTypes';
 
 interface ImageViewConfigManagerProps {
   config: ImageViewConfig;

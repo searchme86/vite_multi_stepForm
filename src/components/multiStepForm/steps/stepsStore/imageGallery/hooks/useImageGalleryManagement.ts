@@ -4,7 +4,7 @@ import { useCustomGalleryViews } from './useCustomGalleryViews';
 import {
   ImageViewConfig,
   CustomGalleryView,
-} from '../../../types/galleryTypes';
+} from '../../../../types/galleryTypes.ts';
 
 export const useImageGalleryManagement = () => {
   console.log(
