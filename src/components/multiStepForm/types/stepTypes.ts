@@ -5,10 +5,12 @@
 import React from 'react';
 // 각 스텝별 컴포넌트들을 import - 실제 렌더링될 컴포넌트들
 import UserInfoStepContainer from '../steps/stepsSections/userInfoStep/UserInfoStepContainer';
-import BlogContentStep from '../steps/blog-content-step';
-import BlogMediaStep from '../steps/blog-media-step';
-import ModularBlogEditorContainer from '../../moduleEditor/ModularBlogEditorContainer';
 import BlogBasicStepContainer from '../steps/stepsSections/blogBasicStep/BlogBasicStepContainer';
+import BlogContentStep from '../steps/blog-content-step';
+// import BlogMediaStepContainer from '../steps/blog-media-step';
+// import BlogMediaStepContainer from '../steps/blog-media-step';
+import ModularBlogEditorContainer from '../../moduleEditor/ModularBlogEditorContainer';
+import BlogMediaStepContainer from '../steps/stepsSections/blogMediaStep/BlogMediaStepContainer';
 
 /**
  * 스텝별 컴포넌트들을 매핑하는 객체
@@ -18,9 +20,9 @@ import BlogBasicStepContainer from '../steps/stepsSections/blogBasicStep/BlogBas
 export const STEP_COMPONENTS = {
   UserInfoStepContainer, // 1단계: 사용자 정보 입력 컴포넌트
   BlogBasicStepContainer, // 2단계: 블로그 기본 정보 입력 컴포넌트
-  BlogContentStep, // 3단계: 블로그 콘텐츠 작성 컴포넌트
   ModularBlogEditorContainer, // 4단계: 고급 에디터 컴포넌트
-  BlogMediaStep, // 5단계: 미디어 업로드 컴포넌트
+  BlogMediaStepContainer, // 5단계: 미디어 업로드 컴포넌트
+  BlogContentStep, // 3단계: 블로그 콘텐츠 작성 컴포넌트
 } as const;
 
 /**
@@ -82,7 +84,7 @@ export const STEP_CONFIG = createStepConfig({
   5: {
     title: '블로그 미디어', // 5단계 제목
     description: '이미지와 미디어를 추가합니다', // 5단계 설명
-    component: 'BlogMediaStep', // 렌더링할 컴포넌트 이름
+    component: 'BlogMediaStepContainer', // 렌더링할 컴포넌트 이름
     validation: [] as const, // 선택 사항이므로 유효성 검사 없음
   },
 });
