@@ -5,8 +5,8 @@ import { Container } from '../../types/container';
 import { validateEditorState } from '../../utils/validation';
 
 // ✨ [ZUSTAND 추가] context 대신 zustand 스토어 import 추가
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
-import { useToastStore } from '../../store/toast/toastStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+import { useToastStore } from '../../../../store/toast/toastStore';
 
 // ✨ [STATIC IMPORT] 타입 변환 함수들과 콘텐츠 생성 함수를 static import로 가져오기
 import {

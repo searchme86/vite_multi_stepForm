@@ -7,14 +7,14 @@ import {
 } from '../../utils/validation';
 
 // ✨ [ZUSTAND 추가] context 대신 zustand 스토어 import 추가
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
-import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
-import { useToastStore } from '../../store/toast/toastStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
+import { useToastStore } from '../../../../store/toast/toastStore';
 
 // ✨ [ZUSTAND 추가] 타입 변환 헬퍼 함수들
 const convertToZustandParagraph = (
   paragraph: LocalParagraph
-): import('../../store/shared/commonTypes').ParagraphBlock => {
+): import('../../../../store/shared/commonTypes').ParagraphBlock => {
   return {
     id: paragraph.id,
     content: paragraph.content,
@@ -26,7 +26,7 @@ const convertToZustandParagraph = (
 };
 
 const convertFromZustandParagraph = (
-  paragraph: import('../../store/shared/commonTypes').ParagraphBlock
+  paragraph: import('../../../../store/shared/commonTypes').ParagraphBlock
 ): LocalParagraph => {
   return {
     id: paragraph.id,
@@ -40,7 +40,7 @@ const convertFromZustandParagraph = (
 };
 
 const convertFromZustandContainer = (
-  container: import('../../store/shared/commonTypes').Container
+  container: import('../../../../store/shared/commonTypes').Container
 ): Container => {
   return {
     id: container.id,

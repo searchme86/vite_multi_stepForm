@@ -10,9 +10,9 @@ import {
 import { createContainersFromInputs } from '../containerActions';
 
 // ✨ [ZUSTAND 추가] context 대신 zustand 스토어 import 추가
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
-import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
-import { useToastStore } from '../../store/toast/toastStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
+import { useToastStore } from '../../../../store/toast/toastStore';
 
 interface Toast {
   title: string;
@@ -23,7 +23,7 @@ interface Toast {
 // ✨ [ZUSTAND 추가] 기존 Container 타입을 zustand Container 타입으로 변환하는 헬퍼 함수
 const convertToZustandContainer = (
   container: Container
-): import('../../store/shared/commonTypes').Container => {
+): import('../../../../store/shared/commonTypes').Container => {
   return {
     id: container.id,
     name: container.name,
@@ -37,7 +37,7 @@ const convertToZustandContainer = (
  */
 const convertToZustandParagraph = (
   paragraph: LocalParagraph
-): import('../../store/shared/commonTypes').ParagraphBlock => {
+): import('../../../../store/shared/commonTypes').ParagraphBlock => {
   return {
     id: paragraph.id,
     content: paragraph.content,
@@ -52,7 +52,7 @@ const convertToZustandParagraph = (
  * ✨ [ZUSTAND 추가] zustand Container 타입을 기존 Container 타입으로 변환하는 헬퍼 함수
  */
 const convertFromZustandContainer = (
-  container: import('../../store/shared/commonTypes').Container
+  container: import('../../../../store/shared/commonTypes').Container
 ): Container => {
   return {
     id: container.id,
@@ -66,7 +66,7 @@ const convertFromZustandContainer = (
  * ✨ [ZUSTAND 추가] zustand ParagraphBlock 타입을 기존 LocalParagraph 타입으로 변환하는 헬퍼 함수
  */
 const convertFromZustandParagraph = (
-  paragraph: import('../../store/shared/commonTypes').ParagraphBlock
+  paragraph: import('../../../../store/shared/commonTypes').ParagraphBlock
 ): LocalParagraph => {
   return {
     id: paragraph.id,

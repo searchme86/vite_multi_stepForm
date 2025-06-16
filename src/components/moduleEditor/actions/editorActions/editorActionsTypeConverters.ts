@@ -4,7 +4,7 @@
 import {
   Container as ZustandContainer,
   ParagraphBlock as ZustandParagraphBlock,
-} from '../../store/shared/commonTypes';
+} from '../../../../store/shared/commonTypes.ts';
 import { LocalParagraph } from '../../types/paragraph';
 import { Container } from '../../types/container';
 
