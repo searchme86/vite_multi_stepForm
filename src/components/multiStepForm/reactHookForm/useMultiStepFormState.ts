@@ -62,6 +62,8 @@ export const useMultiStepFormState = () => {
     addToast,
   });
 
+  console.log('validateCurrentStep<----------', validateCurrentStep);
+
   const { onSubmit } = useFormSubmit({ addToast });
 
   //====여기부터 수정됨====
