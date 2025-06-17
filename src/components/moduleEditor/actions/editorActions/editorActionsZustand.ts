@@ -10,6 +10,10 @@ import { createContainersFromInputs } from '../containerActions';
 import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
 import { useToastStore } from '../../../../store/toast/toastStore';
+import type {
+  Container as ZustandContainer,
+  ParagraphBlock as ZustandParagraphBlock,
+} from '../../../../store/shared/commonTypes';
 
 interface Toast {
   title: string;
@@ -18,49 +22,49 @@ interface Toast {
 }
 
 const convertToZustandContainer = (
-  container: Container
-): import('../../../../store/shared/commonTypes').Container => {
+  localContainer: Container
+): ZustandContainer => {
   return {
-    id: container.id || '',
-    name: container.name || '',
-    order: container.order || 0,
+    id: localContainer.id || '',
+    name: localContainer.name || '',
+    order: localContainer.order || 0,
     createdAt: new Date(),
   };
 };
 
 const convertToZustandParagraph = (
-  paragraph: LocalParagraph
-): import('../../../../store/shared/commonTypes').ParagraphBlock => {
+  localParagraph: LocalParagraph
+): ZustandParagraphBlock => {
   return {
-    id: paragraph.id || '',
-    content: paragraph.content || '',
-    containerId: paragraph.containerId || null,
-    order: paragraph.order || 0,
-    createdAt: paragraph.createdAt || new Date(),
-    updatedAt: paragraph.updatedAt || new Date(),
+    id: localParagraph.id || '',
+    content: localParagraph.content || '',
+    containerId: localParagraph.containerId || null,
+    order: localParagraph.order || 0,
+    createdAt: localParagraph.createdAt || new Date(),
+    updatedAt: localParagraph.updatedAt || new Date(),
   };
 };
 
 const convertFromZustandContainer = (
-  container: import('../../../../store/shared/commonTypes').Container
+  zustandContainer: ZustandContainer
 ): Container => {
   return {
-    id: container.id || '',
-    name: container.name || '',
-    order: container.order || 0,
+    id: zustandContainer.id || '',
+    name: zustandContainer.name || '',
+    order: zustandContainer.order || 0,
   };
 };
 
 const convertFromZustandParagraph = (
-  paragraph: import('../../../../store/shared/commonTypes').ParagraphBlock
+  zustandParagraph: ZustandParagraphBlock
 ): LocalParagraph => {
   return {
-    id: paragraph.id || '',
-    content: paragraph.content || '',
-    containerId: paragraph.containerId || null,
-    order: paragraph.order || 0,
-    createdAt: paragraph.createdAt || new Date(),
-    updatedAt: paragraph.updatedAt || new Date(),
+    id: zustandParagraph.id || '',
+    content: zustandParagraph.content || '',
+    containerId: zustandParagraph.containerId || null,
+    order: zustandParagraph.order || 0,
+    createdAt: zustandParagraph.createdAt || new Date(),
+    updatedAt: zustandParagraph.updatedAt || new Date(),
     originalId: undefined,
   };
 };
@@ -78,8 +82,8 @@ export function handleStructureComplete(
   setLocalContainers?: React.Dispatch<React.SetStateAction<Container[]>>,
   addToast?: (toast: Toast) => void
 ) {
-  const safeInputs = Array.isArray(validInputs) ? validInputs : [];
-  const { isValid } = validateSectionInputs(safeInputs);
+  const safeSectionInputs = Array.isArray(validInputs) ? validInputs : [];
+  const { isValid } = validateSectionInputs(safeSectionInputs);
 
   if (!isValid) {
     const toastMessage = {
@@ -98,14 +102,17 @@ export function handleStructureComplete(
   }
 
   if (setInternalState && setLocalContainers) {
-    setInternalState((prev) => ({ ...prev, isTransitioning: true }));
+    setInternalState((previousState) => ({
+      ...previousState,
+      isTransitioning: true,
+    }));
 
-    const containers = createContainersFromInputs(safeInputs);
-    setLocalContainers(containers);
+    const createdContainers = createContainersFromInputs(safeSectionInputs);
+    setLocalContainers(createdContainers);
 
     setTimeout(() => {
-      setInternalState((prev) => ({
-        ...prev,
+      setInternalState((previousState) => ({
+        ...previousState,
         currentSubStep: 'writing',
         isTransitioning: false,
       }));
@@ -114,7 +121,7 @@ export function handleStructureComplete(
     if (addToast) {
       addToast({
         title: '구조 설정 완료',
-        description: `${safeInputs.length}개의 섹션이 생성되었습니다.`,
+        description: `${safeSectionInputs.length}개의 섹션이 생성되었습니다.`,
         color: 'success',
       });
     }
@@ -124,13 +131,14 @@ export function handleStructureComplete(
     const { setSectionInputs, addContainer } = useEditorCoreStore.getState();
 
     setIsTransitioning(true);
-    setSectionInputs(safeInputs);
+    setSectionInputs(safeSectionInputs);
 
-    const containers = createContainersFromInputs(safeInputs);
+    const createdContainers = createContainersFromInputs(safeSectionInputs);
 
-    containers.forEach((container) => {
-      const zustandContainer = convertToZustandContainer(container);
-      addContainer(zustandContainer);
+    createdContainers.forEach((currentContainer) => {
+      const convertedZustandContainer =
+        convertToZustandContainer(currentContainer);
+      addContainer(convertedZustandContainer);
     });
 
     setTimeout(() => {
@@ -141,7 +149,7 @@ export function handleStructureComplete(
     const { addToast: zustandAddToast } = useToastStore.getState();
     zustandAddToast({
       title: '구조 설정 완료',
-      description: `${safeInputs.length}개의 섹션이 생성되었습니다.`,
+      description: `${safeSectionInputs.length}개의 섹션이 생성되었습니다.`,
       color: 'success',
     });
   }
@@ -155,14 +163,14 @@ export function goToStructureStep(
   setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
 ) {
   if (setInternalState) {
-    setInternalState((prev) => ({
-      ...prev,
+    setInternalState((previousState) => ({
+      ...previousState,
       isTransitioning: true,
     }));
 
     setTimeout(() => {
-      setInternalState((prev) => ({
-        ...prev,
+      setInternalState((previousState) => ({
+        ...previousState,
         currentSubStep: 'structure',
         isTransitioning: false,
       }));
@@ -188,38 +196,43 @@ export function activateEditor(
   paragraphId: string,
   setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
 ) {
-  const validId = typeof paragraphId === 'string' ? paragraphId : '';
+  const validParagraphId = typeof paragraphId === 'string' ? paragraphId : '';
 
   if (setInternalState) {
-    setInternalState((prev) => ({
-      ...prev,
-      activeParagraphId: validId,
+    setInternalState((previousState) => ({
+      ...previousState,
+      activeParagraphId: validParagraphId,
     }));
   } else {
     const { setActiveParagraphId } = useEditorUIStore.getState();
-    setActiveParagraphId(validId);
+    setActiveParagraphId(validParagraphId);
   }
 
   setTimeout(() => {
-    const targetElement = document.querySelector(
-      `[data-paragraph-id="${validId}"]`
+    const targetParagraphElement = document.querySelector(
+      `[data-paragraph-id="${validParagraphId}"]`
     );
 
-    if (targetElement) {
-      const scrollContainer = targetElement.closest('.overflow-y-auto');
+    if (targetParagraphElement) {
+      const scrollContainerElement =
+        targetParagraphElement.closest('.overflow-y-auto');
 
-      if (scrollContainer) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const elementRect = targetElement.getBoundingClientRect();
-        const offsetTop =
-          elementRect.top - containerRect.top + scrollContainer.scrollTop;
+      if (scrollContainerElement) {
+        const scrollContainerRect =
+          scrollContainerElement.getBoundingClientRect();
+        const targetElementRect =
+          targetParagraphElement.getBoundingClientRect();
+        const calculatedOffsetTop =
+          targetElementRect.top -
+          scrollContainerRect.top +
+          scrollContainerElement.scrollTop;
 
-        scrollContainer.scrollTo({
-          top: Math.max(0, offsetTop - 20),
+        scrollContainerElement.scrollTo({
+          top: Math.max(0, calculatedOffsetTop - 20),
           behavior: 'smooth',
         });
       } else {
-        targetElement.scrollIntoView({
+        targetParagraphElement.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
           inline: 'nearest',
@@ -237,9 +250,9 @@ export function togglePreview(
   setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
 ) {
   if (setInternalState) {
-    setInternalState((prev) => ({
-      ...prev,
-      isPreviewOpen: !prev.isPreviewOpen,
+    setInternalState((previousState) => ({
+      ...previousState,
+      isPreviewOpen: !previousState.isPreviewOpen,
     }));
   } else {
     const { togglePreview: zustandTogglePreview } = useEditorUIStore.getState();
@@ -269,19 +282,21 @@ export function saveAllToContext(
     updateEditorParagraphs &&
     addToast
   ) {
-    const safeContainers = Array.isArray(localContainers)
+    const safeLocalContainers = Array.isArray(localContainers)
       ? localContainers
       : [];
-    const safeParagraphs = Array.isArray(localParagraphs)
+    const safeLocalParagraphs = Array.isArray(localParagraphs)
       ? localParagraphs
       : [];
 
-    updateEditorContainers(safeContainers);
+    updateEditorContainers(safeLocalContainers);
 
-    const contextParagraphs = safeParagraphs.map((p) => ({
-      ...p,
-    }));
-    updateEditorParagraphs(contextParagraphs);
+    const contextParagraphsData = safeLocalParagraphs.map(
+      (currentParagraph) => ({
+        ...currentParagraph,
+      })
+    );
+    updateEditorParagraphs(contextParagraphsData);
 
     addToast({
       title: '저장 완료',
@@ -291,25 +306,29 @@ export function saveAllToContext(
   } else {
     const { getContainers, getParagraphs, setContainers, setParagraphs } =
       useEditorCoreStore.getState();
-    const zustandContainers = getContainers();
-    const zustandParagraphs = getParagraphs();
+    const zustandStoredContainers = getContainers();
+    const zustandStoredParagraphs = getParagraphs();
 
-    const convertedContainers = zustandContainers.map(
-      convertFromZustandContainer
+    const convertedLocalContainers = zustandStoredContainers.map(
+      (currentZustandContainer) =>
+        convertFromZustandContainer(currentZustandContainer)
     );
-    const convertedParagraphs = zustandParagraphs.map(
-      convertFromZustandParagraph
-    );
-
-    const reconvertedContainers = convertedContainers.map(
-      convertToZustandContainer
-    );
-    const reconvertedParagraphs = convertedParagraphs.map(
-      convertToZustandParagraph
+    const convertedLocalParagraphs = zustandStoredParagraphs.map(
+      (currentZustandParagraph) =>
+        convertFromZustandParagraph(currentZustandParagraph)
     );
 
-    setContainers(reconvertedContainers);
-    setParagraphs(reconvertedParagraphs);
+    const reconvertedZustandContainers = convertedLocalContainers.map(
+      (currentLocalContainer) =>
+        convertToZustandContainer(currentLocalContainer)
+    );
+    const reconvertedZustandParagraphs = convertedLocalParagraphs.map(
+      (currentLocalParagraph) =>
+        convertToZustandParagraph(currentLocalParagraph)
+    );
+
+    setContainers(reconvertedZustandContainers);
+    setParagraphs(reconvertedZustandParagraphs);
 
     const { addToast: zustandAddToast } = useToastStore.getState();
     zustandAddToast({
@@ -354,25 +373,25 @@ export function completeEditor(
     setEditorCompleted &&
     addToast
   ) {
-    const safeContainers = Array.isArray(localContainers)
+    const safeLocalContainers = Array.isArray(localContainers)
       ? localContainers
       : [];
-    const safeParagraphs = Array.isArray(localParagraphs)
+    const safeLocalParagraphs = Array.isArray(localParagraphs)
       ? localParagraphs
       : [];
 
     saveAllToContextFn();
 
-    const completedContent = generateCompletedContentFn(
-      safeContainers,
-      safeParagraphs
+    const generatedCompletedContent = generateCompletedContentFn(
+      safeLocalContainers,
+      safeLocalParagraphs
     );
 
     if (
       !validateEditorState({
-        containers: safeContainers,
-        paragraphs: safeParagraphs,
-        completedContent,
+        containers: safeLocalContainers,
+        paragraphs: safeLocalParagraphs,
+        completedContent: generatedCompletedContent,
         isCompleted: true,
       })
     ) {
@@ -384,7 +403,7 @@ export function completeEditor(
       return;
     }
 
-    updateEditorCompletedContent(completedContent);
+    updateEditorCompletedContent(generatedCompletedContent);
     setEditorCompleted(true);
 
     addToast({
@@ -401,26 +420,28 @@ export function completeEditor(
       setCompletedContent,
       setIsCompleted,
     } = useEditorCoreStore.getState();
-    const zustandContainers = getContainers();
-    const zustandParagraphs = getParagraphs();
+    const zustandStoredContainers = getContainers();
+    const zustandStoredParagraphs = getParagraphs();
 
-    const convertedContainers = zustandContainers.map(
-      convertFromZustandContainer
+    const convertedLocalContainers = zustandStoredContainers.map(
+      (currentZustandContainer) =>
+        convertFromZustandContainer(currentZustandContainer)
     );
-    const convertedParagraphs = zustandParagraphs.map(
-      convertFromZustandParagraph
+    const convertedLocalParagraphs = zustandStoredParagraphs.map(
+      (currentZustandParagraph) =>
+        convertFromZustandParagraph(currentZustandParagraph)
     );
 
-    const completedContent = generateCompletedContent(
-      convertedContainers,
-      convertedParagraphs
+    const generatedCompletedContent = generateCompletedContent(
+      convertedLocalContainers,
+      convertedLocalParagraphs
     );
 
     if (
       !validateEditorState({
-        containers: convertedContainers,
-        paragraphs: convertedParagraphs,
-        completedContent,
+        containers: convertedLocalContainers,
+        paragraphs: convertedLocalParagraphs,
+        completedContent: generatedCompletedContent,
         isCompleted: true,
       })
     ) {
@@ -433,7 +454,7 @@ export function completeEditor(
       return;
     }
 
-    setCompletedContent(completedContent);
+    setCompletedContent(generatedCompletedContent);
     setIsCompleted(true);
 
     const { addToast: zustandAddToast } = useToastStore.getState();
@@ -449,38 +470,55 @@ export const generateCompletedContent = (
   containers: Container[],
   paragraphs: LocalParagraph[]
 ): string => {
-  const safeContainers = Array.isArray(containers) ? containers : [];
-  const safeParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+  const safeContainerList = Array.isArray(containers) ? containers : [];
+  const safeParagraphList = Array.isArray(paragraphs) ? paragraphs : [];
 
-  const sortedContainers = [...safeContainers].sort((a, b) => {
-    const orderA = typeof a.order === 'number' ? a.order : 0;
-    const orderB = typeof b.order === 'number' ? b.order : 0;
-    return orderA - orderB;
-  });
+  const sortedContainersByOrder = [...safeContainerList].sort(
+    (firstContainer, secondContainer) => {
+      const firstContainerOrder =
+        typeof firstContainer.order === 'number' ? firstContainer.order : 0;
+      const secondContainerOrder =
+        typeof secondContainer.order === 'number' ? secondContainer.order : 0;
+      return firstContainerOrder - secondContainerOrder;
+    }
+  );
 
-  let completedContent = '';
+  let accumulatedCompletedContent = '';
 
-  sortedContainers.forEach((container) => {
-    if (!container || !container.id) return;
+  sortedContainersByOrder.forEach((currentContainer) => {
+    if (!currentContainer || !currentContainer.id) return;
 
-    const containerParagraphs = safeParagraphs
-      .filter((p) => p && p.containerId === container.id)
-      .sort((a, b) => {
-        const orderA = typeof a.order === 'number' ? a.order : 0;
-        const orderB = typeof b.order === 'number' ? b.order : 0;
-        return orderA - orderB;
+    const containerRelatedParagraphs = safeParagraphList
+      .filter(
+        (currentParagraph) =>
+          currentParagraph &&
+          currentParagraph.containerId === currentContainer.id
+      )
+      .sort((firstParagraph, secondParagraph) => {
+        const firstParagraphOrder =
+          typeof firstParagraph.order === 'number' ? firstParagraph.order : 0;
+        const secondParagraphOrder =
+          typeof secondParagraph.order === 'number' ? secondParagraph.order : 0;
+        return firstParagraphOrder - secondParagraphOrder;
       });
 
-    if (containerParagraphs.length > 0) {
-      completedContent += `\n\n## ${container.name || ''}\n\n`;
+    if (containerRelatedParagraphs.length > 0) {
+      accumulatedCompletedContent += `\n\n## ${
+        currentContainer.name || ''
+      }\n\n`;
 
-      containerParagraphs.forEach((paragraph) => {
-        if (paragraph && paragraph.content && paragraph.content.trim()) {
-          completedContent += paragraph.content.trim() + '\n\n';
+      containerRelatedParagraphs.forEach((currentParagraph) => {
+        if (
+          currentParagraph &&
+          currentParagraph.content &&
+          currentParagraph.content.trim()
+        ) {
+          accumulatedCompletedContent +=
+            currentParagraph.content.trim() + '\n\n';
         }
       });
     }
   });
 
-  return completedContent.trim();
+  return accumulatedCompletedContent.trim();
 };
