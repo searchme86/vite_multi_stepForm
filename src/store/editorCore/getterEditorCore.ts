@@ -1,3 +1,4 @@
+// 📁 store/editorCore/getterEditorCore.ts
 import type { Container, ParagraphBlock } from '../shared/commonTypes';
 import type { EditorCoreState } from './initialEditorCoreState';
 import {
@@ -14,6 +15,9 @@ export interface EditorCoreGetters
   getUnassignedParagraphs: () => ParagraphBlock[];
   getSortedContainers: () => Container[];
   validateEditorState: () => boolean;
+  getSectionInputs: () => string[];
+  getSectionInputsCount: () => number;
+  getValidSectionInputs: () => string[];
 }
 
 export const createEditorCoreGetters = (): EditorCoreGetters => {
@@ -38,6 +42,15 @@ export const createEditorCoreGetters = (): EditorCoreGetters => {
     },
     validateEditorState: () => {
       throw new Error('validateEditorState must be implemented in store');
+    },
+    getSectionInputs: () => {
+      throw new Error('getSectionInputs must be implemented in store');
+    },
+    getSectionInputsCount: () => {
+      throw new Error('getSectionInputsCount must be implemented in store');
+    },
+    getValidSectionInputs: () => {
+      throw new Error('getValidSectionInputs must be implemented in store');
     },
   };
 };

@@ -1,3 +1,4 @@
+// 📁 store/editorCore/initialEditorCoreState.ts
 import type { Container, ParagraphBlock } from '../shared/commonTypes';
 
 export interface EditorCoreState {
@@ -5,6 +6,7 @@ export interface EditorCoreState {
   paragraphs: ParagraphBlock[];
   completedContent: string;
   isCompleted: boolean;
+  sectionInputs: string[];
 }
 
 export const initialEditorCoreState: EditorCoreState = {
@@ -12,4 +14,5 @@ export const initialEditorCoreState: EditorCoreState = {
   paragraphs: [],
   completedContent: '',
   isCompleted: false,
+  sectionInputs: ['', '', '', ''],
 };

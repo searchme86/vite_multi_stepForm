@@ -1,94 +1,152 @@
-// 📁 parts/StructureInput/StructureInputForm.tsx
-import React, { useState, useCallback, useRef } from 'react';
+// 📁 editor/parts/StructureInput/StructureInputForm.tsx
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import SectionInput from './inputs/SectionInput';
 import SectionPreview from './preview/SectionPreview';
 import SectionExamples from './examples/SectionExamples';
 import AddRemoveButtons from './controls/AddRemoveButtons';
 import NextStepButton from './controls/NextStepButton';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+import { handleStructureComplete } from '../../actions/editorActions/editorActionsZustand';
 
 interface StructureInputFormProps {
   onStructureComplete: (inputs: string[]) => void;
 }
 
 function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
-  console.log('🎯 [STRUCTURE_INPUT] 컴포넌트 렌더링 시작');
+  const {
+    getSectionInputs,
+    updateSectionInput,
+    addSectionInput,
+    removeSectionInput,
+    setSectionInputs,
+  } = useEditorCoreStore();
 
-  const [containerInputs, setContainerInputs] = useState<string[]>([
-    '',
-    '',
-    '',
-    '',
-  ]);
+  const savedSectionInputs = getSectionInputs();
+
+  const [containerInputs, setContainerInputs] = useState<string[]>(() => {
+    const saved = Array.isArray(savedSectionInputs) ? savedSectionInputs : [];
+    return saved.length > 0 && saved.some((input) => input.trim() !== '')
+      ? saved
+      : ['', '', '', ''];
+  });
+
   const [isValid, setIsValid] = useState(false);
   const isComposingRefs = useRef<{ [key: number]: boolean }>({});
 
-  const handleInputChange = useCallback((index: number, value: string) => {
-    console.log('🚀 [STRUCTURE_INPUT] 입력 변경:', {
-      index,
-      value,
-      isComposing: isComposingRefs.current[index] || false,
-      timestamp: Date.now(),
-    });
+  useEffect(() => {
+    const currentSaved = getSectionInputs();
+    if (Array.isArray(currentSaved) && currentSaved.length > 0) {
+      setContainerInputs(currentSaved);
 
-    setContainerInputs((prev) => {
-      const newInputs = [...prev];
-      newInputs[index] = value;
-
-      const validCount = newInputs.filter(
-        (input) => input.trim().length > 0
+      const validCount = currentSaved.filter(
+        (input) => typeof input === 'string' && input.trim().length > 0
       ).length;
-      const valid = validCount >= 2;
+      setIsValid(validCount >= 2);
+    }
+  }, [getSectionInputs]);
 
-      setIsValid(valid);
-      return newInputs;
-    });
-  }, []);
+  const handleInputChange = useCallback(
+    (index: number, value: string) => {
+      const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
+      const validValue = typeof value === 'string' ? value : '';
+
+      setContainerInputs((prev) => {
+        const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
+        const newInputs = [...safePrev];
+
+        if (validIndex < newInputs.length) {
+          newInputs[validIndex] = validValue;
+        }
+
+        const validCount = newInputs.filter(
+          (input) => typeof input === 'string' && input.trim().length > 0
+        ).length;
+        const valid = validCount >= 2;
+
+        setIsValid(valid);
+
+        updateSectionInput(validIndex, validValue);
+
+        return newInputs;
+      });
+    },
+    [updateSectionInput]
+  );
 
   const handleCompositionStart = useCallback((index: number) => {
-    console.log('🎌 [STRUCTURE_INPUT] IME 입력 시작:', index);
-    isComposingRefs.current[index] = true;
+    const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
+    isComposingRefs.current[validIndex] = true;
   }, []);
 
   const handleCompositionEnd = useCallback(
     (index: number, value: string) => {
-      console.log('🏁 [STRUCTURE_INPUT] IME 입력 완료:', { index, value });
-      isComposingRefs.current[index] = false;
-      handleInputChange(index, value);
+      const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
+      const validValue = typeof value === 'string' ? value : '';
+
+      isComposingRefs.current[validIndex] = false;
+      handleInputChange(validIndex, validValue);
     },
     [handleInputChange]
   );
 
   const addInput = useCallback(() => {
-    console.log('➕ [STRUCTURE_INPUT] 섹션 추가');
-    setContainerInputs((prev) => [...prev, '']);
-    const newIndex = containerInputs.length;
-    isComposingRefs.current[newIndex] = false;
-  }, [containerInputs.length]);
-
-  const removeInput = useCallback(() => {
-    console.log('➖ [STRUCTURE_INPUT] 섹션 삭제');
     setContainerInputs((prev) => {
-      if (prev.length <= 2) return prev;
-      const newInputs = prev.slice(0, -1);
-      const validCount = newInputs.filter(
-        (input) => input.trim().length > 0
-      ).length;
-      setIsValid(validCount >= 2);
+      const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
+      const newInputs = [...safePrev, ''];
 
-      const removedIndex = prev.length - 1;
-      delete isComposingRefs.current[removedIndex];
+      addSectionInput();
+
+      const newIndex = safePrev.length;
+      isComposingRefs.current[newIndex] = false;
 
       return newInputs;
     });
-  }, []);
+  }, [addSectionInput]);
+
+  const removeInput = useCallback(() => {
+    setContainerInputs((prev) => {
+      const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
+
+      if (safePrev.length <= 2) return safePrev;
+
+      const newInputs = safePrev.slice(0, -1);
+      const validCount = newInputs.filter(
+        (input) => typeof input === 'string' && input.trim().length > 0
+      ).length;
+      setIsValid(validCount >= 2);
+
+      const removedIndex = safePrev.length - 1;
+      delete isComposingRefs.current[removedIndex];
+
+      removeSectionInput(removedIndex);
+
+      return newInputs;
+    });
+  }, [removeSectionInput]);
 
   const handleComplete = useCallback(() => {
-    console.log('✅ [STRUCTURE_INPUT] 구조 완료 처리');
-    const validInputs = containerInputs.filter(
-      (input) => input.trim().length > 0
+    const safeInputs = Array.isArray(containerInputs) ? containerInputs : [];
+    const validInputs = safeInputs.filter(
+      (input) => typeof input === 'string' && input.trim().length > 0
     );
-    onStructureComplete(validInputs);
-  }, [containerInputs, onStructureComplete]);
+
+    setSectionInputs(safeInputs);
+    handleStructureComplete(validInputs);
+
+    if (typeof onStructureComplete === 'function') {
+      onStructureComplete(validInputs);
+    }
+  }, [containerInputs, onStructureComplete, setSectionInputs]);
+
+  const safeContainerInputs = Array.isArray(containerInputs)
+    ? containerInputs
+    : ['', '', '', ''];
+  const validInputsCount = safeContainerInputs.filter(
+    (input) => typeof input === 'string' && input.trim().length > 0
+  ).length;
+  const activeComposingCount = Object.values(
+    isComposingRefs.current || {}
+  ).filter(Boolean).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -104,24 +162,21 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
 
       <div className="p-3 text-xs border border-green-200 rounded-lg bg-green-50">
         <div className="mb-2 font-semibold text-green-800">
-          ✅ 에디터 에러 완전 해결! 텍스트 입력 문제 수정됨!
+          ✅ 섹션 입력값 저장 기능 추가! 구조수정 시 값 유지됨!
         </div>
         <div className="grid grid-cols-2 gap-4 text-green-700">
           <div>
             <strong>개선사항:</strong>
-            <br />• Tiptap 에디터 초기화 에러 수정
-            <br />• useEditor 의존성 배열 최적화
-            <br />• 에디터 상태 안전성 강화
-            <br />• 메모리 정리 로직 추가
+            <br />• 섹션 입력값 Zustand 저장
+            <br />• 구조수정 시 값 복원
+            <br />• 실시간 상태 동기화
+            <br />• 타입 안전성 강화
           </div>
           <div>
             <strong>현재 상태:</strong>
-            <br />• 입력 필드 수: {containerInputs.length}개
-            <br />• 유효 입력 수:{' '}
-            {containerInputs.filter((input) => input.trim().length > 0).length}
-            개
-            <br />• IME 활성 상태:{' '}
-            {Object.values(isComposingRefs.current).filter(Boolean).length}개
+            <br />• 입력 필드 수: {safeContainerInputs.length}개
+            <br />• 유효 입력 수: {validInputsCount}개
+            <br />• IME 활성 상태: {activeComposingCount}개
           </div>
         </div>
       </div>
@@ -129,12 +184,12 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
       <SectionExamples />
 
       <div className="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2">
-        {containerInputs.map((input, index) => (
+        {safeContainerInputs.map((input, index) => (
           <SectionInput
             key={`input-${index}`}
             index={index}
-            value={input}
-            isComposing={isComposingRefs.current[index] || false}
+            value={typeof input === 'string' ? input : ''}
+            isComposing={Boolean(isComposingRefs.current[index])}
             onChange={handleInputChange}
             onCompositionStart={handleCompositionStart}
             onCompositionEnd={handleCompositionEnd}
@@ -142,22 +197,25 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
         ))}
       </div>
 
-      <SectionPreview containerInputs={containerInputs} />
+      <SectionPreview containerInputs={safeContainerInputs} />
 
       <div className="flex items-center justify-between mt-4">
         <AddRemoveButtons
           onAdd={addInput}
           onRemove={removeInput}
-          canRemove={containerInputs.length > 2}
+          canRemove={safeContainerInputs.length > 2}
         />
         <NextStepButton onComplete={handleComplete} isValid={isValid} />
       </div>
 
       <div className="p-4 text-center border border-green-200 rounded-lg bg-green-50">
         <p className="text-green-800">
-          ✅ <strong>입력 상태:</strong> 입력 개수: {containerInputs.length} |
-          유효성: {isValid ? '✅' : '❌'} | 현재값: [
-          {containerInputs.map((v) => `"${v}"`).join(', ')}]
+          ✅ <strong>입력 상태:</strong> 입력 개수: {safeContainerInputs.length}{' '}
+          | 유효성: {isValid ? '✅' : '❌'} | 현재값: [
+          {safeContainerInputs
+            .map((v) => `"${typeof v === 'string' ? v : ''}"`)
+            .join(', ')}
+          ]
         </p>
       </div>
     </div>
