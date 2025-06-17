@@ -1,6 +1,8 @@
 // bridges/hooks/useBridgeUI.ts
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+//====여기부터 수정됨====
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+//====여기까지 수정됨====
 import { useEditorMultiStepBridge } from '../editorMultiStepBridge/useEditorMultiStepBridge';
 import {
   BridgeSystemConfiguration,
@@ -106,6 +108,12 @@ export const useBridgeUI = (
 ): BridgeUIHookReturn => {
   console.log('🎨 [BRIDGE_UI] 브릿지 UI 훅 초기화 시작');
 
+  //====여기부터 수정됨====
+  // 초기화 완료 여부를 추적하는 ref
+  // 1. 한 번만 초기화 실행되도록 보장 2. 중복 초기화 방지
+  const isInitializedRef = useRef(false);
+  //====여기까지 수정됨====
+
   // 기본 브릿지 훅과 연결 - 실제 데이터 전송 로직 제공
   const bridgeHook = useEditorMultiStepBridge(customBridgeConfig);
 
@@ -124,6 +132,34 @@ export const useBridgeUI = (
 
   // 마지막 검증 실행 시간을 추적하여 불필요한 재계산 방지
   const lastValidationTimeRef = useRef<number>(0);
+
+  //====여기부터 수정됨====
+  // 컴포넌트 마운트 시 UI 브릿지 상태 완전 초기화
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      console.log('🔄 [BRIDGE_UI] UI 브릿지 훅 완전 초기화 시작');
+
+      // 1. 검증 상태 트리거 초기화
+      setValidationRefreshTrigger(0);
+
+      // 2. 마지막 검증 시간 초기화
+      lastValidationTimeRef.current = 0;
+
+      // 3. 기본 브릿지 훅도 초기화 (필요시)
+      try {
+        if (bridgeHook.resetBridgeState) {
+          bridgeHook.resetBridgeState();
+          console.log('🔄 [BRIDGE_UI] 기본 브릿지 상태도 초기화 완료');
+        }
+      } catch (error) {
+        console.error('❌ [BRIDGE_UI] 기본 브릿지 초기화 중 오류:', error);
+      }
+
+      isInitializedRef.current = true;
+      console.log('✅ [BRIDGE_UI] UI 브릿지 훅 완전 초기화 완료');
+    }
+  }, []); // 1. 빈 의존성 배열 2. 마운트 시 한 번만 실행
+  //====여기까지 수정됨====
 
   // 브릿지 훅에서 필요한 상태들을 구조분해할당으로 추출
   const {
@@ -380,14 +416,23 @@ export const useBridgeUI = (
   const resetAllBridgeAndUIState = useCallback((): void => {
     console.log('🔄 [BRIDGE_UI] 전체 브릿지 및 UI 상태 초기화');
 
-    // 기본 브릿지 상태 초기화
-    clearAllBridgeState();
+    //====여기부터 수정됨====
+    try {
+      // 1. 기본 브릿지 상태 초기화
+      clearAllBridgeState();
 
-    // UI 특화 상태들도 초기화
-    setValidationRefreshTrigger(0);
-    lastValidationTimeRef.current = 0;
+      // 2. UI 특화 상태들도 초기화
+      setValidationRefreshTrigger(0);
+      lastValidationTimeRef.current = 0;
 
-    console.log('✅ [BRIDGE_UI] 전체 상태 초기화 완료');
+      // 3. 초기화 플래그 리셋 (재초기화 허용)
+      isInitializedRef.current = false;
+
+      console.log('✅ [BRIDGE_UI] 전체 상태 초기화 완료');
+    } catch (error) {
+      console.error('❌ [BRIDGE_UI] 상태 초기화 중 오류:', error);
+    }
+    //====여기까지 수정됨====
   }, [clearAllBridgeState]);
 
   // 검증 상태를 수동으로 새로고침하는 함수

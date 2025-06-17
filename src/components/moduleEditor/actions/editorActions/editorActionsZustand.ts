@@ -1,524 +1,162 @@
-// 📁 actions/editorActions/editorActionsZustand.ts
 import { EditorInternalState } from '../../types/editor';
-import { LocalParagraph } from '../../types/paragraph';
-import { Container } from '../../types/container';
+import { Container } from '../../../../store/shared/commonTypes';
 import {
-  validateSectionInputs,
-  validateEditorState,
-} from '../../utils/validation';
-import { createContainersFromInputs } from '../containerActions';
-import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
+  LocalParagraph,
+  EditorUIStoreActions,
+  EditorCoreStoreActions,
+} from '../../hooks/editorStateHooks/editorStateTypes';
 import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
-import { useToastStore } from '../../../../store/toast/toastStore';
-import type {
-  Container as ZustandContainer,
-  ParagraphBlock as ZustandParagraphBlock,
-} from '../../../../store/shared/commonTypes';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 
-interface Toast {
-  title: string;
-  description: string;
-  color: 'warning' | 'success';
-}
-
-const convertToZustandContainer = (
-  localContainer: Container
-): ZustandContainer => {
-  return {
-    id: localContainer.id || '',
-    name: localContainer.name || '',
-    order: localContainer.order || 0,
-    createdAt: new Date(),
-  };
-};
-
-const convertToZustandParagraph = (
-  localParagraph: LocalParagraph
-): ZustandParagraphBlock => {
-  return {
-    id: localParagraph.id || '',
-    content: localParagraph.content || '',
-    containerId: localParagraph.containerId || null,
-    order: localParagraph.order || 0,
-    createdAt: localParagraph.createdAt || new Date(),
-    updatedAt: localParagraph.updatedAt || new Date(),
-  };
-};
-
-const convertFromZustandContainer = (
-  zustandContainer: ZustandContainer
-): Container => {
-  return {
-    id: zustandContainer.id || '',
-    name: zustandContainer.name || '',
-    order: zustandContainer.order || 0,
-  };
-};
-
-const convertFromZustandParagraph = (
-  zustandParagraph: ZustandParagraphBlock
-): LocalParagraph => {
-  return {
-    id: zustandParagraph.id || '',
-    content: zustandParagraph.content || '',
-    containerId: zustandParagraph.containerId || null,
-    order: zustandParagraph.order || 0,
-    createdAt: zustandParagraph.createdAt || new Date(),
-    updatedAt: zustandParagraph.updatedAt || new Date(),
-    originalId: undefined,
-  };
-};
-
-export function handleStructureComplete(validInputs: string[]): void;
-export function handleStructureComplete(
-  validInputs: string[],
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>,
-  setLocalContainers: React.Dispatch<React.SetStateAction<Container[]>>,
-  addToast: (toast: Toast) => void
-): void;
-export function handleStructureComplete(
-  validInputs: string[],
-  setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>,
-  setLocalContainers?: React.Dispatch<React.SetStateAction<Container[]>>,
-  addToast?: (toast: Toast) => void
-) {
-  const safeSectionInputs = Array.isArray(validInputs) ? validInputs : [];
-  const { isValid } = validateSectionInputs(safeSectionInputs);
-
-  if (!isValid) {
-    const toastMessage = {
-      title: '구조 설정 오류',
-      description: '최소 2개 이상의 섹션 이름을 입력해주세요.',
-      color: 'warning' as const,
+const createInitialInternalState = (
+  _hasContext: boolean,
+  _editorUIStoreActions: EditorUIStoreActions
+): EditorInternalState => {
+  try {
+    return {
+      currentSubStep: 'structure',
+      isTransitioning: false,
+      activeParagraphId: null,
+      isPreviewOpen: true,
+      selectedParagraphIds: [],
+      targetContainerId: '',
     };
-
-    if (addToast) {
-      addToast(toastMessage);
-    } else {
-      const { addToast: zustandAddToast } = useToastStore.getState();
-      zustandAddToast(toastMessage);
-    }
-    return;
+  } catch (error) {
+    console.error('❌ [INIT] 내부 상태 초기화 실패:', error);
+    return {
+      currentSubStep: 'structure',
+      isTransitioning: false,
+      activeParagraphId: null,
+      isPreviewOpen: true,
+      selectedParagraphIds: [],
+      targetContainerId: '',
+    };
   }
+};
 
-  if (setInternalState && setLocalContainers) {
-    setInternalState((previousState) => ({
-      ...previousState,
-      isTransitioning: true,
-    }));
-
-    const createdContainers = createContainersFromInputs(safeSectionInputs);
-    setLocalContainers(createdContainers);
-
-    setTimeout(() => {
-      setInternalState((previousState) => ({
-        ...previousState,
-        currentSubStep: 'writing',
-        isTransitioning: false,
-      }));
-    }, 300);
-
-    if (addToast) {
-      addToast({
-        title: '구조 설정 완료',
-        description: `${safeSectionInputs.length}개의 섹션이 생성되었습니다.`,
-        color: 'success',
-      });
-    }
-  } else {
-    const { setIsTransitioning, setCurrentSubStep } =
-      useEditorUIStore.getState();
-    const { setSectionInputs, addContainer } = useEditorCoreStore.getState();
-
-    setIsTransitioning(true);
-    setSectionInputs(safeSectionInputs);
-
-    const createdContainers = createContainersFromInputs(safeSectionInputs);
-
-    createdContainers.forEach((currentContainer) => {
-      const convertedZustandContainer =
-        convertToZustandContainer(currentContainer);
-      addContainer(convertedZustandContainer);
-    });
-
-    setTimeout(() => {
-      setCurrentSubStep('writing');
-      setIsTransitioning(false);
-    }, 300);
-
-    const { addToast: zustandAddToast } = useToastStore.getState();
-    zustandAddToast({
-      title: '구조 설정 완료',
-      description: `${safeSectionInputs.length}개의 섹션이 생성되었습니다.`,
-      color: 'success',
-    });
+const createInitialParagraphs = (
+  _hasContext: boolean,
+  _editorCoreStoreActions: EditorCoreStoreActions
+): LocalParagraph[] => {
+  try {
+    console.log('🔄 [INIT] 단락 초기화 - 항상 빈 배열로 시작');
+    return [];
+  } catch (error) {
+    console.error('❌ [INIT] 단락 초기화 실패:', error);
+    return [];
   }
-}
+};
 
-export function goToStructureStep(): void;
-export function goToStructureStep(
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
-): void;
-export function goToStructureStep(
-  setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
-) {
-  if (setInternalState) {
-    setInternalState((previousState) => ({
-      ...previousState,
-      isTransitioning: true,
-    }));
-
-    setTimeout(() => {
-      setInternalState((previousState) => ({
-        ...previousState,
-        currentSubStep: 'structure',
-        isTransitioning: false,
-      }));
-    }, 300);
-  } else {
-    const { setIsTransitioning, setCurrentSubStep } =
-      useEditorUIStore.getState();
-    setIsTransitioning(true);
-
-    setTimeout(() => {
-      setCurrentSubStep('structure');
-      setIsTransitioning(false);
-    }, 300);
+const createInitialContainers = (
+  _hasContext: boolean,
+  _editorCoreStoreActions: EditorCoreStoreActions
+): Container[] => {
+  try {
+    console.log('🔄 [INIT] 컨테이너 초기화 - 항상 빈 배열로 시작');
+    return [];
+  } catch (error) {
+    console.error('❌ [INIT] 컨테이너 초기화 실패:', error);
+    return [];
   }
-}
+};
 
-export function activateEditor(paragraphId: string): void;
-export function activateEditor(
-  paragraphId: string,
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
-): void;
-export function activateEditor(
-  paragraphId: string,
-  setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
-) {
-  const validParagraphId = typeof paragraphId === 'string' ? paragraphId : '';
-
-  if (setInternalState) {
-    setInternalState((previousState) => ({
-      ...previousState,
-      activeParagraphId: validParagraphId,
-    }));
-  } else {
-    const { setActiveParagraphId } = useEditorUIStore.getState();
-    setActiveParagraphId(validParagraphId);
-  }
-
-  setTimeout(() => {
-    const targetParagraphElement = document.querySelector(
-      `[data-paragraph-id="${validParagraphId}"]`
-    );
-
-    if (targetParagraphElement) {
-      const scrollContainerElement =
-        targetParagraphElement.closest('.overflow-y-auto');
-
-      if (scrollContainerElement) {
-        const scrollContainerRect =
-          scrollContainerElement.getBoundingClientRect();
-        const targetElementRect =
-          targetParagraphElement.getBoundingClientRect();
-        const calculatedOffsetTop =
-          targetElementRect.top -
-          scrollContainerRect.top +
-          scrollContainerElement.scrollTop;
-
-        scrollContainerElement.scrollTo({
-          top: Math.max(0, calculatedOffsetTop - 20),
-          behavior: 'smooth',
-        });
-      } else {
-        targetParagraphElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-          inline: 'nearest',
-        });
-      }
-    }
-  }, 200);
-}
-
-export function togglePreview(): void;
-export function togglePreview(
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>
-): void;
-export function togglePreview(
-  setInternalState?: React.Dispatch<React.SetStateAction<EditorInternalState>>
-) {
-  if (setInternalState) {
-    setInternalState((previousState) => ({
-      ...previousState,
-      isPreviewOpen: !previousState.isPreviewOpen,
-    }));
-  } else {
-    const { togglePreview: zustandTogglePreview } = useEditorUIStore.getState();
-    zustandTogglePreview();
-  }
-}
-
-export function saveAllToContext(): void;
-export function saveAllToContext(
-  localContainers: Container[],
-  localParagraphs: LocalParagraph[],
-  updateEditorContainers: (containers: Container[]) => void,
-  updateEditorParagraphs: (paragraphs: LocalParagraph[]) => void,
-  addToast: (toast: Toast) => void
-): void;
-export function saveAllToContext(
-  localContainers?: Container[],
-  localParagraphs?: LocalParagraph[],
-  updateEditorContainers?: (containers: Container[]) => void,
-  updateEditorParagraphs?: (paragraphs: LocalParagraph[]) => void,
-  addToast?: (toast: Toast) => void
-) {
-  if (
-    localContainers &&
-    localParagraphs &&
-    updateEditorContainers &&
-    updateEditorParagraphs &&
-    addToast
-  ) {
-    const safeLocalContainers = Array.isArray(localContainers)
-      ? localContainers
-      : [];
-    const safeLocalParagraphs = Array.isArray(localParagraphs)
-      ? localParagraphs
-      : [];
-
-    updateEditorContainers(safeLocalContainers);
-
-    const contextParagraphsData = safeLocalParagraphs.map(
-      (currentParagraph) => ({
-        ...currentParagraph,
-      })
-    );
-    updateEditorParagraphs(contextParagraphsData);
-
-    addToast({
-      title: '저장 완료',
-      description: '모든 내용이 저장되었습니다.',
-      color: 'success',
-    });
-  } else {
-    const { getContainers, getParagraphs, setContainers, setParagraphs } =
-      useEditorCoreStore.getState();
-    const zustandStoredContainers = getContainers();
-    const zustandStoredParagraphs = getParagraphs();
-
-    const convertedLocalContainers = zustandStoredContainers.map(
-      (currentZustandContainer) =>
-        convertFromZustandContainer(currentZustandContainer)
-    );
-    const convertedLocalParagraphs = zustandStoredParagraphs.map(
-      (currentZustandParagraph) =>
-        convertFromZustandParagraph(currentZustandParagraph)
-    );
-
-    const reconvertedZustandContainers = convertedLocalContainers.map(
-      (currentLocalContainer) =>
-        convertToZustandContainer(currentLocalContainer)
-    );
-    const reconvertedZustandParagraphs = convertedLocalParagraphs.map(
-      (currentLocalParagraph) =>
-        convertToZustandParagraph(currentLocalParagraph)
-    );
-
-    setContainers(reconvertedZustandContainers);
-    setParagraphs(reconvertedZustandParagraphs);
-
-    const { addToast: zustandAddToast } = useToastStore.getState();
-    zustandAddToast({
-      title: '저장 완료',
-      description: '모든 내용이 저장되었습니다.',
-      color: 'success',
-    });
-  }
-}
-
-export function completeEditor(): void;
-export function completeEditor(
-  localContainers: Container[],
-  localParagraphs: LocalParagraph[],
-  saveAllToContext: () => void,
-  generateCompletedContent: (
-    containers: Container[],
-    paragraphs: LocalParagraph[]
-  ) => string,
-  updateEditorCompletedContent: (content: string) => void,
-  setEditorCompleted: (completed: boolean) => void,
-  addToast: (toast: Toast) => void
-): void;
-export function completeEditor(
-  localContainers?: Container[],
-  localParagraphs?: LocalParagraph[],
-  saveAllToContextFn?: () => void,
-  generateCompletedContentFn?: (
-    containers: Container[],
-    paragraphs: LocalParagraph[]
-  ) => string,
-  updateEditorCompletedContent?: (content: string) => void,
-  setEditorCompleted?: (completed: boolean) => void,
-  addToast?: (toast: Toast) => void
-) {
-  if (
-    localContainers &&
-    localParagraphs &&
-    saveAllToContextFn &&
-    generateCompletedContentFn &&
-    updateEditorCompletedContent &&
-    setEditorCompleted &&
-    addToast
-  ) {
-    const safeLocalContainers = Array.isArray(localContainers)
-      ? localContainers
-      : [];
-    const safeLocalParagraphs = Array.isArray(localParagraphs)
-      ? localParagraphs
-      : [];
-
-    saveAllToContextFn();
-
-    const generatedCompletedContent = generateCompletedContentFn(
-      safeLocalContainers,
-      safeLocalParagraphs
-    );
-
-    if (
-      !validateEditorState({
-        containers: safeLocalContainers,
-        paragraphs: safeLocalParagraphs,
-        completedContent: generatedCompletedContent,
-        isCompleted: true,
-      })
-    ) {
-      addToast({
-        title: '에디터 미완성',
-        description: '최소 1개 이상의 컨테이너와 할당된 단락이 필요합니다.',
-        color: 'warning',
-      });
+const handleStructureComplete = (sectionInputs: string[]): void => {
+  try {
+    if (!Array.isArray(sectionInputs) || sectionInputs.length < 2) {
+      console.error('❌ [STRUCTURE] 최소 2개 이상의 섹션이 필요합니다');
       return;
     }
 
-    updateEditorCompletedContent(generatedCompletedContent);
-    setEditorCompleted(true);
-
-    addToast({
-      title: '에디터 완성',
-      description: '모듈화된 글 작성이 완료되었습니다!',
-      color: 'success',
-    });
-  } else {
-    saveAllToContext();
-
-    const {
-      getContainers,
-      getParagraphs,
-      setCompletedContent,
-      setIsCompleted,
-    } = useEditorCoreStore.getState();
-    const zustandStoredContainers = getContainers();
-    const zustandStoredParagraphs = getParagraphs();
-
-    const convertedLocalContainers = zustandStoredContainers.map(
-      (currentZustandContainer) =>
-        convertFromZustandContainer(currentZustandContainer)
-    );
-    const convertedLocalParagraphs = zustandStoredParagraphs.map(
-      (currentZustandParagraph) =>
-        convertFromZustandParagraph(currentZustandParagraph)
+    const validSections = sectionInputs.filter(
+      (section) => typeof section === 'string' && section.trim().length > 0
     );
 
-    const generatedCompletedContent = generateCompletedContent(
-      convertedLocalContainers,
-      convertedLocalParagraphs
-    );
-
-    if (
-      !validateEditorState({
-        containers: convertedLocalContainers,
-        paragraphs: convertedLocalParagraphs,
-        completedContent: generatedCompletedContent,
-        isCompleted: true,
-      })
-    ) {
-      const { addToast: zustandAddToast } = useToastStore.getState();
-      zustandAddToast({
-        title: '에디터 미완성',
-        description: '최소 1개 이상의 컨테이너와 할당된 단락이 필요합니다.',
-        color: 'warning',
-      });
+    if (validSections.length < 2) {
+      console.error('❌ [STRUCTURE] 유효한 섹션이 2개 미만입니다');
       return;
     }
 
-    setCompletedContent(generatedCompletedContent);
-    setIsCompleted(true);
+    console.log('🔄 [STRUCTURE] 컨테이너 생성 시작:', validSections);
 
-    const { addToast: zustandAddToast } = useToastStore.getState();
-    zustandAddToast({
-      title: '에디터 완성',
-      description: '모듈화된 글 작성이 완료되었습니다!',
-      color: 'success',
+    const editorCoreStore = useEditorCoreStore.getState();
+    const editorUIStore = useEditorUIStore.getState();
+
+    console.log('🔄 [STRUCTURE] 에디터 상태 초기화');
+    editorCoreStore.resetEditorState();
+
+    const createdContainers: Container[] = [];
+
+    validSections.forEach((sectionName, index) => {
+      const containerId = `container-${Date.now()}-${index}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      const newContainer: Container = {
+        id: containerId,
+        name: sectionName.trim(),
+        order: index + 1,
+        createdAt: new Date(),
+      };
+
+      console.log(
+        `📦 [STRUCTURE] 컨테이너 추가: "${sectionName}" (order: ${index + 1})`
+      );
+
+      editorCoreStore.addContainer(newContainer);
+      createdContainers.push(newContainer);
     });
-  }
-}
 
-export const generateCompletedContent = (
-  containers: Container[],
-  paragraphs: LocalParagraph[]
-): string => {
-  const safeContainerList = Array.isArray(containers) ? containers : [];
-  const safeParagraphList = Array.isArray(paragraphs) ? paragraphs : [];
+    setTimeout(() => {
+      try {
+        const storeContainers = editorCoreStore.getSortedContainers();
+        console.log('✅ [STRUCTURE] 생성된 컨테이너 검증:', {
+          예상개수: validSections.length,
+          실제개수: storeContainers.length,
+          생성성공: storeContainers.length === validSections.length,
+          컨테이너목록: storeContainers.map((c) => ({
+            id: c.id,
+            name: c.name,
+            order: c.order,
+          })),
+        });
 
-  const sortedContainersByOrder = [...safeContainerList].sort(
-    (firstContainer, secondContainer) => {
-      const firstContainerOrder =
-        typeof firstContainer.order === 'number' ? firstContainer.order : 0;
-      const secondContainerOrder =
-        typeof secondContainer.order === 'number' ? secondContainer.order : 0;
-      return firstContainerOrder - secondContainerOrder;
-    }
-  );
+        if (storeContainers.length === validSections.length) {
+          console.log('🔄 [STRUCTURE] UI 상태를 글쓰기 단계로 전환');
+          editorUIStore.goToWritingStep();
 
-  let accumulatedCompletedContent = '';
-
-  sortedContainersByOrder.forEach((currentContainer) => {
-    if (!currentContainer || !currentContainer.id) return;
-
-    const containerRelatedParagraphs = safeParagraphList
-      .filter(
-        (currentParagraph) =>
-          currentParagraph &&
-          currentParagraph.containerId === currentContainer.id
-      )
-      .sort((firstParagraph, secondParagraph) => {
-        const firstParagraphOrder =
-          typeof firstParagraph.order === 'number' ? firstParagraph.order : 0;
-        const secondParagraphOrder =
-          typeof secondParagraph.order === 'number' ? secondParagraph.order : 0;
-        return firstParagraphOrder - secondParagraphOrder;
-      });
-
-    if (containerRelatedParagraphs.length > 0) {
-      accumulatedCompletedContent += `\n\n## ${
-        currentContainer.name || ''
-      }\n\n`;
-
-      containerRelatedParagraphs.forEach((currentParagraph) => {
-        if (
-          currentParagraph &&
-          currentParagraph.content &&
-          currentParagraph.content.trim()
-        ) {
-          accumulatedCompletedContent +=
-            currentParagraph.content.trim() + '\n\n';
+          console.log('🎉 [STRUCTURE] 구조 설정 완료!');
+          console.log(`   📊 총 ${storeContainers.length}개 컨테이너 생성`);
+          console.log(`   🚀 글쓰기 단계로 이동 완료`);
+        } else {
+          console.error('❌ [STRUCTURE] 컨테이너 생성 실패 - 개수 불일치');
+          console.error(
+            `   예상: ${validSections.length}개, 실제: ${storeContainers.length}개`
+          );
         }
-      });
-    }
-  });
+      } catch (verificationError) {
+        console.error('❌ [STRUCTURE] 결과 검증 실패:', verificationError);
+      }
+    }, 200);
 
-  return accumulatedCompletedContent.trim();
+    console.log(`🎯 [STRUCTURE] ${validSections.length}개 섹션 처리 시작`);
+  } catch (error) {
+    console.error('❌ [STRUCTURE] 구조 완료 처리 실패:', error);
+    console.error(
+      'Stack trace:',
+      error instanceof Error ? error.stack : 'Unknown error'
+    );
+
+    try {
+      console.log('🔄 [STRUCTURE] 에러 복구 시도 - UI 상태 안전화');
+    } catch (recoveryError) {
+      console.error('❌ [STRUCTURE] 에러 복구 실패:', recoveryError);
+    }
+  }
+};
+
+export {
+  createInitialInternalState,
+  createInitialParagraphs,
+  createInitialContainers,
+  handleStructureComplete,
 };

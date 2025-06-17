@@ -1,4 +1,3 @@
-// 📁 store/editorCore/editorCoreStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Container, ParagraphBlock } from '../shared/commonTypes';
@@ -6,8 +5,6 @@ import {
   initialEditorCoreState,
   type EditorCoreState,
 } from './initialEditorCoreState';
-import type { EditorCoreGetters } from './getterEditorCore';
-import type { EditorCoreSetters } from './setterEditorCore';
 import { createPersistConfig } from '../shared/persistConfig';
 import {
   sortContainers,
@@ -16,6 +13,56 @@ import {
   generateCompletedContent,
   validateEditorState,
 } from '../shared/utilityFunctions';
+
+interface EditorCoreGetters {
+  getCompletedContent: () => string;
+  getIsCompleted: () => boolean;
+  getContainers: () => Container[];
+  getParagraphs: () => ParagraphBlock[];
+  getSectionInputs: () => string[];
+  getSectionInputsCount: () => number;
+  getValidSectionInputs: () => string[];
+  getContainerById: (containerId: string) => Container | undefined;
+  getParagraphById: (paragraphId: string) => ParagraphBlock | undefined;
+  getParagraphsByContainer: (containerId: string) => ParagraphBlock[];
+  getUnassignedParagraphs: () => ParagraphBlock[];
+  getSortedContainers: () => Container[];
+  validateEditorState: () => boolean;
+}
+
+interface EditorCoreSetters {
+  setCompletedContent: (content: string) => void;
+  setIsCompleted: (completed: boolean) => void;
+  setContainers: (containers: Container[]) => void;
+  setParagraphs: (paragraphs: ParagraphBlock[]) => void;
+  setSectionInputs: (inputs: string[]) => void;
+  updateSectionInput: (index: number, value: string) => void;
+  addSectionInput: () => void;
+  removeSectionInput: (index: number) => void;
+  resetSectionInputs: () => void;
+  addContainer: (container: Container) => void;
+  deleteContainer: (containerId: string) => void;
+  updateContainer: (containerId: string, updates: Partial<Container>) => void;
+  reorderContainers: (containers: Container[]) => void;
+  addParagraph: (paragraph: ParagraphBlock) => void;
+  deleteParagraph: (paragraphId: string) => void;
+  updateParagraph: (
+    paragraphId: string,
+    updates: Partial<ParagraphBlock>
+  ) => void;
+  updateParagraphContent: (paragraphId: string, content: string) => void;
+  moveParagraphToContainer: (
+    paragraphId: string,
+    containerId: string | null
+  ) => void;
+  reorderParagraphsInContainer: (
+    containerId: string,
+    paragraphs: ParagraphBlock[]
+  ) => void;
+  resetEditorState: () => void;
+  resetEditorStateCompletely: () => void;
+  generateCompletedContent: () => void;
+}
 
 type EditorCoreStore = EditorCoreState & EditorCoreGetters & EditorCoreSetters;
 
@@ -595,7 +642,38 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
       },
 
       resetEditorState: () => {
+        console.log('🔄 [STORE] 에디터 상태 초기화 시작');
         set(initialEditorCoreState);
+      },
+
+      resetEditorStateCompletely: () => {
+        console.log(
+          '🔥 [STORE] 에디터 상태 완전 초기화 시작 - localStorage 포함'
+        );
+
+        try {
+          set(initialEditorCoreState);
+
+          const persistKey = 'editor-core-storage';
+          if (typeof window !== 'undefined' && window.localStorage) {
+            console.log(`🗑️ [STORE] localStorage에서 ${persistKey} 삭제`);
+            window.localStorage.removeItem(persistKey);
+          }
+
+          setTimeout(() => {
+            set({
+              containers: [],
+              paragraphs: [],
+              completedContent: '',
+              isCompleted: false,
+              sectionInputs: ['', '', '', ''],
+            });
+            console.log('✅ [STORE] 에디터 상태 완전 초기화 완료');
+          }, 100);
+        } catch (error) {
+          console.error('❌ [STORE] 완전 초기화 중 오류:', error);
+          set(initialEditorCoreState);
+        }
       },
 
       generateCompletedContent: () => {
@@ -617,3 +695,21 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
     createPersistConfig('editor-core-storage', 'local')
   )
 );
+
+export const resetEditorStoreCompletely = () => {
+  console.log('🔥 [STORE_EXTERNAL] 외부에서 에디터 완전 초기화 호출');
+
+  try {
+    const { resetEditorStateCompletely } = useEditorCoreStore.getState();
+    resetEditorStateCompletely();
+
+    console.log('✅ [STORE_EXTERNAL] 외부 완전 초기화 완료');
+  } catch (error) {
+    console.error('❌ [STORE_EXTERNAL] 외부 초기화 중 오류:', error);
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('editor-core-storage');
+      console.log('🗑️ [STORE_EXTERNAL] 직접 localStorage 삭제 완료');
+    }
+  }
+};

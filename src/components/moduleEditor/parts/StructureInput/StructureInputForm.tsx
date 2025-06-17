@@ -33,6 +33,9 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
   const [isValid, setIsValid] = useState(false);
   const isComposingRefs = useRef<{ [key: number]: boolean }>({});
 
+  //====여기부터 수정됨====
+  // 🔧 스토어와 로컬 상태 동기화를 useEffect로 분리
+  // 1. 렌더링과 사이드 이펙트 분리 2. 상태 업데이트 충돌 방지
   useEffect(() => {
     const currentSaved = getSectionInputs();
     if (Array.isArray(currentSaved) && currentSaved.length > 0) {
@@ -45,11 +48,33 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
     }
   }, [getSectionInputs]);
 
+  // 🔧 입력값 변경 시 스토어 동기화 useEffect
+  // 1. containerInputs 변경 시 스토어 업데이트 2. 렌더링 중 상태 업데이트 방지
+  useEffect(() => {
+    // 스토어의 현재 상태와 로컬 상태가 다를 때만 업데이트
+    const currentStoreInputs = getSectionInputs();
+    const needsSync =
+      !Array.isArray(currentStoreInputs) ||
+      currentStoreInputs.length !== containerInputs.length ||
+      currentStoreInputs.some(
+        (input, index) => input !== containerInputs[index]
+      );
+
+    if (needsSync) {
+      // 전체 배열을 한 번에 업데이트하여 개별 업데이트 충돌 방지
+      setSectionInputs(containerInputs);
+    }
+  }, [containerInputs, getSectionInputs, setSectionInputs]);
+  //====여기까지 수정됨====
+
   const handleInputChange = useCallback(
     (index: number, value: string) => {
       const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
       const validValue = typeof value === 'string' ? value : '';
 
+      //====여기부터 수정됨====
+      // 🔧 상태 업데이트만 수행하고 스토어 동기화는 useEffect에서 처리
+      // 1. 렌더링 중 사이드 이펙트 제거 2. 상태 업데이트 충돌 방지
       setContainerInputs((prev) => {
         const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
         const newInputs = [...safePrev];
@@ -58,6 +83,7 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
           newInputs[validIndex] = validValue;
         }
 
+        // 유효성 검사만 수행하고 스토어 업데이트는 제거
         const validCount = newInputs.filter(
           (input) => typeof input === 'string' && input.trim().length > 0
         ).length;
@@ -65,12 +91,12 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
 
         setIsValid(valid);
 
-        updateSectionInput(validIndex, validValue);
-
+        // updateSectionInput 호출 제거 - useEffect에서 처리
         return newInputs;
       });
+      //====여기까지 수정됨====
     },
-    [updateSectionInput]
+    [] // updateSectionInput 의존성 제거
   );
 
   const handleCompositionStart = useCallback((index: number) => {
@@ -90,20 +116,26 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
   );
 
   const addInput = useCallback(() => {
+    //====여기부터 수정됨====
+    // 🔧 상태 업데이트만 수행하고 스토어 동기화는 useEffect에서 처리
     setContainerInputs((prev) => {
       const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
       const newInputs = [...safePrev, ''];
-
-      addSectionInput();
 
       const newIndex = safePrev.length;
       isComposingRefs.current[newIndex] = false;
 
       return newInputs;
     });
+
+    // 스토어 업데이트는 별도로 수행
+    addSectionInput();
+    //====여기까지 수정됨====
   }, [addSectionInput]);
 
   const removeInput = useCallback(() => {
+    //====여기부터 수정됨====
+    // 🔧 상태 업데이트와 스토어 업데이트 분리
     setContainerInputs((prev) => {
       const safePrev = Array.isArray(prev) ? prev : ['', '', '', ''];
 
@@ -118,11 +150,17 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
       const removedIndex = safePrev.length - 1;
       delete isComposingRefs.current[removedIndex];
 
-      removeSectionInput(removedIndex);
-
       return newInputs;
     });
-  }, [removeSectionInput]);
+
+    // 스토어 업데이트는 별도로 수행
+    const currentInputs = containerInputs;
+    if (currentInputs.length > 2) {
+      const removedIndex = currentInputs.length - 1;
+      removeSectionInput(removedIndex);
+    }
+    //====여기까지 수정됨====
+  }, [removeSectionInput, containerInputs]);
 
   const handleComplete = useCallback(() => {
     const safeInputs = Array.isArray(containerInputs) ? containerInputs : [];
@@ -160,17 +198,19 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
         </p>
       </div>
 
+      {/*====여기부터 수정됨====*/}
+      {/* 🔧 디버그 정보 업데이트 - 렌더링 중 상태 업데이트 방지 기능 추가 */}
       <div className="p-3 text-xs border border-green-200 rounded-lg bg-green-50">
         <div className="mb-2 font-semibold text-green-800">
-          ✅ 섹션 입력값 저장 기능 추가! 구조수정 시 값 유지됨!
+          ✅ 렌더링 중 상태 업데이트 에러 수정 완료!
         </div>
         <div className="grid grid-cols-2 gap-4 text-green-700">
           <div>
-            <strong>개선사항:</strong>
-            <br />• 섹션 입력값 Zustand 저장
-            <br />• 구조수정 시 값 복원
-            <br />• 실시간 상태 동기화
-            <br />• 타입 안전성 강화
+            <strong>수정사항:</strong>
+            <br />• 렌더링/사이드이펙트 분리
+            <br />• useEffect로 스토어 동기화
+            <br />• 상태 업데이트 충돌 방지
+            <br />• 안전한 비동기 처리
           </div>
           <div>
             <strong>현재 상태:</strong>
@@ -180,6 +220,7 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
           </div>
         </div>
       </div>
+      {/*====여기까지 수정됨====*/}
 
       <SectionExamples />
 
