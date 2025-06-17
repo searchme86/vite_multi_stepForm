@@ -3,6 +3,12 @@ import StepControls from './controls/StepControls';
 import ParagraphEditor from './paragraph/ParagraphEditor';
 import ContainerManager from './container/ContainerManager';
 import PreviewPanel from './preview/PreviewPanel';
+import { MarkdownCompleteButton } from '../../../../bridges/parts/MarkdownCompleteButton';
+//====여기부터 수정됨====
+import { MarkdownStatusCard } from '../../../../bridges/parts/MarkdownStatusCard';
+import { MarkdownResultToast } from '../../../../bridges/parts/MarkdownResultToast';
+import { QuickStatusBar } from '../../../../bridges/parts/QuickStatusBar';
+//====여기까지 수정됨====
 
 type SubStep = 'structure' | 'writing';
 
@@ -112,12 +118,127 @@ function WritingStep({
 
   return (
     <div className="space-y-4">
-      <StepControls
-        sortedContainers={sortedContainers}
-        goToStructureStep={goToStructureStep}
-        saveAllToContext={saveAllToContext}
-        completeEditor={completeEditor}
+      {/*====여기부터 수정됨====*/}
+      {/* 상단 빠른 상태바 (데스크톱 전용) */}
+      {!isMobile && (
+        <QuickStatusBar
+          position="top"
+          variant="minimal"
+          showProgressBar={true}
+          showQuickActions={true}
+          showStatistics={false}
+          collapsible={true}
+          onQuickTransfer={completeEditor}
+          onShowDetails={() => {
+            console.log('⚡ [WRITING_STEP] 상세 정보 보기 요청');
+            // TODO: MarkdownStatusCard 모달/패널 표시 기능 추가 예정
+          }}
+          className="backdrop-blur-sm"
+        />
+      )}
+
+      {/* 마크다운 전송 결과 토스트 알림 - 전역 표시 */}
+      <MarkdownResultToast
+        position={isMobile ? 'top-center' : 'top-right'}
+        defaultDuration={5000}
+        maxToasts={3}
+        className="z-50"
+        onToastClick={(toast) => {
+          console.log(
+            '🍞 [WRITING_STEP] 토스트 클릭:',
+            toast.type,
+            toast.title
+          );
+          // TODO: 클릭 시 상세 정보 모달 표시 등 추가 기능 구현 예정
+        }}
+        onToastClose={(toast) => {
+          console.log(
+            '🍞 [WRITING_STEP] 토스트 닫힘:',
+            toast.type,
+            toast.title
+          );
+        }}
       />
+      {/*====여기까지 수정됨====*/}
+
+      <div
+        className={`flex flex-col space-y-4 ${!isMobile ? 'pt-8' : ''}`}
+        style={{
+          paddingBottom: isMobile ? '80px' : '0', // 하단 상태바를 위한 여백
+        }}
+      >
+        <StepControls
+          sortedContainers={sortedContainers}
+          goToStructureStep={goToStructureStep}
+          saveAllToContext={saveAllToContext}
+          completeEditor={completeEditor}
+        />
+
+        {/*====여기부터 수정됨====*/}
+        {/* 브릿지 UI 섹션 - 마크다운 생성 상태 표시 및 완성 버튼 */}
+        <div
+          className="pt-4 border-t border-gray-200"
+          role="region"
+          aria-labelledby="markdown-bridge-section"
+        >
+          <div className="flex flex-col space-y-4">
+            {/* 섹션 제목 */}
+            <h3
+              id="markdown-bridge-section"
+              className="text-sm font-medium text-gray-700"
+            >
+              마크다운 생성
+            </h3>
+
+            {/* 상태 카드 - 실시간 브릿지 상태 표시 */}
+            <div
+              className="w-full"
+              role="status"
+              aria-live="polite"
+              aria-label="마크다운 생성 상태 정보"
+            >
+              <MarkdownStatusCard
+                size={isMobile ? 'compact' : 'standard'}
+                variant="bordered"
+                hideValidationDetails={isMobile}
+                hideErrorsWarnings={isMobile}
+                className={`
+                  transition-all duration-200
+                  ${isMobile ? 'text-sm' : ''}
+                  focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-opacity-50
+                `}
+                onClick={() => {
+                  console.log(
+                    '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
+                  );
+                  // TODO: 상세 모달이나 패널 표시 기능 추가 예정
+                }}
+              />
+            </div>
+
+            {/* 완성 버튼 */}
+            <div
+              className="w-full"
+              role="group"
+              aria-labelledby="markdown-complete-section"
+            >
+              <MarkdownCompleteButton
+                buttonText="마크다운 완성하기"
+                size="medium"
+                variant="primary"
+                fullWidth={isMobile}
+                onCompleteSuccess={completeEditor}
+                showDetailedStatus={true}
+                className={`
+                  transition-all duration-200
+                  ${isMobile ? 'text-sm py-3' : 'py-2'}
+                `}
+              />
+            </div>
+          </div>
+        </div>
+        {/*====여기까지 수정됨====*/}
+      </div>
 
       <div
         className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-4`}
@@ -268,6 +389,26 @@ function WritingStep({
           `,
         }}
       />
+
+      {/*====여기부터 수정됨====*/}
+      {/* 하단 빠른 상태바 (모바일 전용) */}
+      {isMobile && (
+        <QuickStatusBar
+          position="bottom"
+          variant="tab-bar"
+          showProgressBar={true}
+          showQuickActions={true}
+          showStatistics={true}
+          collapsible={false}
+          onQuickTransfer={completeEditor}
+          onShowDetails={() => {
+            console.log('⚡ [WRITING_STEP] 모바일 상세 정보 보기 요청');
+            // TODO: 모바일용 상세 정보 바텀시트/모달 표시 기능 추가 예정
+          }}
+          className="border-t border-gray-200 backdrop-blur-sm"
+        />
+      )}
+      {/*====여기까지 수정됨====*/}
     </div>
   );
 }
