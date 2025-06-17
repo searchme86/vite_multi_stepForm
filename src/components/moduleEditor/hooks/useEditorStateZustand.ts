@@ -698,6 +698,8 @@ const useEditorStateImpl = (props?: UseEditorStateProps) => {
       paragraphs: currentParagraphs.length,
     });
 
+    console.log('여기5<-------,paragraphsToSave', paragraphsToSave);
+
     showToastFunction({
       title: '저장 완료',
       description: '모든 내용이 저장되었습니다.',

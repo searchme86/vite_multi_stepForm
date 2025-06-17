@@ -4,13 +4,14 @@ import { LocalParagraph } from '../../types/paragraph';
 import { Container } from '../../types/container';
 
 // ✨ [ZUSTAND 추가] context 대신 zustand 스토어 import 추가
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
+
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 
 // ✨ [개선] 타입 import를 상단에서 명시적으로 가져오기
 import {
   ParagraphBlock,
   Container as ZustandContainer,
-} from '../../store/shared/commonTypes';
+} from '../../../../store/shared/commonTypes';
 
 // ✨ [ZUSTAND 추가] 타입 변환 헬퍼 함수들
 const convertFromZustandParagraph = (

@@ -73,6 +73,10 @@ export function saveAllToContext(
       })
     );
     updateEditorParagraphs(contextParagraphsToSave);
+    console.log(
+      '여기3<-------,contextParagraphsToSave',
+      contextParagraphsToSave
+    );
 
     console.log('💾 [SAVE] Context 저장 완료:', {
       containers: currentLocalContainers.length,

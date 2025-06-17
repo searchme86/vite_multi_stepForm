@@ -30,6 +30,11 @@ const saveCurrentProgress = (
       paragraphs: currentParagraphs.length, // 1. 저장된 단락 개수 로깅 2. 데이터 양 확인
     });
 
+    console.log(
+      '<-------저장 버튼을 누르면 나오는 곳, 6월 16일 월요일',
+      paragraphsToSave
+    );
+
     // 1. 사용자에게 저장 완료 알림 2. 성공적인 작업 피드백 제공
     showToastFunction({
       title: '저장 완료',

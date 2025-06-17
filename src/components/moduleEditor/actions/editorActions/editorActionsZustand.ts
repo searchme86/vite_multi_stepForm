@@ -329,6 +329,8 @@ export function saveAllToContext(
       paragraphs: localParagraphs.length,
     });
 
+    console.log('여기4<-------,contextParagraphs', contextParagraphs);
+
     addToast({
       title: '저장 완료',
       description: '모든 내용이 저장되었습니다.',

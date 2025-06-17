@@ -2,7 +2,7 @@
 
 import { LocalParagraph } from '../../types/paragraph';
 import { Container } from '../../types/container';
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 import {
   convertFromZustandContainer,
   convertFromZustandParagraph,

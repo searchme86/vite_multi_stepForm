@@ -1,7 +1,7 @@
 // 📁 actions/containerActions/containerSorting.ts
 
 import { Container } from '../../types/container';
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 import { convertFromZustandContainer } from './containerTypeConverters';
 
 /**
