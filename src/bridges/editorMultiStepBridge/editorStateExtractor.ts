@@ -1,4 +1,4 @@
-// 📁 bridges/editorMultiStepBridge/editorStateExtractor.ts
+// bridges/editorMultiStepBridge/editorStateExtractor.ts
 
 import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
 import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
@@ -7,31 +7,31 @@ import { EditorStateSnapshotForBridge } from './bridgeTypes';
 export const createEditorStateExtractor = () => {
   const extractCurrentEditorStateSnapshot =
     (): EditorStateSnapshotForBridge | null => {
-      console.log('🔍 [BRIDGE] 에디터 상태 추출 시작');
-
       try {
-        const editorCoreStoreCurrentState = useEditorCoreStore.getState();
-        const editorUIStoreCurrentState = useEditorUIStore.getState();
+        let editorCoreStoreCurrentState;
+        let editorUIStoreCurrentState;
 
-        console.log(
-          '🔍 [DEBUG] 실제 Core 스토어 구조:',
-          editorCoreStoreCurrentState
-        );
-        console.log(
-          '🔍 [DEBUG] Core 스토어 키들:',
-          Object.keys(editorCoreStoreCurrentState)
-        );
-        console.log(
-          '🔍 [DEBUG] containers 값:',
-          editorCoreStoreCurrentState.containers
-        );
-        console.log(
-          '🔍 [DEBUG] paragraphs 값:',
-          editorCoreStoreCurrentState.paragraphs
-        );
+        try {
+          editorCoreStoreCurrentState = useEditorCoreStore.getState();
+        } catch (coreStoreError) {
+          console.error('❌ [BRIDGE] Core 스토어 접근 실패:', coreStoreError);
+          return null;
+        }
 
-        if (!editorCoreStoreCurrentState || !editorUIStoreCurrentState) {
-          console.error('❌ [BRIDGE] 에디터 스토어 상태가 존재하지 않음');
+        try {
+          editorUIStoreCurrentState = useEditorUIStore.getState();
+        } catch (uiStoreError) {
+          console.error('❌ [BRIDGE] UI 스토어 접근 실패:', uiStoreError);
+          return null;
+        }
+
+        const isStoreFullyInitialized =
+          typeof editorCoreStoreCurrentState === 'object' &&
+          typeof editorUIStoreCurrentState === 'object' &&
+          editorCoreStoreCurrentState !== null &&
+          editorUIStoreCurrentState !== null;
+
+        if (!isStoreFullyInitialized) {
           return null;
         }
 
@@ -41,13 +41,6 @@ export const createEditorStateExtractor = () => {
           completedContent: rawCompletedContent = '',
           isCompleted: rawCompletionStatus = false,
         } = editorCoreStoreCurrentState;
-
-        console.log('🔍 [DEBUG] 추출된 데이터:', {
-          rawContainerData,
-          rawParagraphData,
-          containerLength: rawContainerData?.length,
-          paragraphLength: rawParagraphData?.length,
-        });
 
         const {
           activeParagraphId: rawActiveParagraphId = null,
@@ -83,15 +76,6 @@ export const createEditorStateExtractor = () => {
           extractedTimestamp: Date.now(),
         };
 
-        console.log('✅ [BRIDGE] 에디터 상태 추출 완료:', {
-          containerCount: safeContainerArray.length,
-          paragraphCount: safeParagraphArray.length,
-          contentLength: safeCompletedContentString.length,
-          isCompleted: safeCompletionStatus,
-        });
-
-        console.log('🔍 [DEBUG] 최종 스냅샷:', standardizedEditorSnapshot);
-
         return standardizedEditorSnapshot;
       } catch (extractionError) {
         console.error('❌ [BRIDGE] 에디터 상태 추출 중 오류:', extractionError);
@@ -102,10 +86,7 @@ export const createEditorStateExtractor = () => {
   const validateExtractedSnapshotIntegrity = (
     snapshot: EditorStateSnapshotForBridge | null
   ): boolean => {
-    console.log('🔍 [BRIDGE] 추출된 상태 검증 시작');
-
     if (!snapshot) {
-      console.error('❌ [BRIDGE] 추출된 스냅샷이 null');
       return false;
     }
 
@@ -124,38 +105,39 @@ export const createEditorStateExtractor = () => {
     const hasValidTimestampNumber =
       typeof extractedTimestamp === 'number' && extractedTimestamp > 0;
 
-    const allValidationsPassed =
+    const basicValidation =
       hasValidContainerArray &&
       hasValidParagraphArray &&
       hasValidContentString &&
       hasValidCompletionBoolean &&
       hasValidTimestampNumber;
 
-    console.log('📊 [BRIDGE] 상태 검증 결과:', {
-      hasValidContainerArray,
-      hasValidParagraphArray,
-      hasValidContentString,
-      hasValidCompletionBoolean,
-      hasValidTimestampNumber,
-      overallValid: allValidationsPassed,
-    });
+    if (!basicValidation) {
+      return false;
+    }
 
-    return allValidationsPassed;
+    const isDataRangeValid =
+      editorContainers.length >= 0 &&
+      editorParagraphs.length >= 0 &&
+      extractedTimestamp <= Date.now();
+
+    return isDataRangeValid;
   };
 
   const getValidatedEditorStateSnapshot =
     (): EditorStateSnapshotForBridge | null => {
-      console.log('🎯 [BRIDGE] 검증된 에디터 상태 요청');
-
       const extractedState = extractCurrentEditorStateSnapshot();
-      const isStateValid = validateExtractedSnapshotIntegrity(extractedState);
 
-      if (!isStateValid) {
-        console.error('❌ [BRIDGE] 추출된 상태가 유효하지 않음');
+      if (!extractedState) {
         return null;
       }
 
-      console.log('✅ [BRIDGE] 검증된 에디터 상태 반환');
+      const isStateValid = validateExtractedSnapshotIntegrity(extractedState);
+
+      if (!isStateValid) {
+        return null;
+      }
+
       return extractedState;
     };
 

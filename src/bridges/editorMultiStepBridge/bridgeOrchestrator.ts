@@ -17,20 +17,18 @@ import { createMultiStepStateUpdater } from './multiStepStateUpdater';
 export const createEditorMultiStepBridgeOrchestrator = (
   customBridgeConfiguration?: Partial<BridgeSystemConfiguration>
 ) => {
-  console.log('🌉 [BRIDGE_ORCHESTRATOR] 브릿지 오케스트레이터 생성 시작');
-
   const defaultBridgeSystemConfiguration: BridgeSystemConfiguration = {
     enableValidation: true,
     enableErrorRecovery: true,
     validationMode: 'strict',
-    debugMode: true,
+    debugMode: false,
   };
 
   const {
     enableValidation = true,
     enableErrorRecovery = true,
     validationMode = 'strict',
-    debugMode = true,
+    debugMode = false,
   } = { ...defaultBridgeSystemConfiguration, ...customBridgeConfiguration };
 
   const finalBridgeConfiguration: BridgeSystemConfiguration = {
@@ -39,11 +37,6 @@ export const createEditorMultiStepBridgeOrchestrator = (
     validationMode,
     debugMode,
   };
-
-  console.log(
-    '🔧 [BRIDGE_ORCHESTRATOR] 브릿지 설정 적용:',
-    finalBridgeConfiguration
-  );
 
   const bridgeErrorManagementHandler = createBridgeErrorManagementHandler();
   const bridgeDataValidationHandler = createBridgeDataValidationHandler();
@@ -73,10 +66,14 @@ export const createEditorMultiStepBridgeOrchestrator = (
   const { performCompleteStateUpdate: executeCompleteMultiStepStateUpdate } =
     multiStepStateUpdaterHandler;
 
+  let preconditionCache = {
+    result: false,
+    timestamp: 0,
+    cacheTimeout: 1000,
+  };
+
   const executeBridgeDataTransferOperation =
     async (): Promise<BridgeOperationExecutionResult> => {
-      console.log('🚀 [BRIDGE_ORCHESTRATOR] 브릿지 데이터 전송 작업 시작');
-
       const operationStartTimestamp = performance.now();
       const operationErrorsList: BridgeOperationErrorDetails[] = [];
       const operationWarningsList: string[] = [];
@@ -84,7 +81,6 @@ export const createEditorMultiStepBridgeOrchestrator = (
         null;
 
       try {
-        console.log('📤 [BRIDGE_ORCHESTRATOR] 1단계: 에디터 상태 추출');
         const extractedEditorStateSnapshot = getValidatedEditorStateSnapshot();
 
         if (!extractedEditorStateSnapshot) {
@@ -108,10 +104,7 @@ export const createEditorMultiStepBridgeOrchestrator = (
           };
         }
 
-        console.log('✅ [BRIDGE_ORCHESTRATOR] 에디터 상태 추출 성공');
-
         if (enableValidation) {
-          console.log('🔍 [BRIDGE_ORCHESTRATOR] 2단계: 데이터 검증');
           const validationResultData =
             performComprehensiveEditorStateValidation(
               extractedEditorStateSnapshot
@@ -125,18 +118,9 @@ export const createEditorMultiStepBridgeOrchestrator = (
 
           if (nonCriticalValidationWarnings.length > 0) {
             operationWarningsList.push(...nonCriticalValidationWarnings);
-            console.warn(
-              '⚠️ [BRIDGE_ORCHESTRATOR] 검증 경고 발견:',
-              nonCriticalValidationWarnings
-            );
           }
 
           if (!isDataValidForTransfer) {
-            console.error(
-              '❌ [BRIDGE_ORCHESTRATOR] 데이터 검증 실패:',
-              criticalValidationErrors
-            );
-
             for (const singleValidationError of criticalValidationErrors) {
               const validationErrorDetails =
                 createStandardizedBridgeErrorDetails(
@@ -159,11 +143,8 @@ export const createEditorMultiStepBridgeOrchestrator = (
               operationDuration: totalOperationDuration,
             };
           }
-
-          console.log('✅ [BRIDGE_ORCHESTRATOR] 데이터 검증 통과');
         }
 
-        console.log('🔄 [BRIDGE_ORCHESTRATOR] 3단계: 데이터 변환');
         const transformationResultData =
           performCompleteEditorToMultiStepTransformation(
             extractedEditorStateSnapshot
@@ -175,11 +156,6 @@ export const createEditorMultiStepBridgeOrchestrator = (
         } = transformationResultData;
 
         if (!wasTransformationSuccessful) {
-          console.error(
-            '❌ [BRIDGE_ORCHESTRATOR] 데이터 변환 실패:',
-            transformationErrorMessages
-          );
-
           for (const singleTransformationError of transformationErrorMessages) {
             const transformationErrorDetails =
               createStandardizedBridgeErrorDetails(
@@ -203,10 +179,8 @@ export const createEditorMultiStepBridgeOrchestrator = (
           };
         }
 
-        console.log('✅ [BRIDGE_ORCHESTRATOR] 데이터 변환 성공');
         transferredDataResult = transformationResultData;
 
-        console.log('💾 [BRIDGE_ORCHESTRATOR] 4단계: 멀티스텝 상태 업데이트');
         const stateUpdateSuccessful = await executeCompleteMultiStepStateUpdate(
           transformationResultData
         );
@@ -232,13 +206,9 @@ export const createEditorMultiStepBridgeOrchestrator = (
           };
         }
 
-        console.log('✅ [BRIDGE_ORCHESTRATOR] 멀티스텝 상태 업데이트 성공');
-
         const operationEndTimestamp = performance.now();
         const totalOperationDuration =
           operationEndTimestamp - operationStartTimestamp;
-
-        console.log('🎉 [BRIDGE_ORCHESTRATOR] 브릿지 작업 완료 성공');
 
         return {
           operationSuccess: true,
@@ -248,11 +218,6 @@ export const createEditorMultiStepBridgeOrchestrator = (
           operationDuration: totalOperationDuration,
         };
       } catch (unexpectedBridgeError) {
-        console.error(
-          '💥 [BRIDGE_ORCHESTRATOR] 예상치 못한 브릿지 오류:',
-          unexpectedBridgeError
-        );
-
         const unexpectedErrorDetails = createStandardizedBridgeErrorDetails(
           unexpectedBridgeError,
           'GENERAL'
@@ -263,10 +228,6 @@ export const createEditorMultiStepBridgeOrchestrator = (
         if (enableErrorRecovery) {
           const recoveryStrategies = formulateErrorRecoveryStrategy(
             unexpectedErrorDetails
-          );
-          console.log(
-            '🔧 [BRIDGE_ORCHESTRATOR] 복구 전략 제안:',
-            recoveryStrategies
           );
           operationWarningsList.push(
             `복구 전략 제안: ${recoveryStrategies.join(', ')}`
@@ -288,13 +249,25 @@ export const createEditorMultiStepBridgeOrchestrator = (
     };
 
   const checkBridgeTransferPreconditions = (): boolean => {
-    console.log('🔍 [BRIDGE_ORCHESTRATOR] 브릿지 전송 사전 조건 확인');
+    const currentTime = Date.now();
+    const timeSinceLastCheck = currentTime - preconditionCache.timestamp;
+
+    if (timeSinceLastCheck < preconditionCache.cacheTimeout) {
+      return preconditionCache.result;
+    }
 
     try {
       const currentEditorStateSnapshot = getValidatedEditorStateSnapshot();
 
       if (!currentEditorStateSnapshot) {
-        console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 유효한 에디터 상태가 없음');
+        if (debugMode) {
+          console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패');
+        }
+        preconditionCache = {
+          result: false,
+          timestamp: currentTime,
+          cacheTimeout: 1000,
+        };
         return false;
       }
 
@@ -306,18 +279,36 @@ export const createEditorMultiStepBridgeOrchestrator = (
           preValidationResult;
 
         if (!preCheckValidForTransfer) {
-          console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패');
+          if (debugMode) {
+            console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패');
+          }
+          preconditionCache = {
+            result: false,
+            timestamp: currentTime,
+            cacheTimeout: 1000,
+          };
           return false;
         }
       }
 
-      console.log('✅ [BRIDGE_ORCHESTRATOR] 사전 조건 모두 충족');
+      preconditionCache = {
+        result: true,
+        timestamp: currentTime,
+        cacheTimeout: 1000,
+      };
       return true;
     } catch (preconditionError) {
-      console.error(
-        '❌ [BRIDGE_ORCHESTRATOR] 사전 조건 확인 중 오류:',
-        preconditionError
-      );
+      if (debugMode) {
+        console.error(
+          '❌ [BRIDGE_ORCHESTRATOR] 사전 조건 확인 중 오류:',
+          preconditionError
+        );
+      }
+      preconditionCache = {
+        result: false,
+        timestamp: currentTime,
+        cacheTimeout: 2000,
+      };
       return false;
     }
   };
@@ -328,11 +319,8 @@ export const createEditorMultiStepBridgeOrchestrator = (
 
   const triggerManualBridgeTransfer =
     async (): Promise<BridgeOperationExecutionResult> => {
-      console.log('🔧 [BRIDGE_ORCHESTRATOR] 수동 브릿지 전송 트리거');
       return await executeBridgeDataTransferOperation();
     };
-
-  console.log('✅ [BRIDGE_ORCHESTRATOR] 브릿지 오케스트레이터 생성 완료');
 
   return {
     executeBridgeTransfer: executeBridgeDataTransferOperation,
