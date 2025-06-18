@@ -1,3 +1,5 @@
+// useUserInfoFormSync.ts
+
 import { useCallback, useEffect, useRef } from 'react';
 import { useFormContext, FieldPath, FieldPathValue } from 'react-hook-form';
 import { useMultiStepFormState } from '../../../../reactHookForm/useMultiStepFormState';
@@ -92,8 +94,6 @@ const isValidToastColorType = (color: string): color is ToastColor => {
 };
 
 export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
-  console.log('🔄 useUserInfoFormSync: 폼 동기화 훅 초기화 시작');
-
   const { watch, setValue } = useFormContext<FormValues>();
 
   const {
@@ -110,6 +110,9 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
     userImage: '',
   });
 
+  const lastValidationTimeRef = useRef<Record<string, number>>({});
+  const validationTimeoutRef = useRef<number>();
+
   const watchedValues: UserInfoFormFields = {
     nickname: ensureWatchValue(watch('nickname')),
     emailPrefix: ensureWatchValue(watch('emailPrefix')),
@@ -118,72 +121,88 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
     userImage: ensureWatchValue(watch('userImage')),
   };
 
-  console.log('👀 useUserInfoFormSync: 현재 감시중인 값들', watchedValues);
+  const hasValueChanged = useCallback(
+    (key: string, newValue: unknown): boolean => {
+      const prevValue = previousValuesRef.current[key as UserInfoFieldKey];
 
-  Object.entries(watchedValues).forEach(([fieldName, value]) => {
-    if (!isStringValue(value)) {
-      console.warn(`⚠️ useUserInfoFormSync: ${fieldName} 값이 문자열이 아님`, {
-        fieldName,
-        value,
-        type: typeof value,
-      });
-    }
-  });
+      if (typeof newValue !== 'object' || newValue === null) {
+        return prevValue !== newValue;
+      }
+
+      if (Array.isArray(newValue) && Array.isArray(prevValue)) {
+        return (
+          newValue.length !== prevValue.length ||
+          newValue.some((item, index) => item !== prevValue[index])
+        );
+      }
+
+      try {
+        return JSON.stringify(newValue) !== JSON.stringify(prevValue);
+      } catch {
+        return true;
+      }
+    },
+    []
+  );
+
+  const performValidationWithThrottle = useCallback(
+    (fieldName: string, value: unknown, expectedType: string) => {
+      const now = Date.now();
+      const lastValidationTime = lastValidationTimeRef.current[fieldName] || 0;
+
+      if (now - lastValidationTime < 1000) {
+        return;
+      }
+
+      if (hasValueChanged(fieldName, value)) {
+        if (validationTimeoutRef.current) {
+          clearTimeout(validationTimeoutRef.current);
+        }
+
+        validationTimeoutRef.current = setTimeout(() => {
+          debugTypeCheck(value, expectedType);
+          lastValidationTimeRef.current[fieldName] = now;
+
+          if (isUserInfoField(fieldName) && isStringValue(value)) {
+            previousValuesRef.current[fieldName] = value;
+          }
+        }, 500);
+      }
+    },
+    [hasValueChanged]
+  );
 
   const isFormValueChanged = useCallback(
     (fieldName: string, newValue: string): boolean => {
-      debugTypeCheck(fieldName, 'string');
-      debugTypeCheck(newValue, 'string');
+      performValidationWithThrottle(fieldName, fieldName, 'string');
+      performValidationWithThrottle(`${fieldName}_value`, newValue, 'string');
 
       if (!isStringValue(fieldName) || !isStringValue(newValue)) {
-        console.log('❌ isFormValueChanged: 입력 값이 문자열이 아님', {
-          fieldName,
-          newValue,
-          fieldNameType: typeof fieldName,
-          newValueType: typeof newValue,
-        });
         return false;
       }
 
       if (!isValidFormFieldName(fieldName)) {
-        console.log('❌ isFormValueChanged: 유효하지 않은 필드명', fieldName);
         return false;
       }
 
       if (!isUserInfoField(fieldName)) {
-        console.log('❌ isFormValueChanged: UserInfo 필드가 아님', fieldName);
         return false;
       }
 
       const previousValue = previousValuesRef.current[fieldName];
       const hasChanged = previousValue !== newValue;
 
-      console.log('🔍 isFormValueChanged: 값 변경 확인', {
-        fieldName,
-        previousValue,
-        newValue,
-        hasChanged,
-      });
-
       return hasChanged;
     },
-    []
+    [performValidationWithThrottle]
   );
 
   const debouncedStoreUpdate = useCallback(
     createDebounce((key: string, value: string) => {
-      console.log('💾 debouncedStoreUpdate: zustand 스토어 업데이트 실행', {
-        key,
-        value,
-      });
-      debugTypeCheck(key, 'string');
-      debugTypeCheck(value, 'string');
+      performValidationWithThrottle(key, key, 'string');
+      performValidationWithThrottle(`${key}_value`, value, 'string');
 
       if (!isStringValue(key) || !isValidFormFieldName(key)) {
-        console.error('❌ debouncedStoreUpdate: 유효하지 않은 키', {
-          key,
-          keyType: typeof key,
-        });
         return;
       }
 
@@ -200,8 +219,6 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
             };
           }
         }
-
-        console.log('✅ debouncedStoreUpdate: 업데이트 성공', { key, value });
       } catch (error) {
         console.error('❌ debouncedStoreUpdate: 업데이트 실패', error);
 
@@ -211,35 +228,30 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
           color: 'danger' satisfies ToastColor,
         });
       }
-    }, 300),
-    [storeUpdateFormValue, storeAddToast]
+    }, 500),
+    [storeUpdateFormValue, storeAddToast, performValidationWithThrottle]
   );
 
   useEffect(() => {
-    console.log('🔄 useUserInfoFormSync: 실시간 동기화 실행');
-
-    Object.entries(watchedValues).forEach(([fieldName, value]) => {
-      if (!isStringValue(fieldName) || !isStringValue(value)) {
-        console.warn('⚠️ useUserInfoFormSync: 필드명 또는 값이 문자열이 아님', {
-          fieldName,
-          value,
-          fieldNameType: typeof fieldName,
-          valueType: typeof value,
-        });
-        return;
+    const fieldsToSync = Object.entries(watchedValues).filter(
+      ([fieldName, value]) => {
+        if (!isStringValue(fieldName) || !isStringValue(value)) {
+          return false;
+        }
+        return true;
       }
+    );
 
-      if (
-        isValidFormField<FormValues>(fieldName, value) &&
-        isFormValueChanged(fieldName, value)
-      ) {
-        console.log(
-          `🔄 useUserInfoFormSync: ${fieldName} 필드 변경 감지`,
-          value
-        );
-        debouncedStoreUpdate(fieldName, value);
-      }
-    });
+    if (fieldsToSync.length > 0) {
+      fieldsToSync.forEach(([fieldName, value]) => {
+        if (
+          isValidFormField<FormValues>(fieldName, value) &&
+          isFormValueChanged(fieldName, value)
+        ) {
+          debouncedStoreUpdate(fieldName, value);
+        }
+      });
+    }
   }, [watchedValues, isFormValueChanged, debouncedStoreUpdate]);
 
   const updateFormValue = useCallback(
@@ -247,15 +259,10 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
       key: K,
       value: FieldPathValue<FormValues, K>
     ) => {
-      console.log('📝 updateFormValue: 직접 폼 값 업데이트', { key, value });
-      debugTypeCheck(key, 'string');
-      debugTypeCheck(value, typeof value);
+      performValidationWithThrottle(key, key, 'string');
+      performValidationWithThrottle(`${key}_value`, value, typeof value);
 
       if (!isStringValue(key) || !isValidFormFieldName(key)) {
-        console.error('❌ updateFormValue: 유효하지 않은 키', {
-          key,
-          keyType: typeof key,
-        });
         storeAddToast({
           title: '입력 오류',
           description: '유효하지 않은 필드명입니다.',
@@ -277,8 +284,6 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
             [key]: value,
           };
         }
-
-        console.log('✅ updateFormValue: 직접 업데이트 성공', { key, value });
       } catch (error) {
         console.error('❌ updateFormValue: 직접 업데이트 실패', error);
         storeAddToast({
@@ -288,13 +293,17 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
         });
       }
     },
-    [setValue, storeUpdateFormValue, storeAddToast]
+    [
+      setValue,
+      storeUpdateFormValue,
+      storeAddToast,
+      performValidationWithThrottle,
+    ]
   );
 
   const addToast = useCallback(
     (options: { title: string; description: string; color: string }) => {
-      console.log('🍞 addToast: 토스트 메시지 추가', options);
-      debugTypeCheck(options, 'object');
+      performValidationWithThrottle('toast_options', options, 'object');
 
       const validatedColor: ToastColor = isValidToastColorType(options.color)
         ? options.color
@@ -313,10 +322,16 @@ export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
         color: validatedColor,
       });
     },
-    [storeAddToast]
+    [storeAddToast, performValidationWithThrottle]
   );
 
-  console.log('✅ useUserInfoFormSync: 폼 동기화 훅 초기화 완료');
+  useEffect(() => {
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     updateFormValue,

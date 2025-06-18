@@ -1,6 +1,6 @@
 // bridges/editorMultiStepBridge/useEditorMultiStepBridge.ts
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   BridgeSystemConfiguration,
   BridgeOperationExecutionResult,
@@ -38,6 +38,7 @@ export const useEditorMultiStepBridge = (
   const isInitializedRef = useRef(false);
   const lastTransferCheckRef = useRef<number>(0);
   const transferCheckCacheRef = useRef<boolean>(false);
+  const lastLogTimeRef = useRef<number>(0);
 
   const [bridgeHookInternalState, setBridgeHookInternalState] =
     useState<BridgeHookState>({
@@ -75,7 +76,7 @@ export const useEditorMultiStepBridge = (
 
       isInitializedRef.current = true;
     }
-  }, []);
+  }, [customBridgeConfiguration]);
 
   const {
     isTransferInProgress: currentTransferInProgress,
@@ -92,6 +93,40 @@ export const useEditorMultiStepBridge = (
   } = bridgeOrchestratorInstanceRef.current;
 
   const currentBridgeConfiguration = retrieveBridgeConfiguration();
+
+  const optimizedPreconditionsCheck = useMemo(() => {
+    try {
+      if (currentTransferInProgress) {
+        return {
+          isValid: false,
+          reason: 'TRANSFER_IN_PROGRESS',
+          shouldLog: false,
+        };
+      }
+
+      const preconditionsValid = validateTransferPreconditions();
+      return {
+        isValid: preconditionsValid,
+        reason: preconditionsValid ? 'VALID' : 'INVALID_CONDITIONS',
+        shouldLog: !preconditionsValid,
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        reason: 'VALIDATION_ERROR',
+        shouldLog: true,
+        error,
+      };
+    }
+  }, [currentTransferInProgress, validateTransferPreconditions]);
+
+  const logWithThrottle = useCallback((message: string, data?: any) => {
+    const now = Date.now();
+    if (now - lastLogTimeRef.current > 5000) {
+      console.warn(message, data);
+      lastLogTimeRef.current = now;
+    }
+  }, []);
 
   const executeSingleBridgeTransferOperation =
     useCallback(async (): Promise<void> => {
@@ -113,8 +148,6 @@ export const useEditorMultiStepBridge = (
           operationSuccess: wasTransferOperationSuccessful,
           operationErrors: transferOperationErrors = [],
           operationWarnings: transferOperationWarnings = [],
-          transferredData: finalTransferredData,
-          operationDuration: totalTransferDuration,
         } = bridgeTransferExecutionResult;
 
         setBridgeHookInternalState((previousHookState) => ({
@@ -161,27 +194,23 @@ export const useEditorMultiStepBridge = (
     const currentTime = Date.now();
     const timeSinceLastCheck = currentTime - lastTransferCheckRef.current;
 
-    if (timeSinceLastCheck < 500) {
+    if (timeSinceLastCheck < 1000) {
       return transferCheckCacheRef.current;
     }
 
-    if (currentTransferInProgress) {
-      transferCheckCacheRef.current = false;
-      lastTransferCheckRef.current = currentTime;
-      return false;
+    if (
+      !optimizedPreconditionsCheck.isValid &&
+      optimizedPreconditionsCheck.shouldLog
+    ) {
+      logWithThrottle(
+        `⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패: ${optimizedPreconditionsCheck.reason}`
+      );
     }
 
-    try {
-      const preconditionsValid = validateTransferPreconditions();
-      transferCheckCacheRef.current = preconditionsValid;
-      lastTransferCheckRef.current = currentTime;
-      return preconditionsValid;
-    } catch (error) {
-      transferCheckCacheRef.current = false;
-      lastTransferCheckRef.current = currentTime;
-      return false;
-    }
-  }, [currentTransferInProgress, validateTransferPreconditions]);
+    transferCheckCacheRef.current = optimizedPreconditionsCheck.isValid;
+    lastTransferCheckRef.current = currentTime;
+    return optimizedPreconditionsCheck.isValid;
+  }, [optimizedPreconditionsCheck, logWithThrottle]);
 
   const resetAllBridgeHookState = useCallback((): void => {
     setBridgeHookInternalState({
@@ -195,13 +224,11 @@ export const useEditorMultiStepBridge = (
     setIsAutoTransferActive(false);
     transferCheckCacheRef.current = false;
     lastTransferCheckRef.current = 0;
+    lastLogTimeRef.current = 0;
   }, []);
 
   const toggleAutoTransferState = useCallback((): void => {
-    setIsAutoTransferActive((previous) => {
-      const newState = !previous;
-      return newState;
-    });
+    setIsAutoTransferActive((previous) => !previous);
   }, []);
 
   return {
