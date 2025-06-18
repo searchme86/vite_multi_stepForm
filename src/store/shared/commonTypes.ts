@@ -1,3 +1,5 @@
+// 📁 store/shared/commonTypes.ts
+
 export interface Container {
   id: string;
   name: string;
@@ -5,6 +7,7 @@ export interface Container {
   createdAt: Date;
 }
 
+// ✅ ParagraphBlock에 originalId 속성 추가 (에러 해결)
 export interface ParagraphBlock {
   id: string;
   content: string;
@@ -12,6 +15,7 @@ export interface ParagraphBlock {
   order: number;
   createdAt: Date;
   updatedAt: Date;
+  originalId?: string; // ✅ 원본 단락 ID 추적용 (선택적 속성)
 }
 
 export interface EditorState {

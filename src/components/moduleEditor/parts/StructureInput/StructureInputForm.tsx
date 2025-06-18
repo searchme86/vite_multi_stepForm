@@ -94,18 +94,93 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
     removeSpecificSectionInput(lastInputIndex);
   }, [removeSpecificSectionInput, validatedSectionInputs.length]);
 
+  // const handleFormSubmissionComplete = useCallback(() => {
+  //   const filteredValidInputs = validatedSectionInputs.filter((singleInput) => {
+  //     const validInput = typeof singleInput === 'string' ? singleInput : '';
+  //     return validInput.trim().length > 0;
+  //   });
+
+  //   handleStructureComplete(filteredValidInputs);
+
+  //   if (typeof onStructureComplete === 'function') {
+  //     onStructureComplete(filteredValidInputs);
+  //   }
+  // }, [validatedSectionInputs, onStructureComplete]);
+
+  // 📁 StructureInputForm.tsx 또는 NextStepButton.tsx
+  // ✅ 디버깅용 코드 (임시로 추가해서 문제 파악)
+
   const handleFormSubmissionComplete = useCallback(() => {
-    const filteredValidInputs = validatedSectionInputs.filter((singleInput) => {
-      const validInput = typeof singleInput === 'string' ? singleInput : '';
-      return validInput.trim().length > 0;
+    console.log('🚀 [NEXT_STEP_BUTTON] handleFormSubmissionComplete 시작');
+
+    // ✅ 입력 데이터 상세 디버깅
+    console.log('📊 [NEXT_STEP_BUTTON] 입력 데이터 분석:', {
+      originalInputs: validatedSectionInputs,
+      originalCount: validatedSectionInputs?.length || 0,
+      inputTypes: validatedSectionInputs?.map((input) => typeof input),
     });
 
-    handleStructureComplete(filteredValidInputs);
+    const filteredValidInputs = validatedSectionInputs.filter((singleInput) => {
+      const validInput = typeof singleInput === 'string' ? singleInput : '';
+      const isValid = validInput.trim().length > 0;
+
+      console.log(`📝 [NEXT_STEP_BUTTON] 입력 검증:`, {
+        input: singleInput,
+        validInput,
+        trimmedLength: validInput.trim().length,
+        isValid,
+      });
+
+      return isValid;
+    });
+
+    console.log('✅ [NEXT_STEP_BUTTON] 필터링 결과:', {
+      filteredCount: filteredValidInputs.length,
+      filteredInputs: filteredValidInputs,
+      isMinimumMet: filteredValidInputs.length >= 2,
+    });
+
+    // ✅ 최소 조건 확인
+    if (filteredValidInputs.length < 2) {
+      console.error('❌ [NEXT_STEP_BUTTON] 최소 조건 미충족:', {
+        required: 2,
+        actual: filteredValidInputs.length,
+      });
+      return;
+    }
+
+    // ✅ handleStructureComplete 호출 전 로그
+    console.log('📞 [NEXT_STEP_BUTTON] handleStructureComplete 호출 시작');
+    try {
+      handleStructureComplete(filteredValidInputs);
+      console.log('✅ [NEXT_STEP_BUTTON] handleStructureComplete 완료');
+    } catch (error) {
+      console.error(
+        '❌ [NEXT_STEP_BUTTON] handleStructureComplete 실패:',
+        error
+      );
+    }
+
+    // ✅ onStructureComplete 호출 전 로그
+    console.log('📞 [NEXT_STEP_BUTTON] onStructureComplete 확인:', {
+      isFunction: typeof onStructureComplete === 'function',
+      hasCallback: !!onStructureComplete,
+    });
 
     if (typeof onStructureComplete === 'function') {
-      onStructureComplete(filteredValidInputs);
+      try {
+        console.log('📞 [NEXT_STEP_BUTTON] onStructureComplete 호출 시작');
+        onStructureComplete(filteredValidInputs);
+        console.log('✅ [NEXT_STEP_BUTTON] onStructureComplete 완료');
+      } catch (error) {
+        console.error('❌ [NEXT_STEP_BUTTON] onStructureComplete 실패:', error);
+      }
+    } else {
+      console.warn('⚠️ [NEXT_STEP_BUTTON] onStructureComplete가 함수가 아님');
     }
-  }, [validatedSectionInputs, onStructureComplete]);
+
+    console.log('🏁 [NEXT_STEP_BUTTON] handleFormSubmissionComplete 완료');
+  }, [validatedSectionInputs, handleStructureComplete, onStructureComplete]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

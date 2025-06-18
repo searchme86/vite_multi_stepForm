@@ -1,15 +1,18 @@
+// 📁 hooks/useEditorState/editorStateTypes.ts
+
 import {
   Container,
   ParagraphBlock,
   ToastOptions,
 } from '../../../../store/shared/commonTypes';
 import { SubStep } from '../../types/editor';
+// ✅ types/paragraph.ts에서 LocalParagraph import (타입 충돌 해결)
+import { LocalParagraph } from '../../types/paragraph';
 
 // 🔥 [Context 제거] Zustand 전용 타입 정의
 
-// 로컬에서 사용하는 단락 타입 별칭
-// 1. ParagraphBlock과 동일하지만 명확한 역할 구분 2. 로컬 상태 관리용 타입
-type LocalParagraph = ParagraphBlock;
+// ✅ LocalParagraph는 별도 파일에서 import하여 사용 (타입 일관성 보장)
+// ❌ 제거된 코드: type LocalParagraph = ParagraphBlock;
 
 // ✨ [Zustand 전용] Store 액션 타입 정의들
 

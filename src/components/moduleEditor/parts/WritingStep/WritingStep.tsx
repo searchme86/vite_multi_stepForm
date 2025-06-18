@@ -82,7 +82,7 @@ function WritingStep({
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
 }: WritingStepProps) {
-  console.log('✍️ [WRITING_STEP] 컴포넌트 렌더링:', {
+  console.log('✍️ [WRITING_STEP] 컴포넌트 렌더링 (Zustand 통합):', {
     localContainers: localContainers.length,
     localParagraphs: localParagraphs.length,
     currentSubStep: internalState.currentSubStep,
@@ -127,9 +127,10 @@ function WritingStep({
     return result;
   }, [localContainers]);
 
+  // ✅ 3-2. handleUpdateParagraphContent 로직 단순화
   const handleUpdateParagraphContent = useCallback(
     (id: string, content: string) => {
-      console.log('📝 [WRITING_STEP] 단락 내용 업데이트 요청:', {
+      console.log('📝 [WRITING_STEP] 단락 내용 업데이트 요청 (단순화):', {
         paragraphId: id,
         contentLength: content?.length || 0,
         contentPreview:
@@ -138,6 +139,7 @@ function WritingStep({
         timestamp: new Date().toISOString(),
       });
 
+      // 기본 검증만 수행
       if (!id || typeof id !== 'string') {
         console.error('❌ [WRITING_STEP] 잘못된 단락 ID:', id);
         return;
@@ -151,45 +153,14 @@ function WritingStep({
         return;
       }
 
-      const existingParagraph = localParagraphs.find((p) => p.id === id);
-      if (!existingParagraph) {
-        console.warn('⚠️ [WRITING_STEP] 존재하지 않는 단락:', id);
-        return;
-      }
-
-      if (existingParagraph.content === content) {
-        console.log('ℹ️ [WRITING_STEP] 동일한 내용, 업데이트 스킵');
-        return;
-      }
-
       try {
-        if (
-          updateLocalParagraphContent &&
-          typeof updateLocalParagraphContent === 'function'
-        ) {
-          updateLocalParagraphContent(id, content);
+        // 직접 전달 (복잡한 로직 제거)
+        updateLocalParagraphContent(id, content);
 
-          console.log('✅ [WRITING_STEP] 단락 내용 업데이트 성공:', {
-            paragraphId: id,
-            contentLength: content?.length || 0,
-          });
-
-          if (internalState.activeParagraphId !== id) {
-            console.log('🎯 [WRITING_STEP] 업데이트 후 단락 활성화:', id);
-            setInternalState((prev) => ({
-              ...prev,
-              activeParagraphId: id,
-            }));
-          }
-        } else {
-          console.error(
-            '❌ [WRITING_STEP] updateLocalParagraphContent가 함수가 아님:',
-            {
-              type: typeof updateLocalParagraphContent,
-              value: updateLocalParagraphContent,
-            }
-          );
-        }
+        console.log('✅ [WRITING_STEP] 단락 내용 업데이트 성공:', {
+          paragraphId: id,
+          contentLength: content?.length || 0,
+        });
       } catch (error) {
         console.error('❌ [WRITING_STEP] 단락 내용 업데이트 실패:', {
           paragraphId: id,
@@ -197,12 +168,7 @@ function WritingStep({
         });
       }
     },
-    [
-      updateLocalParagraphContent,
-      localParagraphs,
-      internalState.activeParagraphId,
-      setInternalState,
-    ]
+    [updateLocalParagraphContent]
   );
 
   const handleToggleParagraphSelection = useCallback(
