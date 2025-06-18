@@ -1,6 +1,6 @@
-// 📁 editor/parts/WritingStep/WritingStep.tsx
+// 📁 src/components/moduleEditor/parts/WritingStep/WritingStep.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import StepControls from './controls/StepControls';
 import ParagraphEditor from './paragraph/ParagraphEditor';
 import ContainerManager from './container/ContainerManager';
@@ -86,6 +86,8 @@ function WritingStep({
     localContainers: localContainers.length,
     localParagraphs: localParagraphs.length,
     currentSubStep: internalState.currentSubStep,
+    updateLocalParagraphContentType: typeof updateLocalParagraphContent,
+    timestamp: new Date().toISOString(),
   });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -107,16 +109,205 @@ function WritingStep({
     };
   }, []);
 
-  const unassignedParagraphs = getLocalUnassignedParagraphs();
-  const sortedContainers = [...localContainers].sort(
-    (a, b) => a.order - b.order
+  const unassignedParagraphs = useMemo(() => {
+    const result = getLocalUnassignedParagraphs();
+    console.log('📊 [WRITING_STEP] 미할당 단락 계산:', {
+      total: localParagraphs.length,
+      unassigned: result.length,
+    });
+    return result;
+  }, [getLocalUnassignedParagraphs, localParagraphs.length]);
+
+  const sortedContainers = useMemo(() => {
+    const result = [...localContainers].sort((a, b) => a.order - b.order);
+    console.log('📊 [WRITING_STEP] 정렬된 컨테이너:', {
+      original: localContainers.length,
+      sorted: result.length,
+    });
+    return result;
+  }, [localContainers]);
+
+  const handleUpdateParagraphContent = useCallback(
+    (id: string, content: string) => {
+      console.log('📝 [WRITING_STEP] 단락 내용 업데이트 요청:', {
+        paragraphId: id,
+        contentLength: content?.length || 0,
+        contentPreview:
+          content?.substring(0, 50) + (content?.length > 50 ? '...' : ''),
+        updateFunctionType: typeof updateLocalParagraphContent,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!id || typeof id !== 'string') {
+        console.error('❌ [WRITING_STEP] 잘못된 단락 ID:', id);
+        return;
+      }
+
+      if (typeof content !== 'string') {
+        console.error('❌ [WRITING_STEP] 잘못된 내용 타입:', {
+          content,
+          type: typeof content,
+        });
+        return;
+      }
+
+      const existingParagraph = localParagraphs.find((p) => p.id === id);
+      if (!existingParagraph) {
+        console.warn('⚠️ [WRITING_STEP] 존재하지 않는 단락:', id);
+        return;
+      }
+
+      if (existingParagraph.content === content) {
+        console.log('ℹ️ [WRITING_STEP] 동일한 내용, 업데이트 스킵');
+        return;
+      }
+
+      try {
+        if (
+          updateLocalParagraphContent &&
+          typeof updateLocalParagraphContent === 'function'
+        ) {
+          updateLocalParagraphContent(id, content);
+
+          console.log('✅ [WRITING_STEP] 단락 내용 업데이트 성공:', {
+            paragraphId: id,
+            contentLength: content?.length || 0,
+          });
+
+          if (internalState.activeParagraphId !== id) {
+            console.log('🎯 [WRITING_STEP] 업데이트 후 단락 활성화:', id);
+            setInternalState((prev) => ({
+              ...prev,
+              activeParagraphId: id,
+            }));
+          }
+        } else {
+          console.error(
+            '❌ [WRITING_STEP] updateLocalParagraphContent가 함수가 아님:',
+            {
+              type: typeof updateLocalParagraphContent,
+              value: updateLocalParagraphContent,
+            }
+          );
+        }
+      } catch (error) {
+        console.error('❌ [WRITING_STEP] 단락 내용 업데이트 실패:', {
+          paragraphId: id,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    },
+    [
+      updateLocalParagraphContent,
+      localParagraphs,
+      internalState.activeParagraphId,
+      setInternalState,
+    ]
   );
 
-  console.log('📊 [WRITING_STEP] 상태 계산:', {
-    unassignedParagraphs: unassignedParagraphs.length,
-    sortedContainers: sortedContainers.length,
-    isMobile,
-  });
+  const handleToggleParagraphSelection = useCallback(
+    (id: string) => {
+      console.log('☑️ [WRITING_STEP] 단락 선택 토글:', {
+        paragraphId: id,
+        currentlySelected: internalState.selectedParagraphIds.includes(id),
+        toggleFunctionType: typeof toggleParagraphSelection,
+      });
+
+      if (
+        toggleParagraphSelection &&
+        typeof toggleParagraphSelection === 'function'
+      ) {
+        try {
+          toggleParagraphSelection(id);
+          console.log('✅ [WRITING_STEP] 단락 선택 토글 성공');
+        } catch (error) {
+          console.error('❌ [WRITING_STEP] 단락 선택 토글 실패:', error);
+        }
+      } else {
+        console.error(
+          '❌ [WRITING_STEP] toggleParagraphSelection이 함수가 아님:',
+          {
+            type: typeof toggleParagraphSelection,
+            value: toggleParagraphSelection,
+          }
+        );
+      }
+    },
+    [internalState.selectedParagraphIds, toggleParagraphSelection]
+  );
+
+  const paragraphEditorProps = useMemo(
+    () => ({
+      isMobile,
+      unassignedParagraphs,
+      internalState,
+      sortedContainers,
+      addLocalParagraph,
+      deleteLocalParagraph,
+      updateLocalParagraphContent: handleUpdateParagraphContent,
+      toggleParagraphSelection: handleToggleParagraphSelection,
+      addToLocalContainer,
+      setTargetContainerId,
+      setInternalState,
+    }),
+    [
+      isMobile,
+      unassignedParagraphs,
+      internalState,
+      sortedContainers,
+      addLocalParagraph,
+      deleteLocalParagraph,
+      handleUpdateParagraphContent,
+      handleToggleParagraphSelection,
+      addToLocalContainer,
+      setTargetContainerId,
+      setInternalState,
+    ]
+  );
+
+  const containerManagerProps = useMemo(
+    () => ({
+      isMobile,
+      sortedContainers,
+      getLocalParagraphsByContainer,
+      moveLocalParagraphInContainer,
+      activateEditor,
+    }),
+    [
+      isMobile,
+      sortedContainers,
+      getLocalParagraphsByContainer,
+      moveLocalParagraphInContainer,
+      activateEditor,
+    ]
+  );
+
+  const previewPanelProps = useMemo(
+    () => ({
+      internalState,
+      sortedContainers,
+      getLocalParagraphsByContainer,
+      renderMarkdown,
+      activateEditor,
+      togglePreview,
+    }),
+    [
+      internalState,
+      sortedContainers,
+      getLocalParagraphsByContainer,
+      renderMarkdown,
+      activateEditor,
+      togglePreview,
+    ]
+  );
+
+  const totalParagraphCount = useMemo(() => {
+    return localParagraphs.length;
+  }, [localParagraphs.length]);
+
+  const assignedParagraphCount = useMemo(() => {
+    return localParagraphs.filter((p) => p.containerId !== null).length;
+  }, [localParagraphs]);
 
   return (
     <div className="space-y-4">
@@ -233,37 +424,34 @@ function WritingStep({
         className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-4`}
         style={{ height: '70vh' }}
       >
-        <ParagraphEditor
-          isMobile={isMobile}
-          unassignedParagraphs={unassignedParagraphs}
-          internalState={internalState}
-          sortedContainers={sortedContainers}
-          addLocalParagraph={addLocalParagraph}
-          deleteLocalParagraph={deleteLocalParagraph}
-          updateLocalParagraphContent={updateLocalParagraphContent}
-          toggleParagraphSelection={toggleParagraphSelection}
-          addToLocalContainer={addToLocalContainer}
-          setTargetContainerId={setTargetContainerId}
-          setInternalState={setInternalState}
-        />
+        <div className={`${isMobile ? 'w-full' : 'flex-1'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
+            <div className="text-sm text-gray-500">
+              미할당: {unassignedParagraphs.length}개 / 전체:{' '}
+              {totalParagraphCount}개
+            </div>
+          </div>
+          <ParagraphEditor {...paragraphEditorProps} />
+        </div>
 
-        <ContainerManager
-          isMobile={isMobile}
-          sortedContainers={sortedContainers}
-          getLocalParagraphsByContainer={getLocalParagraphsByContainer}
-          moveLocalParagraphInContainer={moveLocalParagraphInContainer}
-          activateEditor={activateEditor}
-        />
+        <div
+          className={`${isMobile ? 'w-full' : 'w-96'} ${
+            !isMobile ? 'border-l border-gray-200' : ''
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">📁 구조 관리</h3>
+            <div className="text-sm text-gray-500">
+              할당: {assignedParagraphCount}개 / {sortedContainers.length}개
+              섹션
+            </div>
+          </div>
+          <ContainerManager {...containerManagerProps} />
+        </div>
       </div>
 
-      <PreviewPanel
-        internalState={internalState}
-        sortedContainers={sortedContainers}
-        getLocalParagraphsByContainer={getLocalParagraphsByContainer}
-        renderMarkdown={renderMarkdown}
-        activateEditor={activateEditor}
-        togglePreview={togglePreview}
-      />
+      <PreviewPanel {...previewPanelProps} />
 
       <style
         dangerouslySetInnerHTML={{

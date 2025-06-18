@@ -247,15 +247,111 @@ const useEditorStateImpl = () => {
     stableAddToast,
   ]);
 
+  // 🆕 직접 상태 업데이트 방식으로 변경
   const updateLocalParagraphContent = useCallback(
     (id: string, content: string) => {
-      const actionFn = updateParagraphContent(
-        setManagedParagraphCollection,
-        stableAddToast
+      console.log('📝 [USE_EDITOR_STATE] 단락 내용 업데이트 시작:', {
+        paragraphId: id,
+        contentLength: content?.length || 0,
+        contentPreview:
+          content?.substring(0, 50) + (content?.length > 50 ? '...' : ''),
+        currentParagraphsCount: managedParagraphCollection.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!id || typeof id !== 'string') {
+        console.error('❌ [USE_EDITOR_STATE] 잘못된 단락 ID:', id);
+        return;
+      }
+
+      if (typeof content !== 'string') {
+        console.error('❌ [USE_EDITOR_STATE] 잘못된 내용 타입:', {
+          content,
+          type: typeof content,
+        });
+        return;
+      }
+
+      // 🆕 현재 단락 찾기
+      const existingParagraph = managedParagraphCollection.find(
+        (p) => p.id === id
       );
-      actionFn(id, content);
+      if (!existingParagraph) {
+        console.warn('⚠️ [USE_EDITOR_STATE] 존재하지 않는 단락:', id);
+        return;
+      }
+
+      // 🆕 동일한 내용인지 확인
+      if (existingParagraph.content === content) {
+        console.log('ℹ️ [USE_EDITOR_STATE] 동일한 내용, 업데이트 스킵');
+        return;
+      }
+
+      console.log('🔄 [USE_EDITOR_STATE] 상태 업데이트 실행:', {
+        paragraphId: id,
+        oldContent: existingParagraph.content?.substring(0, 50),
+        newContent: content?.substring(0, 50),
+        oldLength: existingParagraph.content?.length || 0,
+        newLength: content?.length || 0,
+      });
+
+      try {
+        // 🆕 직접 상태 업데이트
+        setManagedParagraphCollection((previousParagraphs) => {
+          const updatedParagraphs = previousParagraphs.map((paragraph) => {
+            if (paragraph.id === id) {
+              console.log('✅ [USE_EDITOR_STATE] 단락 업데이트 중:', {
+                paragraphId: id,
+                oldContentLength: paragraph.content?.length || 0,
+                newContentLength: content?.length || 0,
+              });
+
+              return {
+                ...paragraph,
+                content: content,
+                updatedAt: new Date(),
+              };
+            }
+            return paragraph;
+          });
+
+          console.log('🎉 [USE_EDITOR_STATE] 상태 업데이트 완료:', {
+            paragraphId: id,
+            totalParagraphs: updatedParagraphs.length,
+            updatedParagraph: updatedParagraphs.find((p) => p.id === id),
+          });
+
+          return updatedParagraphs;
+        });
+
+        // 🆕 토스트 알림 (유효한 내용일 때만)
+        if (content && content.trim().length > 10) {
+          stableAddToast({
+            title: '자동 저장됨',
+            description: `단락 내용이 저장되었습니다. (${content.length}자)`,
+            color: 'primary',
+          });
+        }
+
+        console.log('✅ [USE_EDITOR_STATE] 단락 내용 업데이트 성공:', {
+          paragraphId: id,
+          contentLength: content?.length || 0,
+        });
+      } catch (error) {
+        console.error('❌ [USE_EDITOR_STATE] 단락 내용 업데이트 실패:', {
+          paragraphId: id,
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : 'No stack',
+        });
+
+        stableAddToast({
+          title: '저장 실패',
+          description: '단락 내용 저장 중 오류가 발생했습니다.',
+          color: 'danger',
+        });
+      }
     },
-    [stableAddToast]
+    [managedParagraphCollection, stableAddToast]
   );
 
   const deleteLocalParagraph = useCallback(

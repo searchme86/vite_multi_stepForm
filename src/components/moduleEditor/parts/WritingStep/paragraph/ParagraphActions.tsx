@@ -1,4 +1,4 @@
-// 📁 editor/parts/WritingStep/paragraph/ParagraphActions.tsx
+// 📁 src/components/moduleEditor/parts/WritingStep/paragraph/ParagraphActions.tsx
 
 import React, { useCallback, useMemo } from 'react';
 import { Button } from '@heroui/react';
@@ -56,24 +56,127 @@ function ParagraphActions({
     [internalState.selectedParagraphIds, paragraph.id]
   );
 
-  const isButtonDisabled = useMemo(
-    () =>
-      !isSelected ||
-      !internalState.targetContainerId ||
-      !paragraph.content.trim(),
-    [isSelected, internalState.targetContainerId, paragraph.content]
+  console.log('=== 컨테이너 ID 불일치 디버깅 ===');
+  console.log(
+    '현재 선택된 targetContainerId:',
+    internalState.targetContainerId
   );
+  console.log('실제 존재하는 컨테이너들:');
+  sortedContainers.forEach((container, index) => {
+    console.log(`  ${index}: ${container.id} - ${container.name}`);
+  });
 
-  const selectValue = useMemo(
-    () => (isSelected ? internalState.targetContainerId : ''),
-    [isSelected, internalState.targetContainerId]
+  const targetContainerExists = sortedContainers.some(
+    (c) => c.id === internalState.targetContainerId
   );
+  console.log('선택된 컨테이너가 실제로 존재하는가?', targetContainerExists);
+
+  React.useEffect(() => {
+    if (
+      internalState.targetContainerId &&
+      !targetContainerExists &&
+      sortedContainers.length > 0
+    ) {
+      console.log(
+        '🔧 [AUTO_FIX] 존재하지 않는 컨테이너 ID 감지, 자동 초기화:',
+        internalState.targetContainerId
+      );
+      if (setTargetContainerId && typeof setTargetContainerId === 'function') {
+        setTargetContainerId('');
+        console.log('✅ [AUTO_FIX] targetContainerId 초기화 완료');
+      }
+    }
+  }, [
+    internalState.targetContainerId,
+    targetContainerExists,
+    sortedContainers.length,
+    setTargetContainerId,
+  ]);
+
+  const getContentValidation = useMemo(() => {
+    const content = paragraph.content || '';
+    const trimmedContent = content.trim();
+    const htmlContent = content.replace(/<[^>]*>/g, '').trim();
+
+    const isOnlyHtml = content.length > 0 && htmlContent.length === 0;
+
+    const hasPlaceholder =
+      content.includes('여기에 내용을 입력하세요') ||
+      content.includes('마크다운을 작성해보세요') ||
+      content.includes('텍스트를 입력하세요');
+
+    const hasMedia =
+      content.includes('![') ||
+      content.includes('](') ||
+      content.includes('<img');
+
+    const hasMinimalContent = htmlContent.length > 0 || hasMedia;
+
+    return {
+      originalLength: content.length,
+      trimmedLength: trimmedContent.length,
+      htmlContentLength: htmlContent.length,
+      isOnlyHtml,
+      hasPlaceholder,
+      hasMedia,
+      hasMinimalContent,
+      isValid: (hasMinimalContent && !hasPlaceholder) || hasMedia,
+      isEmpty: content.length === 0 || isOnlyHtml,
+    };
+  }, [paragraph.content]);
+
+  console.log('🔍 [NEW] 콘텐츠 검증 상세:', getContentValidation);
+
+  const isButtonDisabled = useMemo(() => {
+    const basicRequirements =
+      !isSelected || !internalState.targetContainerId || !targetContainerExists;
+
+    if (basicRequirements) return true;
+
+    if (getContentValidation.isEmpty && !getContentValidation.hasMedia) {
+      return true;
+    }
+
+    if (getContentValidation.hasPlaceholder && !getContentValidation.hasMedia) {
+      return true;
+    }
+
+    return false;
+  }, [
+    isSelected,
+    internalState.targetContainerId,
+    targetContainerExists,
+    getContentValidation,
+  ]);
+
+  console.log('✅ [FINAL] isButtonDisabled (수정됨):', isButtonDisabled);
+
+  const selectValue =
+    isSelected && targetContainerExists ? internalState.targetContainerId : '';
+
+  console.log('selectValue (수정됨):', selectValue);
+
+  const getButtonText = () => {
+    if (!isSelected) return '단락 선택 필요';
+    if (!internalState.targetContainerId) return '컨테이너 선택 필요';
+    if (getContentValidation.isEmpty && !getContentValidation.hasMedia)
+      return '내용 입력 필요';
+    if (getContentValidation.hasPlaceholder && !getContentValidation.hasMedia)
+      return '실제 내용 입력 필요';
+    return '컨테이너에 추가';
+  };
+
+  const getButtonColor = () => {
+    if (isButtonDisabled) return 'default';
+    return 'success';
+  };
 
   const handleContainerSelect = useCallback(
     (containerId: string) => {
       console.log('🎯 [PARAGRAPH_ACTIONS] 컨테이너 선택:', {
         containerId,
         paragraphId: paragraph.id,
+        paragraphContent: paragraph.content,
         setTargetContainerIdType: typeof setTargetContainerId,
         setTargetContainerIdValue: setTargetContainerId,
       });
@@ -129,14 +232,21 @@ function ParagraphActions({
         );
       }
     },
-    [paragraph.id, isSelected, setTargetContainerId, toggleParagraphSelection]
+    [
+      paragraph.id,
+      paragraph.content,
+      isSelected,
+      setTargetContainerId,
+      toggleParagraphSelection,
+    ]
   );
 
   const handleAddToContainer = useCallback(() => {
     console.log('➕ [PARAGRAPH_ACTIONS] 추가 버튼 클릭:', {
       isSelected,
       targetContainerId: internalState.targetContainerId,
-      hasContent: !!paragraph.content.trim(),
+      paragraphContent: paragraph.content,
+      contentValidation: getContentValidation,
       selectedParagraphs: internalState.selectedParagraphIds,
     });
 
@@ -150,13 +260,26 @@ function ParagraphActions({
       return;
     }
 
-    if (!paragraph.content.trim()) {
-      console.warn('⚠️ [PARAGRAPH_ACTIONS] 단락 내용이 비어있음');
+    if (getContentValidation.isEmpty && !getContentValidation.hasMedia) {
+      console.warn(
+        '⚠️ [PARAGRAPH_ACTIONS] 내용이 비어있습니다 (이미지나 텍스트 필요)'
+      );
+      console.log('📝 [DEBUG] 현재 내용:', `"${paragraph.content}"`);
       return;
     }
 
+    if (getContentValidation.hasPlaceholder && !getContentValidation.hasMedia) {
+      console.warn(
+        '⚠️ [PARAGRAPH_ACTIONS] 플레이스홀더 텍스트만 있음, 실제 내용을 입력해주세요'
+      );
+      return;
+    }
+
+    console.log('✅ [PARAGRAPH_ACTIONS] 모든 검증 통과, 컨테이너에 추가 진행');
+
     if (typeof addToLocalContainer === 'function') {
       addToLocalContainer();
+      console.log('🎉 [PARAGRAPH_ACTIONS] addToLocalContainer 호출 완료');
     } else {
       console.error(
         '❌ [PARAGRAPH_ACTIONS] addToLocalContainer가 함수가 아님:',
@@ -168,6 +291,8 @@ function ParagraphActions({
     internalState.targetContainerId,
     internalState.selectedParagraphIds,
     paragraph.content,
+    paragraph.id,
+    getContentValidation,
     addToLocalContainer,
   ]);
 
@@ -176,6 +301,7 @@ function ParagraphActions({
       const selectedContainerId = e.target.value;
       console.log('📝 [PARAGRAPH_ACTIONS] 드롭다운 변경:', {
         selectedContainerId,
+        previousContainerId: internalState.targetContainerId,
         setTargetContainerIdType: typeof setTargetContainerId,
       });
 
@@ -190,7 +316,11 @@ function ParagraphActions({
         }
       }
     },
-    [handleContainerSelect, setTargetContainerId]
+    [
+      handleContainerSelect,
+      setTargetContainerId,
+      internalState.targetContainerId,
+    ]
   );
 
   return (
@@ -211,14 +341,49 @@ function ParagraphActions({
 
       <Button
         type="button"
-        color="success"
+        color={getButtonColor()}
         size="sm"
         onPress={handleAddToContainer}
         isDisabled={isButtonDisabled}
         aria-label="선택된 단락을 컨테이너에 추가"
+        title={
+          getContentValidation.isEmpty && !getContentValidation.hasMedia
+            ? '단락에 내용을 입력해주세요'
+            : !isSelected
+            ? '단락을 선택해주세요'
+            : !internalState.targetContainerId
+            ? '컨테이너를 선택해주세요'
+            : getContentValidation.hasPlaceholder &&
+              !getContentValidation.hasMedia
+            ? '플레이스홀더 대신 실제 내용을 입력해주세요'
+            : '컨테이너에 추가'
+        }
       >
-        추가
+        {getButtonText()}
       </Button>
+
+      {isButtonDisabled && (
+        <div className="flex items-center ml-2 text-xs text-gray-500">
+          {getContentValidation.isEmpty && !getContentValidation.hasMedia && (
+            <span className="text-orange-600">📝 내용을 입력하세요</span>
+          )}
+          {!getContentValidation.isEmpty && !isSelected && (
+            <span className="text-blue-600">☑️ 단락을 선택하세요</span>
+          )}
+          {!getContentValidation.isEmpty &&
+            isSelected &&
+            !internalState.targetContainerId && (
+              <span className="text-purple-600">📂 컨테이너를 선택하세요</span>
+            )}
+          {!getContentValidation.isEmpty &&
+            isSelected &&
+            internalState.targetContainerId &&
+            getContentValidation.hasPlaceholder &&
+            !getContentValidation.hasMedia && (
+              <span className="text-yellow-600">✏️ 실제 내용을 입력하세요</span>
+            )}
+        </div>
+      )}
     </div>
   );
 }

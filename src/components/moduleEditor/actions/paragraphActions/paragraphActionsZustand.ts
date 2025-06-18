@@ -1,3 +1,5 @@
+// 📁 src/components/moduleEditor/actions/paragraphActions/paragraphActionsZustand.ts
+
 import { LocalParagraph } from '../../types/paragraph';
 import { Container } from '../../types/container';
 import { EditorInternalState } from '../../types/editor';
@@ -76,23 +78,32 @@ const convertFromZustandContainer = (
   };
 };
 
-const hasSignificantContent = (paragraphContent: string): boolean => {
+// 🆕 관대한 콘텐츠 검증
+const hasValidContent = (paragraphContent: string): boolean => {
   if (!paragraphContent || typeof paragraphContent !== 'string') {
     return false;
   }
 
   const trimmedContent = paragraphContent.trim();
+  if (trimmedContent.length === 0) return false;
 
-  if (trimmedContent.length === 0) {
-    return false;
-  }
+  // HTML 태그 제거 후 실제 텍스트 확인
+  const textContent = trimmedContent.replace(/<[^>]*>/g, '').trim();
 
-  const hasMinimumLength = trimmedContent.length >= 3;
-  const hasImages = trimmedContent.includes('![');
-  const hasLinks = trimmedContent.includes('[') && trimmedContent.includes(']');
-  const hasMarkdownSyntax = /[*#`_~]/.test(trimmedContent);
+  // 이미지, 링크 등 미디어 콘텐츠 확인
+  const hasMedia =
+    trimmedContent.includes('![') ||
+    trimmedContent.includes('](') ||
+    trimmedContent.includes('<img');
 
-  return hasMinimumLength || hasImages || hasLinks || hasMarkdownSyntax;
+  // 플레이스홀더 확인
+  const hasPlaceholder =
+    trimmedContent.includes('여기에 내용을 입력하세요') ||
+    trimmedContent.includes('마크다운을 작성해보세요') ||
+    trimmedContent.includes('텍스트를 입력하세요');
+
+  // 미디어가 있거나, 텍스트가 있고 플레이스홀더가 아닌 경우
+  return hasMedia || (textContent.length > 0 && !hasPlaceholder);
 };
 
 interface ToastMessage {
@@ -116,6 +127,15 @@ export function addLocalParagraph(
     React.SetStateAction<EditorInternalState>
   >
 ) {
+  console.log('➕ [PARAGRAPH_ACTIONS_ZUSTAND] 새 단락 추가 요청:', {
+    hasContext: !!(
+      currentLocalParagraphs &&
+      updateLocalParagraphs &&
+      updateInternalState
+    ),
+    timestamp: new Date().toISOString(),
+  });
+
   if (currentLocalParagraphs && updateLocalParagraphs && updateInternalState) {
     try {
       const newParagraphToAdd: LocalParagraph = {
@@ -138,6 +158,8 @@ export function addLocalParagraph(
         ...previousState,
         activeParagraphId: newParagraphToAdd.id,
       }));
+
+      console.log('✅ [CONTEXT] 새 단락 추가 성공:', newParagraphToAdd.id);
     } catch (contextError) {
       console.error('❌ [CONTEXT] 단락 생성 실패:', contextError);
     }
@@ -165,6 +187,8 @@ export function addLocalParagraph(
 
       editorCoreStoreActions.addParagraph(zustandParagraphToAdd);
       editorUIStoreActions.setActiveParagraphId(newParagraphToAdd.id);
+
+      console.log('✅ [ZUSTAND] 새 단락 추가 성공:', newParagraphToAdd.id);
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 단락 생성 실패:', zustandError);
     }
@@ -185,32 +209,159 @@ export function updateLocalParagraphContent(
   newContentValue: string,
   updateLocalParagraphs?: React.Dispatch<React.SetStateAction<LocalParagraph[]>>
 ) {
+  console.log('📝 [PARAGRAPH_ACTIONS_ZUSTAND] 단락 내용 업데이트 시작:', {
+    paragraphId: targetParagraphId,
+    contentLength: newContentValue?.length || 0,
+    hasContext: !!updateLocalParagraphs,
+    contentPreview:
+      newContentValue?.substring(0, 100) +
+      (newContentValue?.length > 100 ? '...' : ''),
+    isValidContent: hasValidContent(newContentValue),
+    timestamp: new Date().toISOString(),
+  });
+
+  if (!targetParagraphId || typeof targetParagraphId !== 'string') {
+    console.error(
+      '❌ [PARAGRAPH_ACTIONS_ZUSTAND] 유효하지 않은 단락 ID:',
+      targetParagraphId
+    );
+    return;
+  }
+
+  if (typeof newContentValue !== 'string') {
+    console.error('❌ [PARAGRAPH_ACTIONS_ZUSTAND] 유효하지 않은 내용:', {
+      content: newContentValue,
+      type: typeof newContentValue,
+    });
+    return;
+  }
+
+  // 🆕 빈 내용이어도 허용 (사용자가 타이핑 중일 수 있음)
+  const sanitizedContent = newContentValue || '';
+
   if (updateLocalParagraphs) {
     try {
       updateLocalParagraphs((previousParagraphs) =>
-        previousParagraphs.map((currentParagraph) =>
-          currentParagraph.id === targetParagraphId
-            ? {
-                ...currentParagraph,
-                content: newContentValue || '',
-                updatedAt: new Date(),
-              }
-            : currentParagraph
-        )
+        previousParagraphs.map((currentParagraph) => {
+          if (currentParagraph.id === targetParagraphId) {
+            if (currentParagraph.content === sanitizedContent) {
+              console.log('ℹ️ [CONTEXT] 동일한 내용, 업데이트 스킵');
+              return currentParagraph;
+            }
+
+            console.log('🔄 [CONTEXT] 단락 내용 업데이트:', {
+              paragraphId: targetParagraphId,
+              oldLength: currentParagraph.content?.length || 0,
+              newLength: sanitizedContent?.length || 0,
+              isValid: hasValidContent(sanitizedContent),
+            });
+
+            return {
+              ...currentParagraph,
+              content: sanitizedContent,
+              updatedAt: new Date(),
+            };
+          }
+          return currentParagraph;
+        })
       );
+
+      console.log('✅ [CONTEXT] 단락 내용 업데이트 성공');
     } catch (contextError) {
       console.error('❌ [CONTEXT] 단락 내용 업데이트 실패:', contextError);
     }
   } else {
     try {
       const editorCoreStoreActions = useEditorCoreStore.getState();
-      editorCoreStoreActions.updateParagraphContent(
-        targetParagraphId,
-        newContentValue || ''
+      const editorUIStoreActions = useEditorUIStore.getState();
+
+      const existingParagraph = editorCoreStoreActions.paragraphs?.find(
+        (p) => p.id === targetParagraphId
       );
+
+      if (!existingParagraph) {
+        console.warn('⚠️ [ZUSTAND] 존재하지 않는 단락:', targetParagraphId);
+        return;
+      }
+
+      if (existingParagraph.content === sanitizedContent) {
+        console.log('ℹ️ [ZUSTAND] 동일한 내용, 업데이트 스킵');
+        return;
+      }
+
+      console.log('🔄 [ZUSTAND] 단락 내용 업데이트:', {
+        paragraphId: targetParagraphId,
+        oldLength: existingParagraph.content?.length || 0,
+        newLength: sanitizedContent?.length || 0,
+        isValid: hasValidContent(sanitizedContent),
+      });
+
+      const updateResult = editorCoreStoreActions.updateParagraphContent(
+        targetParagraphId,
+        sanitizedContent
+      );
+
+      if (editorUIStoreActions.activeParagraphId !== targetParagraphId) {
+        editorUIStoreActions.setActiveParagraphId(targetParagraphId);
+        console.log('🎯 [ZUSTAND] 업데이트 후 단락 활성화');
+      }
+
+      console.log('✅ [ZUSTAND] 단락 내용 업데이트 성공:', {
+        paragraphId: targetParagraphId,
+        contentLength: sanitizedContent?.length || 0,
+        updateResult,
+        isValid: hasValidContent(sanitizedContent),
+      });
+
+      // 🆕 유효한 내용이 있을 때만 성공 토스트
+      if (hasValidContent(sanitizedContent) && sanitizedContent.length > 50) {
+        const toastStoreActions = useToastStore.getState();
+        toastStoreActions.addToast({
+          title: '자동 저장됨',
+          description: `단락 내용이 저장되었습니다. (${sanitizedContent.length}자)`,
+          color: 'primary',
+        });
+      }
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 단락 내용 업데이트 실패:', zustandError);
+
+      const toastStoreActions = useToastStore.getState();
+      toastStoreActions.addToast({
+        title: '저장 실패',
+        description: '단락 내용 저장 중 오류가 발생했습니다.',
+        color: 'danger',
+      });
     }
+  }
+}
+
+// 🆕 실시간 동기화 함수 추가
+export function syncParagraphContentToStore(
+  targetParagraphId: string,
+  currentContent: string
+): void {
+  try {
+    const editorCoreStoreActions = useEditorCoreStore.getState();
+    const existingParagraph = editorCoreStoreActions.paragraphs?.find(
+      (p) => p.id === targetParagraphId
+    );
+
+    if (existingParagraph && existingParagraph.content !== currentContent) {
+      console.log('🔄 [SYNC] 실시간 동기화 실행:', {
+        paragraphId: targetParagraphId,
+        oldContent: existingParagraph.content?.substring(0, 30),
+        newContent: currentContent?.substring(0, 30),
+        contentLength: currentContent?.length || 0,
+      });
+
+      editorCoreStoreActions.updateParagraphContent(
+        targetParagraphId,
+        currentContent
+      );
+      console.log('✅ [SYNC] 실시간 동기화 완료');
+    }
+  } catch (error) {
+    console.error('❌ [SYNC] 실시간 동기화 실패:', error);
   }
 }
 
@@ -227,6 +378,11 @@ export function deleteLocalParagraph(
   >,
   showToastMessage?: (toastData: ToastMessage) => void
 ) {
+  console.log('🗑️ [PARAGRAPH_ACTIONS_ZUSTAND] 단락 삭제 요청:', {
+    paragraphId: targetParagraphId,
+    hasContext: !!(updateLocalParagraphs && showToastMessage),
+  });
+
   if (updateLocalParagraphs && showToastMessage) {
     try {
       updateLocalParagraphs((previousParagraphs) =>
@@ -240,6 +396,8 @@ export function deleteLocalParagraph(
         description: '선택한 단락이 삭제되었습니다.',
         color: 'success',
       });
+
+      console.log('✅ [CONTEXT] 단락 삭제 성공');
     } catch (contextError) {
       console.error('❌ [CONTEXT] 단락 삭제 실패:', contextError);
 
@@ -254,15 +412,50 @@ export function deleteLocalParagraph(
   } else {
     try {
       const editorCoreStoreActions = useEditorCoreStore.getState();
+      const editorUIStoreActions = useEditorUIStore.getState();
       const toastStoreActions = useToastStore.getState();
 
+      const paragraphToDelete = editorCoreStoreActions.paragraphs?.find(
+        (p) => p.id === targetParagraphId
+      );
+
+      if (!paragraphToDelete) {
+        console.warn(
+          '⚠️ [ZUSTAND] 삭제할 단락을 찾을 수 없음:',
+          targetParagraphId
+        );
+        toastStoreActions.addToast({
+          title: '단락 없음',
+          description: '삭제할 단락을 찾을 수 없습니다.',
+          color: 'warning',
+        });
+        return;
+      }
+
       editorCoreStoreActions.deleteParagraph(targetParagraphId);
+
+      if (editorUIStoreActions.activeParagraphId === targetParagraphId) {
+        editorUIStoreActions.setActiveParagraphId(null);
+        console.log('🧹 [ZUSTAND] 활성 단락 상태 초기화');
+      }
+
+      if (
+        editorUIStoreActions.selectedParagraphIds?.includes(targetParagraphId)
+      ) {
+        const newSelectedIds = editorUIStoreActions.selectedParagraphIds.filter(
+          (id) => id !== targetParagraphId
+        );
+        editorUIStoreActions.setSelectedParagraphIds(newSelectedIds);
+        console.log('🧹 [ZUSTAND] 선택 목록에서 제거');
+      }
 
       toastStoreActions.addToast({
         title: '단락 삭제',
         description: '선택한 단락이 삭제되었습니다.',
         color: 'success',
       });
+
+      console.log('✅ [ZUSTAND] 단락 삭제 성공');
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 단락 삭제 실패:', zustandError);
 
@@ -287,6 +480,11 @@ export function toggleParagraphSelection(
     React.SetStateAction<EditorInternalState>
   >
 ) {
+  console.log('☑️ [PARAGRAPH_ACTIONS_ZUSTAND] 단락 선택 토글:', {
+    paragraphId: targetParagraphId,
+    hasContext: !!updateInternalState,
+  });
+
   if (updateInternalState) {
     try {
       updateInternalState((previousState: EditorInternalState) => {
@@ -303,6 +501,12 @@ export function toggleParagraphSelection(
             )
           : [...currentlySelectedIds, targetParagraphId];
 
+        console.log('✅ [CONTEXT] 선택 상태 토글 완료:', {
+          paragraphId: targetParagraphId,
+          wasSelected: isCurrentlySelected,
+          newSelectedCount: updatedSelectedIds.length,
+        });
+
         return {
           ...restOfState,
           selectedParagraphIds: updatedSelectedIds,
@@ -314,7 +518,18 @@ export function toggleParagraphSelection(
   } else {
     try {
       const editorUIStoreActions = useEditorUIStore.getState();
+      const currentSelected = editorUIStoreActions.selectedParagraphIds || [];
+      const isCurrentlySelected = currentSelected.includes(targetParagraphId);
+
       editorUIStoreActions.toggleParagraphSelection(targetParagraphId);
+
+      console.log('✅ [ZUSTAND] 선택 상태 토글 완료:', {
+        paragraphId: targetParagraphId,
+        wasSelected: isCurrentlySelected,
+        newSelectedCount: isCurrentlySelected
+          ? currentSelected.length - 1
+          : currentSelected.length + 1,
+      });
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 단락 선택 토글 실패:', zustandError);
     }
@@ -346,6 +561,16 @@ export function addToLocalContainer(
   >,
   showToastMessage?: (toastData: ToastMessage) => void
 ) {
+  console.log('📂 [PARAGRAPH_ACTIONS_ZUSTAND] 컨테이너에 추가 요청:', {
+    hasContext: !!(
+      selectedParagraphIdsList &&
+      targetContainerIdentifier &&
+      currentLocalParagraphs
+    ),
+    selectedCount: selectedParagraphIdsList?.length || 0,
+    targetContainer: targetContainerIdentifier,
+  });
+
   if (
     selectedParagraphIdsList &&
     targetContainerIdentifier &&
@@ -397,6 +622,17 @@ export function addToLocalContainer(
         }
       );
 
+      // 🆕 관대한 검증 적용
+      const validParagraphs = selectedValidParagraphs.filter(
+        (paragraphItem) => {
+          const { content: paragraphContent = '' } = paragraphItem || {};
+          return (
+            hasValidContent(paragraphContent) ||
+            paragraphContent.trim().length === 0
+          ); // 빈 내용도 허용
+        }
+      );
+
       const emptyParagraphsList = selectedValidParagraphs.filter(
         (paragraphItem) => {
           const { content: paragraphContent = '' } = paragraphItem || {};
@@ -405,16 +641,14 @@ export function addToLocalContainer(
       );
 
       if (emptyParagraphsList.length > 0) {
-        if (emptyParagraphsList.length === selectedValidParagraphs.length) {
-          showToastMessage({
-            title: '빈 단락 추가됨',
-            description: `${emptyParagraphsList.length}개의 빈 단락이 컨테이너에 추가됩니다. 나중에 내용을 입력할 수 있습니다.`,
-            color: 'primary',
-          });
-        }
+        showToastMessage({
+          title: '빈 단락 포함',
+          description: `${emptyParagraphsList.length}개의 빈 단락이 포함됩니다. 나중에 내용을 입력할 수 있습니다.`,
+          color: 'primary',
+        });
       }
 
-      const newParagraphCopies: LocalParagraph[] = selectedValidParagraphs.map(
+      const newParagraphCopies: LocalParagraph[] = validParagraphs.map(
         (originalParagraph, copyIndex) => {
           const { content: originalContent = '', id: originalId = '' } =
             originalParagraph || {};
@@ -457,6 +691,8 @@ export function addToLocalContainer(
         description: `${newParagraphCopies.length}개의 단락이 ${containerName} 컨테이너에 추가되었습니다.`,
         color: 'success',
       });
+
+      console.log('✅ [CONTEXT] 컨테이너에 단락 추가 성공');
     } catch (contextError) {
       console.error('❌ [CONTEXT] 컨테이너 추가 실패:', contextError);
 
@@ -525,6 +761,17 @@ export function addToLocalContainer(
         }
       );
 
+      // 🆕 관대한 검증 적용
+      const validParagraphs = selectedValidParagraphs.filter(
+        (paragraphItem) => {
+          const { content: paragraphContent = '' } = paragraphItem || {};
+          return (
+            hasValidContent(paragraphContent) ||
+            paragraphContent.trim().length === 0
+          ); // 빈 내용도 허용
+        }
+      );
+
       const emptyParagraphsList = selectedValidParagraphs.filter(
         (paragraphItem) => {
           const { content: paragraphContent = '' } = paragraphItem || {};
@@ -533,16 +780,14 @@ export function addToLocalContainer(
       );
 
       if (emptyParagraphsList.length > 0) {
-        if (emptyParagraphsList.length === selectedValidParagraphs.length) {
-          toastStoreActions.addToast({
-            title: '빈 단락 추가됨',
-            description: `${emptyParagraphsList.length}개의 빈 단락이 컨테이너에 추가됩니다. 나중에 내용을 입력할 수 있습니다.`,
-            color: 'primary',
-          });
-        }
+        toastStoreActions.addToast({
+          title: '빈 단락 포함',
+          description: `${emptyParagraphsList.length}개의 빈 단락이 포함됩니다. 나중에 내용을 입력할 수 있습니다.`,
+          color: 'primary',
+        });
       }
 
-      const newParagraphCopies: LocalParagraph[] = selectedValidParagraphs.map(
+      const newParagraphCopies: LocalParagraph[] = validParagraphs.map(
         (originalParagraph, copyIndex) => {
           const { content: originalContent = '', id: originalId = '' } =
             originalParagraph || {};
@@ -581,6 +826,8 @@ export function addToLocalContainer(
         description: `${newParagraphCopies.length}개의 단락이 ${containerName} 컨테이너에 추가되었습니다.`,
         color: 'success',
       });
+
+      console.log('✅ [ZUSTAND] 컨테이너에 단락 추가 성공');
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 컨테이너 추가 실패:', zustandError);
 
@@ -610,6 +857,12 @@ export function moveLocalParagraphInContainer(
   currentLocalParagraphs?: LocalParagraph[],
   updateLocalParagraphs?: React.Dispatch<React.SetStateAction<LocalParagraph[]>>
 ) {
+  console.log('↕️ [PARAGRAPH_ACTIONS_ZUSTAND] 단락 순서 변경:', {
+    paragraphId: targetParagraphId,
+    direction: moveDirection,
+    hasContext: !!(currentLocalParagraphs && updateLocalParagraphs),
+  });
+
   if (currentLocalParagraphs && updateLocalParagraphs) {
     try {
       const targetParagraphToMove = currentLocalParagraphs.find(
@@ -649,6 +902,7 @@ export function moveLocalParagraphInContainer(
         (moveDirection === 'down' &&
           currentPositionIndex === paragraphsInSameContainer.length - 1)
       ) {
+        console.log('ℹ️ [CONTEXT] 이동할 수 없는 위치 (경계)');
         return;
       }
 
@@ -685,6 +939,8 @@ export function moveLocalParagraphInContainer(
           return paragraphItem;
         })
       );
+
+      console.log('✅ [CONTEXT] 단락 순서 변경 성공');
     } catch (contextError) {
       console.error('❌ [CONTEXT] 단락 순서 변경 실패:', contextError);
     }
@@ -732,6 +988,7 @@ export function moveLocalParagraphInContainer(
         (moveDirection === 'down' &&
           currentPositionIndex === paragraphsInSameContainer.length - 1)
       ) {
+        console.log('ℹ️ [ZUSTAND] 이동할 수 없는 위치 (경계)');
         return;
       }
 
@@ -754,6 +1011,8 @@ export function moveLocalParagraphInContainer(
       editorCoreStoreActions.updateParagraph(swapTargetParagraph.id, {
         order: targetParagraphToMove.order || 0,
       });
+
+      console.log('✅ [ZUSTAND] 단락 순서 변경 성공');
     } catch (zustandError) {
       console.error('❌ [ZUSTAND] 단락 순서 변경 실패:', zustandError);
     }
