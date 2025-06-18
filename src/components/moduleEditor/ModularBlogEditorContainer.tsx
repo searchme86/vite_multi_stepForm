@@ -1,3 +1,6 @@
+// 📁 editor/ModularBlogEditorContainer.tsx
+// 🎯 **근본적 개선**: import 경로 정리 및 단일 데이터 소스 확정
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -13,18 +16,24 @@ import { useBridgeUI } from '../../bridges/hooks/useBridgeUI';
 import { resetEditorStoreCompletely } from '../../store/editorCore/editorCoreStore';
 import { resetEditorUIStoreCompletely } from '../../store/editorUI/editorUIStore';
 
+// ❌ **제거됨**: editorActionsZustand에서 handleStructureComplete import
+// import { handleStructureComplete } from './actions/editorActions/editorActionsZustand';
+
 function ModularBlogEditorContainer(): React.ReactNode {
   const isInitializedRef = useRef(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // ✅ **초기화**: 스토어 리셋
   useEffect(() => {
     if (!isInitializedRef.current) {
+      console.log('🔄 [CONTAINER] 에디터 스토어 초기화');
       resetEditorStoreCompletely();
       resetEditorUIStoreCompletely();
       isInitializedRef.current = true;
     }
   }, []);
 
+  // ✅ **단일 데이터 소스**: useEditorState만 사용
   const editorState = useEditorState();
 
   const {
@@ -37,7 +46,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     toggleParagraphSelection: toggleParagraphSelect,
     addToLocalContainer: addParagraphsToContainer,
     moveLocalParagraphInContainer: changeParagraphOrder,
-    handleStructureComplete: handleStructureCompleteInternal,
+    handleStructureComplete: handleStructureCompleteInternal, // ✅ useEditorState에서만 가져옴
     goToStructureStep: navigateToStructureStepInternal,
     saveAllToContext: saveCurrentProgress,
     completeEditor: finishEditing,
@@ -49,11 +58,19 @@ function ModularBlogEditorContainer(): React.ReactNode {
     getLocalParagraphsByContainer: getParagraphsByContainer,
   } = editorState;
 
+  console.log('🏗️ [CONTAINER] 컴포넌트 렌더링:', {
+    containers: currentContainers.length,
+    paragraphs: currentParagraphs.length,
+    currentStep: editorInternalState.currentSubStep,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
   const {
     currentSubStep: currentEditorStep,
     isTransitioning: isStepTransitioning,
   } = editorInternalState;
 
+  // ✅ **브릿지 설정**: 기존 로직 유지
   const bridgeConfig = {
     enableAutoTransfer: false,
     enableValidation: true,
@@ -72,10 +89,12 @@ function ModularBlogEditorContainer(): React.ReactNode {
     refreshValidationStatus: uiRefreshValidation,
   } = useBridgeUI(bridgeConfig);
 
+  // ✅ **Promise 기반 딜레이**: setTimeout 대신 사용
   const createPromiseDelay = useCallback((ms: number) => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }, []);
 
+  // ✅ **근본적 개선**: 상태 전환 로직 단순화
   const updateStepWithValidation = useCallback(
     async (targetStep: 'structure' | 'writing', actionName: string) => {
       console.log(`🔄 [CONTAINER] ${actionName} 시작:`, {
@@ -92,6 +111,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
       setIsTransitioning(true);
 
       try {
+        // ✅ **직접 상태 업데이트**: 복잡한 로직 제거
         if (updateEditorState) {
           updateEditorState((prev) => ({
             ...prev,
@@ -100,53 +120,21 @@ function ModularBlogEditorContainer(): React.ReactNode {
           }));
         }
 
-        await createPromiseDelay(200);
+        await createPromiseDelay(100); // 짧은 딜레이로 안정화
 
-        const finalStep = editorInternalState?.currentSubStep;
-        if (finalStep === targetStep) {
-          console.log(`✅ [CONTAINER] ${actionName} 성공:`, { finalStep });
-          setIsTransitioning(false);
-          return true;
-        } else {
-          console.warn(
-            `⚠️ [CONTAINER] ${actionName} 상태 불일치 - 강제 수정:`,
-            {
-              expected: targetStep,
-              actual: finalStep,
-            }
-          );
-
-          if (updateEditorState) {
-            updateEditorState({
-              currentSubStep: targetStep,
-              isTransitioning: false,
-              activeParagraphId: editorInternalState?.activeParagraphId || null,
-              isPreviewOpen: editorInternalState?.isPreviewOpen ?? true,
-              selectedParagraphIds:
-                editorInternalState?.selectedParagraphIds || [],
-              targetContainerId: editorInternalState?.targetContainerId || '',
-            });
-          }
-
-          console.log(`🔧 [CONTAINER] ${actionName} 강제 수정 완료`);
-          setIsTransitioning(false);
-          return true;
-        }
+        console.log(`✅ [CONTAINER] ${actionName} 성공`);
+        setIsTransitioning(false);
+        return true;
       } catch (error) {
         console.error(`❌ [CONTAINER] ${actionName} 실패:`, error);
         setIsTransitioning(false);
         return false;
       }
     },
-    [
-      currentEditorStep,
-      isTransitioning,
-      updateEditorState,
-      editorInternalState,
-      createPromiseDelay,
-    ]
+    [currentEditorStep, isTransitioning, updateEditorState, createPromiseDelay]
   );
 
+  // ✅ **근본적 개선**: 구조 설정 완료 로직 단순화
   const completeStructureSetup = useCallback(
     async (inputs: string[]) => {
       console.log('🏗️ [CONTAINER] 구조 설정 완료 프로세스 시작:', {
@@ -155,7 +143,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
       });
 
       if (isTransitioning) {
-        console.warn('⚠️ [CONTAINER] 구조 설정 - 전환 중이므로 중단');
+        console.warn('⚠️ [CONTAINER] 전환 중이므로 중단');
         return;
       }
 
@@ -172,67 +160,32 @@ function ModularBlogEditorContainer(): React.ReactNode {
           return;
         }
 
-        console.log('📞 [CONTAINER] 내부 구조 완료 핸들러 실행');
+        // ✅ **단일 함수 호출**: handleStructureCompleteInternal만 사용
+        console.log('📞 [CONTAINER] 구조 완료 핸들러 실행');
         handleStructureCompleteInternal(validInputs);
 
-        await createPromiseDelay(100);
-
-        const success = await updateStepWithValidation(
-          'writing',
-          '구조→글쓰기 전환'
-        );
-
-        if (success) {
-          console.log('✅ [CONTAINER] 구조 설정 완료 프로세스 성공');
-        } else {
-          console.error('❌ [CONTAINER] 구조 설정 완료 프로세스 실패');
-        }
+        // ✅ **자동 상태 전환**: useEditorState 내부에서 처리됨
+        console.log('✅ [CONTAINER] 구조 설정 완료 프로세스 성공');
       } catch (error) {
         console.error('❌ [CONTAINER] 구조 설정 완료 프로세스 에러:', error);
       }
     },
-    [
-      isTransitioning,
-      handleStructureCompleteInternal,
-      createPromiseDelay,
-      updateStepWithValidation,
-    ]
+    [isTransitioning, handleStructureCompleteInternal]
   );
 
+  // ✅ **단순화된 네비게이션 함수들**
   const navigateToStructureStep = useCallback(async () => {
-    console.log('⬅️ [CONTAINER] 구조 설정으로 이동 프로세스 시작');
-
-    if (isTransitioning) {
-      console.warn('⚠️ [CONTAINER] 구조 이동 - 전환 중이므로 중단');
-      return;
-    }
-
+    console.log('⬅️ [CONTAINER] 구조 설정으로 이동');
     try {
-      console.log('📞 [CONTAINER] 내부 구조 이동 핸들러 실행');
       navigateToStructureStepInternal();
-
       await createPromiseDelay(100);
-
-      const success = await updateStepWithValidation(
-        'structure',
-        '글쓰기→구조 전환'
-      );
-
-      if (success) {
-        console.log('✅ [CONTAINER] 구조 설정으로 이동 프로세스 성공');
-      } else {
-        console.error('❌ [CONTAINER] 구조 설정으로 이동 프로세스 실패');
-      }
+      console.log('✅ [CONTAINER] 구조 설정으로 이동 완료');
     } catch (error) {
-      console.error('❌ [CONTAINER] 구조 설정으로 이동 프로세스 에러:', error);
+      console.error('❌ [CONTAINER] 구조 설정으로 이동 실패:', error);
     }
-  }, [
-    isTransitioning,
-    navigateToStructureStepInternal,
-    createPromiseDelay,
-    updateStepWithValidation,
-  ]);
+  }, [navigateToStructureStepInternal, createPromiseDelay]);
 
+  // ✅ **브릿지 완료 로직**: 기존 유지
   const handleEditorComplete = useCallback(async () => {
     console.log('🎉 [CONTAINER] 에디터 완료 프로세스 시작');
 
@@ -293,6 +246,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     uiExecuteTransfer,
   ]);
 
+  // ✅ **브릿지 검증 새로고침**: 기존 유지
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       uiRefreshValidation();
@@ -308,6 +262,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     uiRefreshValidation,
   ]);
 
+  // ✅ **상태 변화 로깅**
   useEffect(() => {
     console.log('📊 [CONTAINER] 상태 변화 감지:', {
       currentStep: currentEditorStep,
@@ -316,12 +271,14 @@ function ModularBlogEditorContainer(): React.ReactNode {
       isTransitioning,
       containerCount: currentContainers.length,
       paragraphCount: currentParagraphs.length,
+      containerNames: currentContainers.map((c) => c.name),
     });
   }, [
     currentEditorStep,
     isTransitioning,
     currentContainers.length,
     currentParagraphs.length,
+    currentContainers,
   ]);
 
   const isInStructureStep = currentEditorStep === 'structure';

@@ -6,7 +6,8 @@ import SectionExamples from './examples/SectionExamples';
 import AddRemoveButtons from './controls/AddRemoveButtons';
 import NextStepButton from './controls/NextStepButton';
 import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
-import { handleStructureComplete } from '../../actions/editorActions/editorActionsZustand';
+// ❌ **수정 1**: 이 라인 제거됨 - 존재하지 않는 함수 import 제거
+// import { handleStructureComplete } from '../../actions/editorActions/editorActionsZustand';
 
 interface StructureInputFormProps {
   onStructureComplete: (sectionInputArray: string[]) => void;
@@ -149,17 +150,18 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
       return;
     }
 
-    // ✅ handleStructureComplete 호출 전 로그
-    console.log('📞 [NEXT_STEP_BUTTON] handleStructureComplete 호출 시작');
-    try {
-      handleStructureComplete(filteredValidInputs);
-      console.log('✅ [NEXT_STEP_BUTTON] handleStructureComplete 완료');
-    } catch (error) {
-      console.error(
-        '❌ [NEXT_STEP_BUTTON] handleStructureComplete 실패:',
-        error
-      );
-    }
+    // ❌ **수정 2**: 이 블록 전체 제거됨 - 존재하지 않는 함수 호출 제거
+    // // ✅ handleStructureComplete 호출 전 로그
+    // console.log('📞 [NEXT_STEP_BUTTON] handleStructureComplete 호출 시작');
+    // try {
+    //   handleStructureComplete(filteredValidInputs);
+    //   console.log('✅ [NEXT_STEP_BUTTON] handleStructureComplete 완료');
+    // } catch (error) {
+    //   console.error(
+    //     '❌ [NEXT_STEP_BUTTON] handleStructureComplete 실패:',
+    //     error
+    //   );
+    // }
 
     // ✅ onStructureComplete 호출 전 로그
     console.log('📞 [NEXT_STEP_BUTTON] onStructureComplete 확인:', {
@@ -180,7 +182,8 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
     }
 
     console.log('🏁 [NEXT_STEP_BUTTON] handleFormSubmissionComplete 완료');
-  }, [validatedSectionInputs, handleStructureComplete, onStructureComplete]);
+  }, [validatedSectionInputs, onStructureComplete]);
+  // ❌ **수정 3**: 의존성 배열에서 handleStructureComplete 제거됨
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
