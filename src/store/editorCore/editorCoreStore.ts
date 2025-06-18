@@ -1,3 +1,4 @@
+// 📁 store/editorCore/editorCoreStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Container, ParagraphBlock } from '../shared/commonTypes';
@@ -73,278 +74,393 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
 
       getCompletedContent: () => {
         const { completedContent } = get();
-        return completedContent || '';
+        const validCompletedContent =
+          typeof completedContent === 'string' ? completedContent : '';
+        return validCompletedContent;
       },
 
-      setCompletedContent: (completedContent: string) => {
-        set({ completedContent: completedContent || '' });
+      setCompletedContent: (completedContentValue: string) => {
+        const validCompletedContent =
+          typeof completedContentValue === 'string'
+            ? completedContentValue
+            : '';
+        set({ completedContent: validCompletedContent });
       },
 
       getIsCompleted: () => {
         const { isCompleted } = get();
-        return Boolean(isCompleted);
+        const validCompletionStatus =
+          typeof isCompleted === 'boolean' ? isCompleted : false;
+        return validCompletionStatus;
       },
 
-      setIsCompleted: (isCompleted: boolean) => {
-        set({ isCompleted: Boolean(isCompleted) });
+      setIsCompleted: (completionStatus: boolean) => {
+        const validCompletionStatus =
+          typeof completionStatus === 'boolean' ? completionStatus : false;
+        set({ isCompleted: validCompletionStatus });
       },
 
       getContainers: () => {
         const { containers } = get();
-        return Array.isArray(containers) ? containers : [];
+        const validContainerArray = Array.isArray(containers) ? containers : [];
+        return validContainerArray;
       },
 
       setContainers: (containerList: Container[]) => {
-        const validContainers = Array.isArray(containerList)
+        const validContainerList = Array.isArray(containerList)
           ? containerList
           : [];
         const { paragraphs } = get();
-        const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        const validParagraphList = Array.isArray(paragraphs) ? paragraphs : [];
+
+        const generatedCompletedContent = generateCompletedContent(
+          validContainerList,
+          validParagraphList
+        );
 
         set({
-          containers: validContainers,
-          completedContent: generateCompletedContent(
-            validContainers,
-            validParagraphs
-          ),
+          containers: validContainerList,
+          completedContent: generatedCompletedContent,
         });
       },
 
       getParagraphs: () => {
         const { paragraphs } = get();
-        return Array.isArray(paragraphs) ? paragraphs : [];
+        const validParagraphArray = Array.isArray(paragraphs) ? paragraphs : [];
+        return validParagraphArray;
       },
 
       setParagraphs: (paragraphList: ParagraphBlock[]) => {
-        const validParagraphs = Array.isArray(paragraphList)
+        const validParagraphList = Array.isArray(paragraphList)
           ? paragraphList
           : [];
         const { containers } = get();
-        const validContainers = Array.isArray(containers) ? containers : [];
+        const validContainerList = Array.isArray(containers) ? containers : [];
+
+        const generatedCompletedContent = generateCompletedContent(
+          validContainerList,
+          validParagraphList
+        );
 
         set({
-          paragraphs: validParagraphs,
-          completedContent: generateCompletedContent(
-            validContainers,
-            validParagraphs
-          ),
+          paragraphs: validParagraphList,
+          completedContent: generatedCompletedContent,
         });
       },
 
       getSectionInputs: () => {
         const { sectionInputs } = get();
-        return Array.isArray(sectionInputs) ? sectionInputs : ['', '', '', ''];
-      },
-
-      setSectionInputs: (sectionInputs: string[]) => {
-        const validInputs = Array.isArray(sectionInputs)
+        const validSectionInputArray = Array.isArray(sectionInputs)
           ? sectionInputs
           : ['', '', '', ''];
-        set({ sectionInputs: [...validInputs] });
+        return validSectionInputArray;
+      },
+
+      setSectionInputs: (sectionInputArray: string[]) => {
+        const validSectionInputArray = Array.isArray(sectionInputArray)
+          ? sectionInputArray
+          : ['', '', '', ''];
+        const sanitizedSectionInputArray = validSectionInputArray.map(
+          (singleInput) => {
+            const validSingleInput =
+              typeof singleInput === 'string' ? singleInput : '';
+            return validSingleInput;
+          }
+        );
+
+        set({ sectionInputs: [...sanitizedSectionInputArray] });
       },
 
       getSectionInputsCount: () => {
         const { sectionInputs } = get();
-        const validInputs = Array.isArray(sectionInputs) ? sectionInputs : [];
-        return validInputs.length;
+        const validSectionInputArray = Array.isArray(sectionInputs)
+          ? sectionInputs
+          : [];
+        const sectionInputCount = validSectionInputArray.length;
+        return sectionInputCount;
       },
 
       getValidSectionInputs: () => {
         const { sectionInputs } = get();
-        const validInputs = Array.isArray(sectionInputs) ? sectionInputs : [];
-        return validInputs.filter((section: string) => {
-          return typeof section === 'string' && section.trim() !== '';
-        });
+        const validSectionInputArray = Array.isArray(sectionInputs)
+          ? sectionInputs
+          : [];
+        const filteredValidSectionInputs = validSectionInputArray.filter(
+          (singleSectionInput) => {
+            const validSingleSection =
+              typeof singleSectionInput === 'string' ? singleSectionInput : '';
+            const hasValidContent = validSingleSection.trim() !== '';
+            return hasValidContent;
+          }
+        );
+        return filteredValidSectionInputs;
       },
 
-      updateSectionInput: (index: number, value: string) => {
-        const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
-        const validValue = typeof value === 'string' ? value : '';
+      updateSectionInput: (inputIndex: number, inputValue: string) => {
+        const validInputIndex =
+          typeof inputIndex === 'number' && inputIndex >= 0 ? inputIndex : 0;
+        const validInputValue =
+          typeof inputValue === 'string' ? inputValue : '';
 
-        set((currentState) => {
-          const { sectionInputs } = currentState;
-          const validInputs = Array.isArray(sectionInputs)
+        set((currentStoreState) => {
+          const { sectionInputs } = currentStoreState;
+          const validCurrentInputs = Array.isArray(sectionInputs)
             ? [...sectionInputs]
             : ['', '', '', ''];
 
-          if (validIndex >= validInputs.length) {
-            console.warn(`Invalid section index: ${validIndex}`);
-            return currentState;
+          if (validInputIndex >= validCurrentInputs.length) {
+            console.warn(`Invalid section index: ${validInputIndex}`);
+            return currentStoreState;
           }
 
-          validInputs[validIndex] = validValue;
+          validCurrentInputs[validInputIndex] = validInputValue;
 
           return {
-            ...currentState,
-            sectionInputs: validInputs,
+            ...currentStoreState,
+            sectionInputs: validCurrentInputs,
           };
         });
       },
 
       addSectionInput: () => {
-        set((currentState) => {
-          const { sectionInputs } = currentState;
-          const validInputs = Array.isArray(sectionInputs)
+        set((currentStoreState) => {
+          const { sectionInputs } = currentStoreState;
+          const validCurrentInputs = Array.isArray(sectionInputs)
             ? sectionInputs
             : ['', '', '', ''];
+          const expandedInputArray = [...validCurrentInputs, ''];
 
           return {
-            ...currentState,
-            sectionInputs: [...validInputs, ''],
+            ...currentStoreState,
+            sectionInputs: expandedInputArray,
           };
         });
       },
 
-      removeSectionInput: (index: number) => {
-        const validIndex = typeof index === 'number' && index >= 0 ? index : 0;
+      removeSectionInput: (removalIndex: number) => {
+        const validRemovalIndex =
+          typeof removalIndex === 'number' && removalIndex >= 0
+            ? removalIndex
+            : 0;
 
-        set((currentState) => {
-          const { sectionInputs } = currentState;
-          const validInputs = Array.isArray(sectionInputs)
+        set((currentStoreState) => {
+          const { sectionInputs } = currentStoreState;
+          const validCurrentInputs = Array.isArray(sectionInputs)
             ? sectionInputs
             : ['', '', '', ''];
 
-          if (validInputs.length <= 2) {
+          if (validCurrentInputs.length <= 2) {
             console.warn('Minimum 2 sections required');
-            return currentState;
+            return currentStoreState;
           }
 
-          if (validIndex >= validInputs.length) {
-            console.warn(`Invalid section index: ${validIndex}`);
-            return currentState;
+          if (validRemovalIndex >= validCurrentInputs.length) {
+            console.warn(`Invalid section index: ${validRemovalIndex}`);
+            return currentStoreState;
           }
 
-          const newInputs = validInputs.filter((_, i) => i !== validIndex);
+          const reducedInputArray = validCurrentInputs.filter(
+            (_, currentIndex) => currentIndex !== validRemovalIndex
+          );
 
           return {
-            ...currentState,
-            sectionInputs: newInputs,
+            ...currentStoreState,
+            sectionInputs: reducedInputArray,
           };
         });
       },
 
       resetSectionInputs: () => {
-        set((currentState) => ({
-          ...currentState,
+        set((currentStoreState) => ({
+          ...currentStoreState,
           sectionInputs: ['', '', '', ''],
         }));
       },
 
       getContainerById: (containerId: string) => {
-        const validId = typeof containerId === 'string' ? containerId : '';
+        const validContainerId =
+          typeof containerId === 'string' ? containerId : '';
         const { containers } = get();
-        const validContainers = Array.isArray(containers) ? containers : [];
+        const validContainerArray = Array.isArray(containers) ? containers : [];
 
-        return validContainers.find((container) => {
-          return container && container.id === validId;
+        const foundContainer = validContainerArray.find((singleContainer) => {
+          const hasValidContainer =
+            singleContainer && typeof singleContainer.id === 'string';
+          const isMatchingId =
+            hasValidContainer && singleContainer.id === validContainerId;
+          return isMatchingId;
         });
+
+        return foundContainer;
       },
 
       getParagraphById: (paragraphId: string) => {
-        const validId = typeof paragraphId === 'string' ? paragraphId : '';
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
         const { paragraphs } = get();
-        const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        const validParagraphArray = Array.isArray(paragraphs) ? paragraphs : [];
 
-        return validParagraphs.find((paragraph) => {
-          return paragraph && paragraph.id === validId;
+        const foundParagraph = validParagraphArray.find((singleParagraph) => {
+          const hasValidParagraph =
+            singleParagraph && typeof singleParagraph.id === 'string';
+          const isMatchingId =
+            hasValidParagraph && singleParagraph.id === validParagraphId;
+          return isMatchingId;
         });
+
+        return foundParagraph;
       },
 
       getParagraphsByContainer: (containerId: string) => {
-        const validId = typeof containerId === 'string' ? containerId : '';
+        const validContainerId =
+          typeof containerId === 'string' ? containerId : '';
         const { paragraphs } = get();
-        const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        const validParagraphArray = Array.isArray(paragraphs) ? paragraphs : [];
 
-        return getParagraphsByContainer(validParagraphs, validId);
+        const containerParagraphs = getParagraphsByContainer(
+          validParagraphArray,
+          validContainerId
+        );
+        return containerParagraphs;
       },
 
       getUnassignedParagraphs: () => {
         const { paragraphs } = get();
-        const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        const validParagraphArray = Array.isArray(paragraphs) ? paragraphs : [];
 
-        return getUnassignedParagraphs(validParagraphs);
+        const unassignedParagraphs =
+          getUnassignedParagraphs(validParagraphArray);
+        return unassignedParagraphs;
       },
 
       getSortedContainers: () => {
         const { containers } = get();
-        const validContainers = Array.isArray(containers) ? containers : [];
+        const validContainerArray = Array.isArray(containers) ? containers : [];
 
-        return sortContainers(validContainers);
+        const sortedContainerArray = sortContainers(validContainerArray);
+        return sortedContainerArray;
       },
 
       validateEditorState: () => {
-        const currentState = get();
-        return validateEditorState(currentState);
+        const currentStoreState = get();
+        const isValidEditorState = validateEditorState(currentStoreState);
+        return isValidEditorState;
       },
 
       addContainer: (newContainer: Container) => {
-        if (!newContainer || typeof newContainer.id !== 'string') {
+        const hasValidContainer =
+          newContainer && typeof newContainer.id === 'string';
+
+        if (!hasValidContainer) {
           throw new Error('Invalid container provided');
         }
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const containerExists = validContainers.some((container) => {
-            return container && container.id === newContainer.id;
-          });
+          const containerAlreadyExists = validCurrentContainers.some(
+            (existingContainer) => {
+              const hasValidExistingContainer =
+                existingContainer && typeof existingContainer.id === 'string';
+              const isDuplicateId =
+                hasValidExistingContainer &&
+                existingContainer.id === newContainer.id;
+              return isDuplicateId;
+            }
+          );
 
-          if (containerExists) {
+          if (containerAlreadyExists) {
             throw new Error(
               `Container with id ${newContainer.id} already exists`
             );
           }
 
-          const updatedContainers = [...validContainers, newContainer];
+          const expandedContainerArray = [
+            ...validCurrentContainers,
+            newContainer,
+          ];
+          const generatedCompletedContent = generateCompletedContent(
+            expandedContainerArray,
+            validCurrentParagraphs
+          );
 
           return {
-            ...currentState,
-            containers: updatedContainers,
-            completedContent: generateCompletedContent(
-              updatedContainers,
-              validParagraphs
-            ),
+            ...currentStoreState,
+            containers: expandedContainerArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
       deleteContainer: (containerId: string) => {
-        const validId = typeof containerId === 'string' ? containerId : '';
+        const validContainerId =
+          typeof containerId === 'string' ? containerId : '';
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const containerExists = validContainers.some((container) => {
-            return container && container.id === validId;
-          });
+          const containerExists = validCurrentContainers.some(
+            (existingContainer) => {
+              const hasValidContainer =
+                existingContainer && typeof existingContainer.id === 'string';
+              const isMatchingId =
+                hasValidContainer && existingContainer.id === validContainerId;
+              return isMatchingId;
+            }
+          );
 
           if (!containerExists) {
-            throw new Error(`Container with id ${validId} not found`);
+            throw new Error(`Container with id ${validContainerId} not found`);
           }
 
-          const remainingContainers = validContainers.filter((container) => {
-            return container && container.id !== validId;
-          });
-
-          const updatedParagraphs = validParagraphs.map((paragraph) => {
-            if (paragraph && paragraph.containerId === validId) {
-              return { ...paragraph, containerId: null };
+          const remainingContainers = validCurrentContainers.filter(
+            (existingContainer) => {
+              const hasValidContainer =
+                existingContainer && typeof existingContainer.id === 'string';
+              const isDifferentId =
+                hasValidContainer && existingContainer.id !== validContainerId;
+              return isDifferentId;
             }
-            return paragraph;
-          });
+          );
+
+          const updatedParagraphs = validCurrentParagraphs.map(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph &&
+                typeof existingParagraph.containerId === 'string';
+              const belongsToDeletedContainer =
+                hasValidParagraph &&
+                existingParagraph.containerId === validContainerId;
+
+              if (belongsToDeletedContainer) {
+                return { ...existingParagraph, containerId: null };
+              }
+              return existingParagraph;
+            }
+          );
+
+          const generatedCompletedContent = generateCompletedContent(
+            remainingContainers,
+            updatedParagraphs
+          );
 
           return {
-            ...currentState,
+            ...currentStoreState,
             containers: remainingContainers,
             paragraphs: updatedParagraphs,
-            completedContent: generateCompletedContent(
-              remainingContainers,
-              updatedParagraphs
-            ),
+            completedContent: generatedCompletedContent,
           };
         });
       },
@@ -353,121 +469,175 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         containerId: string,
         containerUpdates: Partial<Container>
       ) => {
-        const validId = typeof containerId === 'string' ? containerId : '';
-        const validUpdates = containerUpdates || {};
+        const validContainerId =
+          typeof containerId === 'string' ? containerId : '';
+        const validContainerUpdates = containerUpdates || {};
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const containerIndex = validContainers.findIndex((container) => {
-            return container && container.id === validId;
-          });
+          const containerIndex = validCurrentContainers.findIndex(
+            (existingContainer) => {
+              const hasValidContainer =
+                existingContainer && typeof existingContainer.id === 'string';
+              const isMatchingId =
+                hasValidContainer && existingContainer.id === validContainerId;
+              return isMatchingId;
+            }
+          );
 
           if (containerIndex === -1) {
-            throw new Error(`Container with id ${validId} not found`);
+            throw new Error(`Container with id ${validContainerId} not found`);
           }
 
-          const updatedContainers = [...validContainers];
-          const existingContainer = updatedContainers[containerIndex];
+          const modifiedContainerArray = [...validCurrentContainers];
+          const existingContainerData = modifiedContainerArray[containerIndex];
 
-          updatedContainers[containerIndex] = {
-            ...existingContainer,
-            ...validUpdates,
+          modifiedContainerArray[containerIndex] = {
+            ...existingContainerData,
+            ...validContainerUpdates,
           };
 
+          const generatedCompletedContent = generateCompletedContent(
+            modifiedContainerArray,
+            validCurrentParagraphs
+          );
+
           return {
-            ...currentState,
-            containers: updatedContainers,
-            completedContent: generateCompletedContent(
-              updatedContainers,
-              validParagraphs
-            ),
+            ...currentStoreState,
+            containers: modifiedContainerArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
-      reorderContainers: (reorderedContainers: Container[]) => {
-        const validContainers = Array.isArray(reorderedContainers)
-          ? reorderedContainers
+      reorderContainers: (reorderedContainerArray: Container[]) => {
+        const validReorderedContainers = Array.isArray(reorderedContainerArray)
+          ? reorderedContainerArray
           : [];
 
-        set((currentState) => {
-          const { paragraphs } = currentState;
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { paragraphs } = currentStoreState;
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
+
+          const generatedCompletedContent = generateCompletedContent(
+            validReorderedContainers,
+            validCurrentParagraphs
+          );
 
           return {
-            ...currentState,
-            containers: validContainers,
-            completedContent: generateCompletedContent(
-              validContainers,
-              validParagraphs
-            ),
+            ...currentStoreState,
+            containers: validReorderedContainers,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
       addParagraph: (newParagraph: ParagraphBlock) => {
-        if (!newParagraph || typeof newParagraph.id !== 'string') {
+        const hasValidParagraph =
+          newParagraph && typeof newParagraph.id === 'string';
+
+        if (!hasValidParagraph) {
           throw new Error('Invalid paragraph provided');
         }
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const paragraphExists = validParagraphs.some((paragraph) => {
-            return paragraph && paragraph.id === newParagraph.id;
-          });
+          const paragraphAlreadyExists = validCurrentParagraphs.some(
+            (existingParagraph) => {
+              const hasValidExistingParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isDuplicateId =
+                hasValidExistingParagraph &&
+                existingParagraph.id === newParagraph.id;
+              return isDuplicateId;
+            }
+          );
 
-          if (paragraphExists) {
+          if (paragraphAlreadyExists) {
             throw new Error(
               `Paragraph with id ${newParagraph.id} already exists`
             );
           }
 
-          const updatedParagraphs = [...validParagraphs, newParagraph];
+          const expandedParagraphArray = [
+            ...validCurrentParagraphs,
+            newParagraph,
+          ];
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            expandedParagraphArray
+          );
 
           return {
-            ...currentState,
-            paragraphs: updatedParagraphs,
-            completedContent: generateCompletedContent(
-              validContainers,
-              updatedParagraphs
-            ),
+            ...currentStoreState,
+            paragraphs: expandedParagraphArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
       deleteParagraph: (paragraphId: string) => {
-        const validId = typeof paragraphId === 'string' ? paragraphId : '';
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const paragraphExists = validParagraphs.some((paragraph) => {
-            return paragraph && paragraph.id === validId;
-          });
+          const paragraphExists = validCurrentParagraphs.some(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isMatchingId =
+                hasValidParagraph && existingParagraph.id === validParagraphId;
+              return isMatchingId;
+            }
+          );
 
           if (!paragraphExists) {
-            throw new Error(`Paragraph with id ${validId} not found`);
+            throw new Error(`Paragraph with id ${validParagraphId} not found`);
           }
 
-          const remainingParagraphs = validParagraphs.filter((paragraph) => {
-            return paragraph && paragraph.id !== validId;
-          });
+          const remainingParagraphs = validCurrentParagraphs.filter(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isDifferentId =
+                hasValidParagraph && existingParagraph.id !== validParagraphId;
+              return isDifferentId;
+            }
+          );
+
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            remainingParagraphs
+          );
 
           return {
-            ...currentState,
+            ...currentStoreState,
             paragraphs: remainingParagraphs,
-            completedContent: generateCompletedContent(
-              validContainers,
-              remainingParagraphs
-            ),
+            completedContent: generatedCompletedContent,
           };
         });
       },
@@ -476,75 +646,107 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         paragraphId: string,
         paragraphUpdates: Partial<ParagraphBlock>
       ) => {
-        const validId = typeof paragraphId === 'string' ? paragraphId : '';
-        const validUpdates = paragraphUpdates || {};
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
+        const validParagraphUpdates = paragraphUpdates || {};
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const paragraphIndex = validParagraphs.findIndex((paragraph) => {
-            return paragraph && paragraph.id === validId;
-          });
+          const paragraphIndex = validCurrentParagraphs.findIndex(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isMatchingId =
+                hasValidParagraph && existingParagraph.id === validParagraphId;
+              return isMatchingId;
+            }
+          );
 
           if (paragraphIndex === -1) {
-            throw new Error(`Paragraph with id ${validId} not found`);
+            throw new Error(`Paragraph with id ${validParagraphId} not found`);
           }
 
-          const updatedParagraphs = [...validParagraphs];
-          const existingParagraph = updatedParagraphs[paragraphIndex];
+          const modifiedParagraphArray = [...validCurrentParagraphs];
+          const existingParagraphData = modifiedParagraphArray[paragraphIndex];
+          const currentTimestamp = new Date();
 
-          updatedParagraphs[paragraphIndex] = {
-            ...existingParagraph,
-            ...validUpdates,
-            updatedAt: new Date(),
+          modifiedParagraphArray[paragraphIndex] = {
+            ...existingParagraphData,
+            ...validParagraphUpdates,
+            updatedAt: currentTimestamp,
           };
 
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            modifiedParagraphArray
+          );
+
           return {
-            ...currentState,
-            paragraphs: updatedParagraphs,
-            completedContent: generateCompletedContent(
-              validContainers,
-              updatedParagraphs
-            ),
+            ...currentStoreState,
+            paragraphs: modifiedParagraphArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
-      updateParagraphContent: (paragraphId: string, newContent: string) => {
-        const validId = typeof paragraphId === 'string' ? paragraphId : '';
-        const validContent = typeof newContent === 'string' ? newContent : '';
+      updateParagraphContent: (
+        paragraphId: string,
+        newContentValue: string
+      ) => {
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
+        const validNewContent =
+          typeof newContentValue === 'string' ? newContentValue : '';
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const paragraphIndex = validParagraphs.findIndex((paragraph) => {
-            return paragraph && paragraph.id === validId;
-          });
+          const paragraphIndex = validCurrentParagraphs.findIndex(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isMatchingId =
+                hasValidParagraph && existingParagraph.id === validParagraphId;
+              return isMatchingId;
+            }
+          );
 
           if (paragraphIndex === -1) {
-            throw new Error(`Paragraph with id ${validId} not found`);
+            throw new Error(`Paragraph with id ${validParagraphId} not found`);
           }
 
-          const updatedParagraphs = [...validParagraphs];
-          const existingParagraph = updatedParagraphs[paragraphIndex];
+          const modifiedParagraphArray = [...validCurrentParagraphs];
+          const existingParagraphData = modifiedParagraphArray[paragraphIndex];
+          const currentTimestamp = new Date();
 
-          updatedParagraphs[paragraphIndex] = {
-            ...existingParagraph,
-            content: validContent,
-            updatedAt: new Date(),
+          modifiedParagraphArray[paragraphIndex] = {
+            ...existingParagraphData,
+            content: validNewContent,
+            updatedAt: currentTimestamp,
           };
 
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            modifiedParagraphArray
+          );
+
           return {
-            ...currentState,
-            paragraphs: updatedParagraphs,
-            completedContent: generateCompletedContent(
-              validContainers,
-              updatedParagraphs
-            ),
+            ...currentStoreState,
+            paragraphs: modifiedParagraphArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
@@ -553,141 +755,193 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         targetParagraphId: string,
         destinationContainerId: string | null
       ) => {
-        const validParagraphId =
+        const validTargetParagraphId =
           typeof targetParagraphId === 'string' ? targetParagraphId : '';
-        const validContainerId =
+        const validDestinationContainerId =
           destinationContainerId === null
             ? null
             : typeof destinationContainerId === 'string'
             ? destinationContainerId
             : null;
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          if (
-            validContainerId &&
-            !validContainers.some((container) => {
-              return container && container.id === validContainerId;
-            })
-          ) {
-            throw new Error(`Container ${validContainerId} does not exist`);
+          if (validDestinationContainerId) {
+            const destinationContainerExists = validCurrentContainers.some(
+              (existingContainer) => {
+                const hasValidContainer =
+                  existingContainer && typeof existingContainer.id === 'string';
+                const isMatchingId =
+                  hasValidContainer &&
+                  existingContainer.id === validDestinationContainerId;
+                return isMatchingId;
+              }
+            );
+
+            if (!destinationContainerExists) {
+              throw new Error(
+                `Container ${validDestinationContainerId} does not exist`
+              );
+            }
           }
 
-          const paragraphIndex = validParagraphs.findIndex((paragraph) => {
-            return paragraph && paragraph.id === validParagraphId;
-          });
+          const paragraphIndex = validCurrentParagraphs.findIndex(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph && typeof existingParagraph.id === 'string';
+              const isMatchingId =
+                hasValidParagraph &&
+                existingParagraph.id === validTargetParagraphId;
+              return isMatchingId;
+            }
+          );
 
           if (paragraphIndex === -1) {
-            throw new Error(`Paragraph ${validParagraphId} does not exist`);
+            throw new Error(
+              `Paragraph ${validTargetParagraphId} does not exist`
+            );
           }
 
-          const updatedParagraphs = [...validParagraphs];
-          const existingParagraph = updatedParagraphs[paragraphIndex];
+          const modifiedParagraphArray = [...validCurrentParagraphs];
+          const existingParagraphData = modifiedParagraphArray[paragraphIndex];
+          const currentTimestamp = new Date();
 
-          updatedParagraphs[paragraphIndex] = {
-            ...existingParagraph,
-            containerId: validContainerId,
-            updatedAt: new Date(),
+          modifiedParagraphArray[paragraphIndex] = {
+            ...existingParagraphData,
+            containerId: validDestinationContainerId,
+            updatedAt: currentTimestamp,
           };
 
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            modifiedParagraphArray
+          );
+
           return {
-            ...currentState,
-            paragraphs: updatedParagraphs,
-            completedContent: generateCompletedContent(
-              validContainers,
-              updatedParagraphs
-            ),
+            ...currentStoreState,
+            paragraphs: modifiedParagraphArray,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
       reorderParagraphsInContainer: (
         targetContainerId: string,
-        reorderedParagraphs: ParagraphBlock[]
+        reorderedParagraphArray: ParagraphBlock[]
       ) => {
-        const validContainerId =
+        const validTargetContainerId =
           typeof targetContainerId === 'string' ? targetContainerId : '';
-        const validReorderedParagraphs = Array.isArray(reorderedParagraphs)
-          ? reorderedParagraphs
+        const validReorderedParagraphs = Array.isArray(reorderedParagraphArray)
+          ? reorderedParagraphArray
           : [];
 
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
 
-          const paragraphsFromOtherContainers = validParagraphs.filter(
-            (paragraph) => {
-              return paragraph && paragraph.containerId !== validContainerId;
+          const paragraphsFromOtherContainers = validCurrentParagraphs.filter(
+            (existingParagraph) => {
+              const hasValidParagraph =
+                existingParagraph &&
+                typeof existingParagraph.containerId === 'string';
+              const belongsToDifferentContainer =
+                hasValidParagraph &&
+                existingParagraph.containerId !== validTargetContainerId;
+              const isUnassignedParagraph =
+                !hasValidParagraph || existingParagraph.containerId === null;
+              return belongsToDifferentContainer || isUnassignedParagraph;
             }
           );
 
-          const finalParagraphList = [
+          const finalReorderedParagraphList = [
             ...paragraphsFromOtherContainers,
             ...validReorderedParagraphs,
           ];
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            finalReorderedParagraphList
+          );
 
           return {
-            ...currentState,
-            paragraphs: finalParagraphList,
-            completedContent: generateCompletedContent(
-              validContainers,
-              finalParagraphList
-            ),
+            ...currentStoreState,
+            paragraphs: finalReorderedParagraphList,
+            completedContent: generatedCompletedContent,
           };
         });
       },
 
       resetEditorState: () => {
-        console.log('🔄 [STORE] 에디터 상태 초기화 시작');
-        set(initialEditorCoreState);
+        set((currentStoreState) => {
+          const { sectionInputs } = currentStoreState;
+          const preservedSectionInputs = Array.isArray(sectionInputs)
+            ? sectionInputs
+            : ['', '', '', ''];
+
+          return {
+            ...initialEditorCoreState,
+            sectionInputs: preservedSectionInputs,
+          };
+        });
       },
 
       resetEditorStateCompletely: () => {
-        console.log(
-          '🔥 [STORE] 에디터 상태 완전 초기화 시작 - localStorage 포함'
-        );
-
         try {
           set(initialEditorCoreState);
 
-          const persistKey = 'editor-core-storage';
-          if (typeof window !== 'undefined' && window.localStorage) {
-            console.log(`🗑️ [STORE] localStorage에서 ${persistKey} 삭제`);
-            window.localStorage.removeItem(persistKey);
+          const persistenceStorageKey = 'editor-core-storage';
+          const hasWindowObject = typeof window !== 'undefined';
+          const hasLocalStorage = hasWindowObject && window.localStorage;
+
+          if (hasLocalStorage) {
+            window.localStorage.removeItem(persistenceStorageKey);
           }
 
           setTimeout(() => {
-            set({
+            const defaultResetState = {
               containers: [],
               paragraphs: [],
               completedContent: '',
               isCompleted: false,
               sectionInputs: ['', '', '', ''],
-            });
-            console.log('✅ [STORE] 에디터 상태 완전 초기화 완료');
+            };
+            set(defaultResetState);
           }, 100);
-        } catch (error) {
-          console.error('❌ [STORE] 완전 초기화 중 오류:', error);
+        } catch (resetError) {
+          console.error('❌ [STORE] 완전 초기화 중 오류:', resetError);
           set(initialEditorCoreState);
         }
       },
 
       generateCompletedContent: () => {
-        set((currentState) => {
-          const { containers, paragraphs } = currentState;
-          const validContainers = Array.isArray(containers) ? containers : [];
-          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+        set((currentStoreState) => {
+          const { containers, paragraphs } = currentStoreState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
+
+          const generatedCompletedContent = generateCompletedContent(
+            validCurrentContainers,
+            validCurrentParagraphs
+          );
 
           return {
-            ...currentState,
-            completedContent: generateCompletedContent(
-              validContainers,
-              validParagraphs
-            ),
+            ...currentStoreState,
+            completedContent: generatedCompletedContent,
           };
         });
       },
@@ -697,19 +951,20 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
 );
 
 export const resetEditorStoreCompletely = () => {
-  console.log('🔥 [STORE_EXTERNAL] 외부에서 에디터 완전 초기화 호출');
-
   try {
     const { resetEditorStateCompletely } = useEditorCoreStore.getState();
     resetEditorStateCompletely();
+  } catch (externalResetError) {
+    console.error(
+      '❌ [STORE_EXTERNAL] 외부 초기화 중 오류:',
+      externalResetError
+    );
 
-    console.log('✅ [STORE_EXTERNAL] 외부 완전 초기화 완료');
-  } catch (error) {
-    console.error('❌ [STORE_EXTERNAL] 외부 초기화 중 오류:', error);
+    const hasWindowObject = typeof window !== 'undefined';
+    const hasLocalStorage = hasWindowObject && window.localStorage;
 
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (hasLocalStorage) {
       window.localStorage.removeItem('editor-core-storage');
-      console.log('🗑️ [STORE_EXTERNAL] 직접 localStorage 삭제 완료');
     }
   }
 };
