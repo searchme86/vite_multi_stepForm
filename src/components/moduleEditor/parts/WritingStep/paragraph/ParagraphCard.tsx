@@ -1,4 +1,5 @@
-import React from 'react';
+// 📁 editor/parts/WritingStep/paragraph/ParagraphCard.tsx
+
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import TiptapEditor from '../../TiptapEditor/TiptapEditor';
@@ -41,7 +42,7 @@ interface ParagraphCardProps {
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
+  setTargetContainerId: (containerId: string) => void;
 }
 
 function ParagraphCard({
@@ -52,7 +53,7 @@ function ParagraphCard({
   updateLocalParagraphContent,
   toggleParagraphSelection,
   addToLocalContainer,
-  setInternalState,
+  setTargetContainerId,
 }: ParagraphCardProps) {
   console.log('📄 [PARAGRAPH_CARD] 렌더링:', {
     paragraphId: paragraph.id,
@@ -110,7 +111,8 @@ function ParagraphCard({
               internalState={internalState}
               sortedContainers={sortedContainers}
               addToLocalContainer={addToLocalContainer}
-              setInternalState={setInternalState}
+              setTargetContainerId={setTargetContainerId}
+              toggleParagraphSelection={toggleParagraphSelection}
             />
           </div>
 

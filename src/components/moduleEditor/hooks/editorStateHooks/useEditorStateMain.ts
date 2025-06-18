@@ -1,3 +1,5 @@
+// 📁 hooks/useEditorState/useEditorStateMain.ts
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { EditorInternalState } from '../../types/editor';
 import { Container } from '../../../../store/shared/commonTypes';
@@ -46,18 +48,15 @@ import {
 
 import { saveCurrentProgress, finishEditing } from './editorStatePersistence';
 
-// 🔥 [완전 안정화] 모든 dependency를 제거하고 직접 호출 방식으로 변경
 export function useEditorState() {
   return useEditorStateImpl();
 }
 
 const useEditorStateImpl = () => {
-  // 🎯 [Store 안정화] 최상위에서 한 번만 호출하고 안정적인 참조 유지
   const editorCoreStore = useEditorCoreStore();
   const editorUIStore = useEditorUIStore();
   const toastStore = useToastStore();
 
-  // 🔧 [핵심 수정] Store 함수들을 useCallback으로 안정화 - dependency 없이
   const stableUpdateStoredContainers = useCallback(
     (containers: Container[]) => {
       if (editorCoreStore?.setContainers) {
@@ -65,7 +64,7 @@ const useEditorStateImpl = () => {
       }
     },
     []
-  ); // 빈 dependency 배열
+  );
 
   const stableUpdateStoredParagraphs = useCallback(
     (paragraphs: LocalParagraph[]) => {
@@ -74,75 +73,74 @@ const useEditorStateImpl = () => {
       }
     },
     []
-  ); // 빈 dependency 배열
+  );
 
   const stableUpdateCompletedContent = useCallback((content: string) => {
     if (editorCoreStore?.setCompletedContent) {
       editorCoreStore.setCompletedContent(content);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableUpdateCompletionStatus = useCallback((completed: boolean) => {
     if (editorCoreStore?.setIsCompleted) {
       editorCoreStore.setIsCompleted(completed);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableAddToast = useCallback((options: any) => {
     if (toastStore?.addToast) {
       toastStore.addToast(options);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableNavigateToWritingStep = useCallback(() => {
     if (editorUIStore?.goToWritingStep) {
       editorUIStore.goToWritingStep();
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableNavigateToStructureStep = useCallback(() => {
     if (editorUIStore?.goToStructureStep) {
       editorUIStore.goToStructureStep();
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableUpdateActiveParagraphId = useCallback((id: string | null) => {
     if (editorUIStore?.setActiveParagraphId) {
       editorUIStore.setActiveParagraphId(id);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableTogglePreview = useCallback(() => {
     if (editorUIStore?.togglePreview) {
       editorUIStore.togglePreview();
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableToggleParagraphSelection = useCallback((paragraphId: string) => {
     if (editorUIStore?.toggleParagraphSelection) {
       editorUIStore.toggleParagraphSelection(paragraphId);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableUpdateSelectedParagraphIds = useCallback((ids: string[]) => {
     if (editorUIStore?.setSelectedParagraphIds) {
       editorUIStore.setSelectedParagraphIds(ids);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableUpdateTargetContainerId = useCallback((containerId: string) => {
     if (editorUIStore?.setTargetContainerId) {
       editorUIStore.setTargetContainerId(containerId);
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
   const stableClearSelectedParagraphs = useCallback(() => {
     if (editorUIStore?.clearSelectedParagraphs) {
       editorUIStore.clearSelectedParagraphs();
     }
-  }, []); // 빈 dependency 배열
+  }, []);
 
-  // 🎯 [상태 초기화] 단순한 초기화
   const [editorInternalState, setEditorInternalState] =
     useState<EditorInternalState>(() => {
       try {
@@ -185,17 +183,12 @@ const useEditorStateImpl = () => {
   const [isMobileDeviceDetected, setIsMobileDeviceDetected] = useState(false);
 
   const {
-    currentSubStep: currentEditorStepValue = 'structure',
-    isTransitioning: isStepTransitioningValue = false,
-    activeParagraphId: activeElementIdValue = null,
-    isPreviewOpen: previewModeActiveValue = true,
     selectedParagraphIds: selectedElementIdCollection = [],
     targetContainerId: targetDestinationIdValue = '',
   } = editorInternalState || {};
 
   useDeviceDetection(setIsMobileDeviceDetected);
 
-  // 🔧 [핵심 수정] Store 값 조회도 안정화 - dependency 최소화
   const stableStoreValues = useMemo(() => {
     return {
       currentSubStep: editorUIStore?.getCurrentSubStep?.() || 'structure',
@@ -214,7 +207,6 @@ const useEditorStateImpl = () => {
     editorUIStore?.getTargetContainerId,
   ]);
 
-  // 🎯 [동기화] Store와 로컬 상태 동기화
   useEffect(() => {
     setEditorInternalState((previousInternalState) => {
       const prevState = previousInternalState || {};
@@ -238,7 +230,6 @@ const useEditorStateImpl = () => {
     });
   }, [stableStoreValues]);
 
-  // 🔧 [핵심 수정] 모든 액션 함수들 - dependency 배열 완전 고정
   const addLocalParagraph = useCallback(() => {
     const actionFn = createNewParagraph(
       managedParagraphCollection,
@@ -251,10 +242,10 @@ const useEditorStateImpl = () => {
     );
     actionFn();
   }, [
-    managedParagraphCollection.length, // 숫자
-    stableUpdateActiveParagraphId, // 안정적인 함수
-    stableAddToast, // 안정적인 함수
-  ]); // 항상 3개 요소
+    managedParagraphCollection.length,
+    stableUpdateActiveParagraphId,
+    stableAddToast,
+  ]);
 
   const updateLocalParagraphContent = useCallback(
     (id: string, content: string) => {
@@ -264,7 +255,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(id, content);
     },
-    [stableAddToast] // 항상 1개 요소
+    [stableAddToast]
   );
 
   const deleteLocalParagraph = useCallback(
@@ -275,7 +266,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(id);
     },
-    [stableAddToast] // 항상 1개 요소
+    [stableAddToast]
   );
 
   const toggleParagraphSelection = useCallback(
@@ -288,7 +279,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(id);
     },
-    [stableToggleParagraphSelection] // 항상 1개 요소
+    [stableToggleParagraphSelection]
   );
 
   const addToLocalContainer = useCallback(() => {
@@ -306,13 +297,13 @@ const useEditorStateImpl = () => {
     );
     actionFn();
   }, [
-    selectedElementIdCollection.length, // 숫자
-    targetDestinationIdValue, // 문자열
-    managedParagraphCollection.length, // 숫자
-    managedContainerCollection.length, // 숫자
-    stableAddToast, // 안정적인 함수
-    stableClearSelectedParagraphs, // 안정적인 함수
-  ]); // 항상 6개 요소
+    selectedElementIdCollection,
+    targetDestinationIdValue,
+    managedParagraphCollection,
+    managedContainerCollection,
+    stableAddToast,
+    stableClearSelectedParagraphs,
+  ]);
 
   const moveLocalParagraphInContainer = useCallback(
     (id: string, direction: 'up' | 'down') => {
@@ -323,18 +314,18 @@ const useEditorStateImpl = () => {
       );
       actionFn(id, direction);
     },
-    [managedParagraphCollection.length, stableAddToast] // 항상 2개 요소
+    [managedParagraphCollection.length, stableAddToast]
   );
 
   const getLocalUnassignedParagraphs = useCallback(
     () => getUnassignedParagraphs(managedParagraphCollection)(),
-    [managedParagraphCollection.length] // 항상 1개 요소
+    [managedParagraphCollection.length]
   );
 
   const getLocalParagraphsByContainer = useCallback(
     (containerId: string) =>
       getParagraphsByContainer(managedParagraphCollection)(containerId),
-    [managedParagraphCollection.length] // 항상 1개 요소
+    [managedParagraphCollection.length]
   );
 
   const setSelectedParagraphIds = useCallback(
@@ -347,7 +338,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(ids);
     },
-    [stableUpdateSelectedParagraphIds] // 항상 1개 요소
+    [stableUpdateSelectedParagraphIds]
   );
 
   const setTargetContainerId = useCallback(
@@ -360,7 +351,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(containerId);
     },
-    [stableUpdateTargetContainerId] // 항상 1개 요소
+    [stableUpdateTargetContainerId]
   );
 
   const setActiveParagraphId = useCallback(
@@ -373,7 +364,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(id);
     },
-    [stableUpdateActiveParagraphId] // 항상 1개 요소
+    [stableUpdateActiveParagraphId]
   );
 
   const handleStructureComplete = useCallback(
@@ -388,7 +379,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(inputs);
     },
-    [stableAddToast, stableNavigateToWritingStep] // 항상 2개 요소
+    [stableAddToast, stableNavigateToWritingStep]
   );
 
   const goToStructureStep = useCallback(() => {
@@ -399,7 +390,7 @@ const useEditorStateImpl = () => {
       stableNavigateToStructureStep
     );
     actionFn();
-  }, [stableNavigateToStructureStep]); // 항상 1개 요소
+  }, [stableNavigateToStructureStep]);
 
   const activateEditor = useCallback(
     (id: string) => {
@@ -411,7 +402,7 @@ const useEditorStateImpl = () => {
       );
       actionFn(id);
     },
-    [stableUpdateActiveParagraphId] // 항상 1개 요소
+    [stableUpdateActiveParagraphId]
   );
 
   const togglePreview = useCallback(() => {
@@ -422,7 +413,7 @@ const useEditorStateImpl = () => {
       stableTogglePreview
     );
     actionFn();
-  }, [stableTogglePreview]); // 항상 1개 요소
+  }, [stableTogglePreview]);
 
   const saveAllToContext = useCallback(() => {
     const actionFn = saveCurrentProgress(
@@ -434,12 +425,12 @@ const useEditorStateImpl = () => {
     );
     actionFn();
   }, [
-    managedContainerCollection.length, // 숫자
-    managedParagraphCollection.length, // 숫자
-    stableUpdateStoredContainers, // 안정적인 함수
-    stableUpdateStoredParagraphs, // 안정적인 함수
-    stableAddToast, // 안정적인 함수
-  ]); // 항상 5개 요소
+    managedContainerCollection.length,
+    managedParagraphCollection.length,
+    stableUpdateStoredContainers,
+    stableUpdateStoredParagraphs,
+    stableAddToast,
+  ]);
 
   const completeEditor = useCallback(() => {
     const actionFn = finishEditing(
@@ -452,13 +443,13 @@ const useEditorStateImpl = () => {
     );
     actionFn();
   }, [
-    managedContainerCollection.length, // 숫자
-    managedParagraphCollection.length, // 숫자
-    saveAllToContext, // 안정적인 함수
-    stableUpdateCompletedContent, // 안정적인 함수
-    stableUpdateCompletionStatus, // 안정적인 함수
-    stableAddToast, // 안정적인 함수
-  ]); // 항상 6개 요소
+    managedContainerCollection.length,
+    managedParagraphCollection.length,
+    saveAllToContext,
+    stableUpdateCompletedContent,
+    stableUpdateCompletionStatus,
+    stableAddToast,
+  ]);
 
   return {
     internalState: editorInternalState,
