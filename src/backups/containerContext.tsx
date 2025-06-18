@@ -1,7 +1,7 @@
 // 📁 store/containerContext.ts
 
 import { createContext, useContext, ReactNode } from 'react';
-import { useContainerState } from './containerState';
+import { useContainerState } from '../store/containerState';
 
 type ContainerContextType = ReturnType<typeof useContainerState>;
 
