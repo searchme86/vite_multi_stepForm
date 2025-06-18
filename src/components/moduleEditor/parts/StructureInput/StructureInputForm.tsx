@@ -1,5 +1,5 @@
 // 📁 editor/parts/StructureInput/StructureInputForm.tsx
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef } from 'react';
 import SectionInput from './inputs/SectionInput';
 import SectionPreview from './preview/SectionPreview';
 import SectionExamples from './examples/SectionExamples';
@@ -13,76 +13,31 @@ interface StructureInputFormProps {
 }
 
 function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
-  const editorCoreStoreActions = useEditorCoreStore();
-
+  const editorCoreStoreState = useEditorCoreStore();
   const {
-    getSectionInputs: retrieveCurrentSectionInputsFromStore,
-    updateSectionInput: updateSpecificSectionInputInStore,
-    addSectionInput: appendNewSectionInputToStore,
-    removeSectionInput: removeSpecificSectionInputFromStore,
-    setSectionInputs: replaceAllSectionInputsInStore,
-  } = editorCoreStoreActions;
+    getSectionInputs: retrieveCurrentSectionInputs,
+    updateSectionInput: updateSpecificSectionInput,
+    addSectionInput: appendNewSectionInput,
+    removeSectionInput: removeSpecificSectionInput,
+  } = editorCoreStoreState;
 
-  // 📁 StructureInputForm.tsx 맨 위에 임시 디버깅 코드 추가
-  console.log('🔍 [DEBUG] 스토어 함수 확인:', {
-    updateSpecificSectionInputInStore: typeof updateSpecificSectionInputInStore,
-    replaceAllSectionInputsInStore: typeof replaceAllSectionInputsInStore,
-    editorCoreStoreActions,
-  });
-
-  const currentStoredSectionInputs = retrieveCurrentSectionInputsFromStore();
-  const validatedStoredInputs = Array.isArray(currentStoredSectionInputs)
-    ? currentStoredSectionInputs
-    : [];
-  const hasValidStoredContent =
-    validatedStoredInputs.length > 0 &&
-    validatedStoredInputs.some((singleInput) => {
-      const validInput = typeof singleInput === 'string' ? singleInput : '';
-      return validInput.trim() !== '';
-    });
-
-  const initialSectionInputs = hasValidStoredContent
-    ? validatedStoredInputs
-    : ['', '', '', ''];
-
-  const [localSectionInputsState, setLocalSectionInputsState] =
-    useState<string[]>(initialSectionInputs);
-  const [isFormValidForSubmission, setIsFormValidForSubmission] =
-    useState(false);
   const imeCompositionStatusByIndex = useRef<Record<number, boolean>>({});
 
-  const hasInitializedFromStoreRef = useRef<boolean>(false);
+  const currentSectionInputs = retrieveCurrentSectionInputs();
+  const validatedSectionInputs = Array.isArray(currentSectionInputs)
+    ? currentSectionInputs
+    : ['', '', '', ''];
 
-  useEffect(() => {
-    if (hasInitializedFromStoreRef.current) {
-      return;
-    }
+  const countOfValidInputs = validatedSectionInputs.filter((singleInput) => {
+    const validInput = typeof singleInput === 'string' ? singleInput : '';
+    return validInput.trim().length > 0;
+  }).length;
 
-    console.log('🔄 [STRUCTURE_FORM] 스토어에서 초기값 로딩');
-    const currentStoreInputs = retrieveCurrentSectionInputsFromStore();
-    const validStoreInputs = Array.isArray(currentStoreInputs)
-      ? currentStoreInputs
-      : [];
-
-    if (
-      validStoreInputs.length > 0 &&
-      validStoreInputs.some((input) => {
-        const validInput = typeof input === 'string' ? input : '';
-        return validInput.trim() !== '';
-      })
-    ) {
-      setLocalSectionInputsState(validStoreInputs);
-
-      const validInputCount = validStoreInputs.filter((singleInput) => {
-        const validInput = typeof singleInput === 'string' ? singleInput : '';
-        return validInput.trim().length > 0;
-      }).length;
-
-      setIsFormValidForSubmission(validInputCount >= 2);
-    }
-
-    hasInitializedFromStoreRef.current = true;
-  }, [retrieveCurrentSectionInputsFromStore]);
+  const isFormValidForSubmission = countOfValidInputs >= 2;
+  const activeIMECompositionCount = Object.values(
+    imeCompositionStatusByIndex.current || {}
+  ).filter(Boolean).length;
+  const canRemoveInputs = validatedSectionInputs.length > 2;
 
   const handleSectionInputChange = useCallback(
     (inputIndex: number, newInputValue: string) => {
@@ -91,45 +46,14 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
       const validatedValue =
         typeof newInputValue === 'string' ? newInputValue : '';
 
-      console.log('🎯 [STRUCTURE_FORM] 입력 변경:', {
+      console.log('🎯 [SINGLE_STATE] 직접 스토어 업데이트:', {
         index: validatedIndex,
         value: validatedValue,
       });
 
-      let updatedInputsArray: string[] = [];
-
-      setLocalSectionInputsState((previousInputsState) => {
-        const safePreviousInputs = Array.isArray(previousInputsState)
-          ? previousInputsState
-          : ['', '', '', ''];
-        updatedInputsArray = [...safePreviousInputs];
-
-        if (validatedIndex < updatedInputsArray.length) {
-          updatedInputsArray[validatedIndex] = validatedValue;
-        }
-
-        const validInputCount = updatedInputsArray.filter((singleInput) => {
-          const validInput = typeof singleInput === 'string' ? singleInput : '';
-          return validInput.trim().length > 0;
-        }).length;
-
-        const isFormValid = validInputCount >= 2;
-        setIsFormValidForSubmission(isFormValid);
-
-        return updatedInputsArray;
-      });
-
-      Promise.resolve().then(() => {
-        console.log('📤 [STRUCTURE_FORM] 스토어 업데이트:', {
-          index: validatedIndex,
-          value: validatedValue,
-          array: updatedInputsArray,
-        });
-        updateSpecificSectionInputInStore(validatedIndex, validatedValue);
-        replaceAllSectionInputsInStore(updatedInputsArray);
-      });
+      updateSpecificSectionInput(validatedIndex, validatedValue);
     },
-    [updateSpecificSectionInputInStore, replaceAllSectionInputsInStore]
+    [updateSpecificSectionInput]
   );
 
   const handleIMECompositionStart = useCallback((inputIndex: number) => {
@@ -152,89 +76,36 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
   );
 
   const addNewSectionInput = useCallback(() => {
-    setLocalSectionInputsState((previousInputsState) => {
-      const safePreviousInputs = Array.isArray(previousInputsState)
-        ? previousInputsState
-        : ['', '', '', ''];
-      const expandedInputsArray = [...safePreviousInputs, ''];
+    const newInputIndex = validatedSectionInputs.length;
+    imeCompositionStatusByIndex.current[newInputIndex] = false;
 
-      const newInputIndex = safePreviousInputs.length;
-      imeCompositionStatusByIndex.current[newInputIndex] = false;
-
-      return expandedInputsArray;
-    });
-
-    appendNewSectionInputToStore();
-  }, [appendNewSectionInputToStore]);
+    appendNewSectionInput();
+  }, [appendNewSectionInput, validatedSectionInputs.length]);
 
   const removeLastSectionInput = useCallback(() => {
-    setLocalSectionInputsState((previousInputsState) => {
-      const safePreviousInputs = Array.isArray(previousInputsState)
-        ? previousInputsState
-        : ['', '', '', ''];
-
-      if (safePreviousInputs.length <= 2) {
-        return safePreviousInputs;
-      }
-
-      const reducedInputsArray = safePreviousInputs.slice(0, -1);
-      const validInputCount = reducedInputsArray.filter((singleInput) => {
-        const validInput = typeof singleInput === 'string' ? singleInput : '';
-        return validInput.trim().length > 0;
-      }).length;
-
-      setIsFormValidForSubmission(validInputCount >= 2);
-
-      const removedInputIndex = safePreviousInputs.length - 1;
-      delete imeCompositionStatusByIndex.current[removedInputIndex];
-
-      return reducedInputsArray;
-    });
-
-    const currentInputsState = localSectionInputsState;
-    const validCurrentInputs = Array.isArray(currentInputsState)
-      ? currentInputsState
-      : [];
-
-    if (validCurrentInputs.length > 2) {
-      const lastInputIndex = validCurrentInputs.length - 1;
-      removeSpecificSectionInputFromStore(lastInputIndex);
+    if (validatedSectionInputs.length <= 2) {
+      console.warn('최소 2개 섹션이 필요합니다');
+      return;
     }
-  }, [removeSpecificSectionInputFromStore, localSectionInputsState]);
+
+    const lastInputIndex = validatedSectionInputs.length - 1;
+    delete imeCompositionStatusByIndex.current[lastInputIndex];
+
+    removeSpecificSectionInput(lastInputIndex);
+  }, [removeSpecificSectionInput, validatedSectionInputs.length]);
 
   const handleFormSubmissionComplete = useCallback(() => {
-    const validLocalInputs = Array.isArray(localSectionInputsState)
-      ? localSectionInputsState
-      : [];
-    const filteredValidInputs = validLocalInputs.filter((singleInput) => {
+    const filteredValidInputs = validatedSectionInputs.filter((singleInput) => {
       const validInput = typeof singleInput === 'string' ? singleInput : '';
       return validInput.trim().length > 0;
     });
 
-    replaceAllSectionInputsInStore(validLocalInputs);
     handleStructureComplete(filteredValidInputs);
 
     if (typeof onStructureComplete === 'function') {
       onStructureComplete(filteredValidInputs);
     }
-  }, [
-    localSectionInputsState,
-    onStructureComplete,
-    replaceAllSectionInputsInStore,
-  ]);
-
-  const validatedLocalInputs = Array.isArray(localSectionInputsState)
-    ? localSectionInputsState
-    : ['', '', '', ''];
-  const countOfValidInputs = validatedLocalInputs.filter((singleInput) => {
-    const validInput = typeof singleInput === 'string' ? singleInput : '';
-    return validInput.trim().length > 0;
-  }).length;
-
-  const activeIMECompositionCount = Object.values(
-    imeCompositionStatusByIndex.current || {}
-  ).filter(Boolean).length;
-  const canRemoveInputs = validatedLocalInputs.length > 2;
+  }, [validatedSectionInputs, onStructureComplete]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -248,21 +119,21 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
         </p>
       </div>
 
-      <div className="p-3 text-xs border border-green-200 rounded-lg bg-green-50">
-        <div className="mb-2 font-semibold text-green-800">
-          ✅ 상태 동기화 에러 수정 완료!
+      <div className="p-3 text-xs border border-blue-200 rounded-lg bg-blue-50">
+        <div className="mb-2 font-semibold text-blue-800">
+          🎯 단일 상태 패턴으로 리팩터링 완료!
         </div>
-        <div className="grid grid-cols-2 gap-4 text-green-700">
+        <div className="grid grid-cols-2 gap-4 text-blue-700">
           <div>
-            <strong>수정사항:</strong>
-            <br />• useEffect 의존성 최적화
-            <br />• 즉시 스토어 업데이트
-            <br />• IME 충돌 방지 로직
-            <br />• 안전한 타입 검증
+            <strong>개선사항:</strong>
+            <br />• 로컬 상태 완전 제거
+            <br />• Zustand 직접 사용
+            <br />• 복잡한 동기화 로직 제거
+            <br />• useEffect 완전 제거
           </div>
           <div>
             <strong>현재 상태:</strong>
-            <br />• 입력 필드 수: {validatedLocalInputs.length}개
+            <br />• 입력 필드 수: {validatedSectionInputs.length}개
             <br />• 유효 입력 수: {countOfValidInputs}개
             <br />• IME 활성 상태: {activeIMECompositionCount}개
           </div>
@@ -272,7 +143,7 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
       <SectionExamples />
 
       <div className="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2">
-        {validatedLocalInputs.map((singleInputValue, inputIndex) => {
+        {validatedSectionInputs.map((singleInputValue, inputIndex) => {
           const validInputValue =
             typeof singleInputValue === 'string' ? singleInputValue : '';
           const isCurrentlyComposing = Boolean(
@@ -293,7 +164,7 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
         })}
       </div>
 
-      <SectionPreview containerInputs={validatedLocalInputs} />
+      <SectionPreview containerInputs={validatedSectionInputs} />
 
       <div className="flex items-center justify-between mt-4">
         <AddRemoveButtons
@@ -307,12 +178,12 @@ function StructureInputForm({ onStructureComplete }: StructureInputFormProps) {
         />
       </div>
 
-      <div className="p-4 text-center border border-green-200 rounded-lg bg-green-50">
-        <p className="text-green-800">
-          ✅ <strong>입력 상태:</strong> 입력 개수:{' '}
-          {validatedLocalInputs.length} | 유효성:{' '}
+      <div className="p-4 text-center border border-blue-200 rounded-lg bg-blue-50">
+        <p className="text-blue-800">
+          🎯 <strong>단일 상태:</strong> 입력 개수:{' '}
+          {validatedSectionInputs.length} | 유효성:{' '}
           {isFormValidForSubmission ? '✅' : '❌'} | 현재값: [
-          {validatedLocalInputs
+          {validatedSectionInputs
             .map((singleValue) => {
               const validValue =
                 typeof singleValue === 'string' ? singleValue : '';
