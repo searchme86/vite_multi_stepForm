@@ -1,6 +1,6 @@
 // editor/ModularBlogEditorContainer.tsx
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useEditorState } from './hooks/editorStateHooks/useEditorStateMain';
@@ -26,6 +26,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     }
   }, []);
 
+  // 🎯 [Zustand 전용] Context 없이 간단한 호출
   const editorState = useEditorState();
 
   const {
@@ -55,6 +56,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     isTransitioning: isStepTransitioning,
   } = editorInternalState;
 
+  // 🎯 [브릿지 설정] Zustand 전용 브릿지 설정
   const bridgeConfig = {
     enableAutoTransfer: false,
     enableValidation: true,
@@ -87,7 +89,8 @@ function ModularBlogEditorContainer(): React.ReactNode {
     bridgeConfiguration: uiBridgeConfiguration,
   } = useBridgeUI(bridgeConfig);
 
-  const handleEditorComplete = useCallback(async () => {
+  // 🎯 [에디터 완료 처리] 브릿지와 통합된 완료 핸들러
+  const handleEditorComplete = React.useCallback(async () => {
     finishEditing();
 
     const canTransfer = checkCanTransfer();
@@ -129,6 +132,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     uiExecuteTransfer,
   ]);
 
+  // 🎯 [검증 상태 갱신] 에디터 상태 변화 시 검증 갱신
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       uiRefreshValidation();

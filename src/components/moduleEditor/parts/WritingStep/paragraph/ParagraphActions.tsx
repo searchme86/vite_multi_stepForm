@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Button } from '@heroui/react';
 
 type SubStep = 'structure' | 'writing';
@@ -45,40 +45,54 @@ function ParagraphActions({
   addToLocalContainer,
   setInternalState,
 }: ParagraphActionsProps) {
-  console.log('⚡ [PARAGRAPH_ACTIONS] 렌더링:', {
-    paragraphId: paragraph.id,
-    isSelected: internalState.selectedParagraphIds.includes(paragraph.id),
-    targetContainerId: internalState.targetContainerId,
-  });
+  const isSelected = useMemo(
+    () => internalState.selectedParagraphIds.includes(paragraph.id),
+    [internalState.selectedParagraphIds, paragraph.id]
+  );
 
-  const isSelected = internalState.selectedParagraphIds.includes(paragraph.id);
+  const isButtonDisabled = useMemo(
+    () =>
+      !isSelected ||
+      !internalState.targetContainerId ||
+      !paragraph.content.trim(),
+    [isSelected, internalState.targetContainerId, paragraph.content]
+  );
 
-  const handleContainerSelect = (containerId: string) => {
-    console.log('📦 [PARAGRAPH_ACTIONS] 컨테이너 선택:', {
-      paragraphId: paragraph.id,
-      containerId,
-    });
+  const selectValue = useMemo(
+    () => (isSelected ? internalState.targetContainerId : ''),
+    [isSelected, internalState.targetContainerId]
+  );
 
-    setInternalState((prev: EditorInternalState) => ({
-      ...prev,
-      targetContainerId: containerId,
-      selectedParagraphIds: prev.selectedParagraphIds.includes(paragraph.id)
-        ? prev.selectedParagraphIds
-        : [...prev.selectedParagraphIds, paragraph.id],
-    }));
-  };
+  const handleContainerSelect = useCallback(
+    (containerId: string) => {
+      setInternalState((prev: EditorInternalState) => ({
+        ...prev,
+        targetContainerId: containerId,
+        selectedParagraphIds: prev.selectedParagraphIds.includes(paragraph.id)
+          ? prev.selectedParagraphIds
+          : [...prev.selectedParagraphIds, paragraph.id],
+      }));
+    },
+    [paragraph.id, setInternalState]
+  );
 
-  const handleAddToContainer = () => {
-    console.log('➡️ [PARAGRAPH_ACTIONS] 컨테이너에 추가:', paragraph.id);
+  const handleAddToContainer = useCallback(() => {
     addToLocalContainer();
-  };
+  }, [addToLocalContainer]);
+
+  const handleSelectChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      handleContainerSelect(e.target.value);
+    },
+    [handleContainerSelect]
+  );
 
   return (
     <div className="flex gap-2">
       <select
         className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded"
-        value={isSelected ? internalState.targetContainerId : ''}
-        onChange={(e) => handleContainerSelect(e.target.value)}
+        value={selectValue}
+        onChange={handleSelectChange}
         aria-label={`단락 ${paragraph.id}를 추가할 컨테이너 선택`}
       >
         <option value="">컨테이너 선택</option>
@@ -94,11 +108,7 @@ function ParagraphActions({
         color="success"
         size="sm"
         onPress={handleAddToContainer}
-        isDisabled={
-          !isSelected ||
-          !internalState.targetContainerId ||
-          !paragraph.content.trim()
-        }
+        isDisabled={isButtonDisabled}
         aria-label="선택된 단락을 컨테이너에 추가"
       >
         추가
@@ -107,4 +117,4 @@ function ParagraphActions({
   );
 }
 
-export default ParagraphActions;
+export default React.memo(ParagraphActions);
