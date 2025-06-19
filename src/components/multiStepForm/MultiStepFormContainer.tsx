@@ -233,7 +233,7 @@ function MultiStepFormContainer(): React.ReactNode {
   ]);
 
   return (
-    <div className="p-2 mx-auto max-w-[1200px] sm:p-4 md:p-8">
+    <div className=" p-2 mx-auto w-[1200px] max-w-[1200px] sm:p-4 md:p-8 md:w-[400px]">
       {bridgeDebugEnabled && (
         <div className="fixed z-50 px-3 py-1 text-sm text-yellow-700 bg-yellow-100 border border-yellow-400 rounded debug-indicator top-4 right-4">
           🔧 BRIDGE DEBUG MODE

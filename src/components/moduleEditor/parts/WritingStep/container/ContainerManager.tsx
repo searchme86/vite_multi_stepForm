@@ -49,14 +49,7 @@ function ContainerManager({
         <span className="text-lg font-semibold">📦 컨테이너 관리</span>
       </div>
 
-      <div
-        className="p-4 overflow-y-auto"
-        style={{
-          height: 'calc(70vh - 80px)',
-          maxHeight: 'calc(70vh - 80px)',
-          overflowY: 'scroll',
-        }}
-      >
+      <div className="p-4 overflow-y-auto">
         <div className="space-y-4">
           {sortedContainers.map((container) => (
             <ContainerCard

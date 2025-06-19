@@ -3,12 +3,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import StepControls from './controls/StepControls';
 import ParagraphEditor from './paragraph/ParagraphEditor';
-import ContainerManager from './container/ContainerManager';
-import PreviewPanel from './preview/PreviewPanel';
 import { MarkdownCompleteButton } from '../../../../bridges/parts/MarkdownCompleteButton';
 import { MarkdownStatusCard } from '../../../../bridges/parts/MarkdownStatusCard';
 import { MarkdownResultToast } from '../../../../bridges/parts/MarkdownResultToast';
 import { QuickStatusBar } from '../../../../bridges/parts/QuickStatusBar';
+
+// 🆕 새로운 슬라이드 사이드바 시스템 import
+import { EditorSidebarContainer } from './sidebar/EditorSidebarContainer';
+import { StructureManagementSlide } from './sidebar/slides/StructureManagementSlide';
+import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
+import { editorStyles } from './editorStyle';
 
 type SubStep = 'structure' | 'writing';
 
@@ -82,13 +86,16 @@ function WritingStep({
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
 }: WritingStepProps) {
-  console.log('✍️ [WRITING_STEP] 컴포넌트 렌더링 (Zustand 통합):', {
-    localContainers: localContainers.length,
-    localParagraphs: localParagraphs.length,
-    currentSubStep: internalState.currentSubStep,
-    updateLocalParagraphContentType: typeof updateLocalParagraphContent,
-    timestamp: new Date().toISOString(),
-  });
+  console.log(
+    '✍️ [WRITING_STEP] 컴포넌트 렌더링 (단순화된 슬라이드 사이드바):',
+    {
+      localContainers: localContainers.length,
+      localParagraphs: localParagraphs.length,
+      currentSubStep: internalState.currentSubStep,
+      updateLocalParagraphContentType: typeof updateLocalParagraphContent,
+      timestamp: new Date().toISOString(),
+    }
+  );
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -127,7 +134,6 @@ function WritingStep({
     return result;
   }, [localContainers]);
 
-  // ✅ 3-2. handleUpdateParagraphContent 로직 단순화
   const handleUpdateParagraphContent = useCallback(
     (id: string, content: string) => {
       console.log('📝 [WRITING_STEP] 단락 내용 업데이트 요청 (단순화):', {
@@ -139,7 +145,6 @@ function WritingStep({
         timestamp: new Date().toISOString(),
       });
 
-      // 기본 검증만 수행
       if (!id || typeof id !== 'string') {
         console.error('❌ [WRITING_STEP] 잘못된 단락 ID:', id);
         return;
@@ -154,7 +159,6 @@ function WritingStep({
       }
 
       try {
-        // 직접 전달 (복잡한 로직 제거)
         updateLocalParagraphContent(id, content);
 
         console.log('✅ [WRITING_STEP] 단락 내용 업데이트 성공:', {
@@ -202,6 +206,7 @@ function WritingStep({
     [internalState.selectedParagraphIds, toggleParagraphSelection]
   );
 
+  // 📦 ParagraphEditor props 준비
   const paragraphEditorProps = useMemo(
     () => ({
       isMobile,
@@ -231,6 +236,7 @@ function WritingStep({
     ]
   );
 
+  // 📦 ContainerManager props 준비 (슬라이드용)
   const containerManagerProps = useMemo(
     () => ({
       isMobile,
@@ -248,6 +254,7 @@ function WritingStep({
     ]
   );
 
+  // 📦 PreviewPanel props 준비 (슬라이드용)
   const previewPanelProps = useMemo(
     () => ({
       internalState,
@@ -267,32 +274,173 @@ function WritingStep({
     ]
   );
 
+  // 🎠 준비된 슬라이드 컴포넌트들 생성
+  const preparedStructureSlide = useMemo(
+    () => (
+      <StructureManagementSlide containerManagerProps={containerManagerProps} />
+    ),
+    [containerManagerProps]
+  );
+
+  const preparedPreviewSlide = useMemo(
+    () => <FinalPreviewSlide previewPanelProps={previewPanelProps} />,
+    [previewPanelProps]
+  );
+
+  // 📊 통계 계산
   const totalParagraphCount = useMemo(() => {
     return localParagraphs.length;
   }, [localParagraphs.length]);
 
-  const assignedParagraphCount = useMemo(() => {
-    return localParagraphs.filter((p) => p.containerId !== null).length;
-  }, [localParagraphs]);
-
   return (
-    <div className="space-y-4">
-      {!isMobile && (
-        <QuickStatusBar
-          position="top"
-          variant="minimal"
-          showProgressBar={true}
-          showQuickActions={true}
-          showStatistics={false}
-          collapsible={true}
-          onQuickTransfer={completeEditor}
-          onShowDetails={() => {
-            console.log('⚡ [WRITING_STEP] 상세 정보 보기 요청');
-          }}
-          className="backdrop-blur-sm"
+    <div className="w-full h-full">
+      {/* 상단 상태바 */}
+      <QuickStatusBar
+        position="top"
+        variant="minimal"
+        showProgressBar={true}
+        showQuickActions={true}
+        showStatistics={false}
+        collapsible={true}
+        onQuickTransfer={completeEditor}
+        onShowDetails={() => {
+          console.log('⚡ [WRITING_STEP] 상세 정보 보기 요청');
+        }}
+        className="border-b border-gray-200 backdrop-blur-sm"
+      />
+      {/* 브릿지 섹션 */}
+      <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
+        <StepControls
+          sortedContainers={sortedContainers}
+          goToStructureStep={goToStructureStep}
+          saveAllToContext={saveAllToContext}
+          completeEditor={completeEditor}
         />
-      )}
 
+        <div className="mt-4 space-y-4">
+          <MarkdownStatusCard
+            size="compact"
+            variant="bordered"
+            hideValidationDetails={false}
+            hideErrorsWarnings={false}
+            className="transition-all duration-200"
+            onClick={() => {
+              console.log('📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시');
+            }}
+          />
+
+          <MarkdownCompleteButton
+            buttonText="마크다운 완성하기"
+            size="medium"
+            variant="primary"
+            fullWidth={false}
+            onCompleteSuccess={completeEditor}
+            showDetailedStatus={true}
+            className="transition-all duration-200"
+          />
+        </div>
+      </div>
+      {/* 🖥️ 데스크탑: 좌우 분할 레이아웃 */}
+      <div className="hidden h-full md:flex">
+        {/* 왼쪽: 에디터 영역 */}
+        <div className="w-[50%] h-full  mr-[20px] border-r border-gray-200 ">
+          {/* 에디터 영역 */}
+          <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
+          <div className="text-sm text-gray-500">
+            미할당: {unassignedParagraphs.length}개 / 전체:{' '}
+            {totalParagraphCount}개
+          </div>
+          <ParagraphEditor {...paragraphEditorProps} />
+        </div>
+
+        {/* 오른쪽: 슬라이드 사이드바 */}
+        <div className="flex flex-col w-[50%]">
+          <EditorSidebarContainer className="h-full">
+            {preparedStructureSlide}
+            {preparedPreviewSlide}
+          </EditorSidebarContainer>
+        </div>
+      </div>
+
+      {/* 📱 모바일: 상하 분할 레이아웃 */}
+      <div className="flex flex-col h-full md:hidden">
+        {/* 상단: 슬라이드 사이드바 */}
+        <div className="border-b border-gray-200 h-1/2">
+          <EditorSidebarContainer className="h-full">
+            {preparedStructureSlide}
+            {preparedPreviewSlide}
+          </EditorSidebarContainer>
+        </div>
+
+        {/* 하단: 에디터 영역 */}
+        <div className="flex flex-col flex-1">
+          {/* 브릿지 섹션 */}
+          <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
+            <StepControls
+              sortedContainers={sortedContainers}
+              goToStructureStep={goToStructureStep}
+              saveAllToContext={saveAllToContext}
+              completeEditor={completeEditor}
+            />
+
+            <div className="mt-4 space-y-4">
+              <MarkdownStatusCard
+                size="compact"
+                variant="bordered"
+                hideValidationDetails={true}
+                hideErrorsWarnings={true}
+                className="text-sm transition-all duration-200"
+                onClick={() => {
+                  console.log(
+                    '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
+                  );
+                }}
+              />
+
+              <MarkdownCompleteButton
+                buttonText="마크다운 완성하기"
+                size="medium"
+                variant="primary"
+                fullWidth={true}
+                onCompleteSuccess={completeEditor}
+                showDetailedStatus={true}
+                className="py-3 text-sm transition-all duration-200"
+              />
+            </div>
+          </div>
+
+          {/* 에디터 영역 */}
+          <div className="flex-1 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">📝 단락 작성</h2>
+              <div className="text-xs text-gray-500">
+                미할당: {unassignedParagraphs.length}개 / 전체:{' '}
+                {totalParagraphCount}개
+              </div>
+            </div>
+            <div className="h-full pb-20">
+              <ParagraphEditor {...paragraphEditorProps} />
+            </div>
+          </div>
+
+          {/* 하단 상태바 */}
+          <QuickStatusBar
+            position="bottom"
+            variant="tab-bar"
+            showProgressBar={true}
+            showQuickActions={true}
+            showStatistics={true}
+            collapsible={false}
+            onQuickTransfer={completeEditor}
+            onShowDetails={() => {
+              console.log('⚡ [WRITING_STEP] 모바일 상세 정보 보기 요청');
+            }}
+            className="border-t border-gray-200 backdrop-blur-sm"
+          />
+        </div>
+      </div>
+
+      {/* 🍞 토스트 알림 */}
       <MarkdownResultToast
         position={isMobile ? 'top-center' : 'top-right'}
         defaultDuration={5000}
@@ -314,241 +462,12 @@ function WritingStep({
         }}
       />
 
-      <div
-        className={`flex flex-col space-y-4 ${!isMobile ? 'pt-8' : ''}`}
-        style={{
-          paddingBottom: isMobile ? '80px' : '0',
-        }}
-      >
-        <StepControls
-          sortedContainers={sortedContainers}
-          goToStructureStep={goToStructureStep}
-          saveAllToContext={saveAllToContext}
-          completeEditor={completeEditor}
-        />
-
-        <div
-          className="pt-4 border-t border-gray-200"
-          role="region"
-          aria-labelledby="markdown-bridge-section"
-        >
-          <div className="flex flex-col space-y-4">
-            <h3
-              id="markdown-bridge-section"
-              className="text-sm font-medium text-gray-700"
-            >
-              마크다운 생성
-            </h3>
-
-            <div
-              className="w-full"
-              role="status"
-              aria-live="polite"
-              aria-label="마크다운 생성 상태 정보"
-            >
-              <MarkdownStatusCard
-                size={isMobile ? 'compact' : 'standard'}
-                variant="bordered"
-                hideValidationDetails={isMobile}
-                hideErrorsWarnings={isMobile}
-                className={`
-                  transition-all duration-200
-                  ${isMobile ? 'text-sm' : ''}
-                  focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-opacity-50
-                `}
-                onClick={() => {
-                  console.log(
-                    '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
-                  );
-                }}
-              />
-            </div>
-
-            <div
-              className="w-full"
-              role="group"
-              aria-labelledby="markdown-complete-section"
-            >
-              <MarkdownCompleteButton
-                buttonText="마크다운 완성하기"
-                size="medium"
-                variant="primary"
-                fullWidth={isMobile}
-                onCompleteSuccess={completeEditor}
-                showDetailedStatus={true}
-                className={`
-                  transition-all duration-200
-                  ${isMobile ? 'text-sm py-3' : 'py-2'}
-                `}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-4`}
-        style={{ height: '70vh' }}
-      >
-        <div className={`${isMobile ? 'w-full' : 'flex-1'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
-            <div className="text-sm text-gray-500">
-              미할당: {unassignedParagraphs.length}개 / 전체:{' '}
-              {totalParagraphCount}개
-            </div>
-          </div>
-          <ParagraphEditor {...paragraphEditorProps} />
-        </div>
-
-        <div
-          className={`${isMobile ? 'w-full' : 'w-96'} ${
-            !isMobile ? 'border-l border-gray-200' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">📁 구조 관리</h3>
-            <div className="text-sm text-gray-500">
-              할당: {assignedParagraphCount}개 / {sortedContainers.length}개
-              섹션
-            </div>
-          </div>
-          <ContainerManager {...containerManagerProps} />
-        </div>
-      </div>
-
-      <PreviewPanel {...previewPanelProps} />
-
+      {/* 🎨 스타일링 */}
       <style
         dangerouslySetInnerHTML={{
-          __html: `
-            .tiptap-wrapper .ProseMirror {
-              outline: none;
-              min-height: 200px;
-              padding: 1rem;
-            }
-
-            .tiptap-wrapper .ProseMirror p.is-editor-empty:first-child::before {
-              content: attr(data-placeholder);
-              float: left;
-              color: #adb5bd;
-              pointer-events: none;
-              height: 0;
-              white-space: pre-line;
-            }
-
-            .tiptap-wrapper .tiptap-image,
-            .tiptap-wrapper .ProseMirror img,
-            .tiptap-wrapper img {
-              max-width: 100% !important;
-              height: auto !important;
-              border-radius: 8px !important;
-              margin: 8px 0 !important;
-              display: block !important;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-              cursor: pointer !important;
-              transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-            }
-
-            .tiptap-wrapper .tiptap-image:hover,
-            .tiptap-wrapper .ProseMirror img:hover,
-            .tiptap-wrapper img:hover {
-              transform: scale(1.02) !important;
-              box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-            }
-
-            .tiptap-wrapper img[src=""],
-            .tiptap-wrapper img:not([src]) {
-              background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-              background-size: 200% 100%;
-              animation: loading 1.5s infinite;
-              min-height: 100px;
-              opacity: 0.7;
-            }
-
-            @keyframes loading {
-              0% { background-position: 200% 0; }
-              100% { background-position: -200% 0; }
-            }
-
-            .tiptap-wrapper .tiptap-link {
-              color: #3b82f6;
-              text-decoration: underline;
-            }
-
-            .tiptap-wrapper .ProseMirror-dropcursor {
-              border-left: 2px solid #3b82f6;
-            }
-
-            .tiptap-wrapper .ProseMirror-gapcursor {
-              display: none;
-              pointer-events: none;
-              position: absolute;
-            }
-
-            .tiptap-wrapper .ProseMirror-gapcursor:after {
-              content: '';
-              display: block;
-              position: absolute;
-              top: -2px;
-              width: 20px;
-              border-top: 1px solid #3b82f6;
-              animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
-            }
-
-            @keyframes ProseMirror-cursor-blink {
-              to {
-                visibility: hidden;
-              }
-            }
-
-            .tiptap-wrapper .ProseMirror-selectednode {
-              outline: 2px solid #3b82f6;
-              outline-offset: 2px;
-            }
-
-            .markdown-content img,
-            .rendered-image {
-              max-width: 100% !important;
-              height: auto !important;
-              border-radius: 8px !important;
-              margin: 8px 0 !important;
-              display: block !important;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-              cursor: pointer !important;
-              transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-            }
-
-            .markdown-content .rendered-image:hover {
-              transform: scale(1.02) !important;
-              box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-            }
-
-            .markdown-content img[alt*="불러올 수 없습니다"],
-            .rendered-image[alt*="불러올 수 없습니다"] {
-              opacity: 0.5 !important;
-              filter: grayscale(100%) !important;
-              border: 2px dashed #ccc !important;
-            }
-          `,
+          __html: editorStyles,
         }}
       />
-
-      {isMobile && (
-        <QuickStatusBar
-          position="bottom"
-          variant="tab-bar"
-          showProgressBar={true}
-          showQuickActions={true}
-          showStatistics={true}
-          collapsible={false}
-          onQuickTransfer={completeEditor}
-          onShowDetails={() => {
-            console.log('⚡ [WRITING_STEP] 모바일 상세 정보 보기 요청');
-          }}
-          className="border-t border-gray-200 backdrop-blur-sm"
-        />
-      )}
     </div>
   );
 }
