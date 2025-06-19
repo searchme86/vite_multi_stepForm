@@ -76,7 +76,7 @@ function ParagraphEditor({
     <div
       className={`${
         isMobile ? 'w-full' : 'flex-1'
-      } w-full h-full border border-gray-200 rounded-lg`}
+      } w-full h-full border border-gray-200 rounded-lg pb-4`}
     >
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
         <span className="text-lg font-semibold">📝 단락 작성 (Tiptap)</span>
@@ -93,7 +93,7 @@ function ParagraphEditor({
       </div>
 
       <div className="p-4 overflow-y-auto h-[calc(100%-65px)]">
-        <div className="h-full space-y-6">
+        <div className="h-full space-y-6 ">
           {unassignedParagraphs.map((paragraph) => (
             <ParagraphCard
               key={paragraph.id}
