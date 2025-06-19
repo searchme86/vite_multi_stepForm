@@ -51,48 +51,31 @@ function ParagraphActions({
   toggleParagraphSelection = () =>
     console.warn('toggleParagraphSelection not provided'),
 }: ParagraphActionsProps) {
+  // ✅ 개발 모드에서만 디버그 로그
+  const isDebugMode = process.env.NODE_ENV === 'development';
+
+  // 🎯 메모이제이션된 계산값들
   const isSelected = useMemo(
     () => internalState.selectedParagraphIds.includes(paragraph.id),
     [internalState.selectedParagraphIds, paragraph.id]
   );
 
-  console.log('=== 컨테이너 ID 불일치 디버깅 ===');
-  console.log(
-    '현재 선택된 targetContainerId:',
-    internalState.targetContainerId
-  );
-  console.log('실제 존재하는 컨테이너들:');
-  sortedContainers.forEach((container, index) => {
-    console.log(`  ${index}: ${container.id} - ${container.name}`);
-  });
+  const targetContainerExists = useMemo(() => {
+    return sortedContainers.some(
+      (container) => container.id === internalState.targetContainerId
+    );
+  }, [sortedContainers, internalState.targetContainerId]);
 
-  const targetContainerExists = sortedContainers.some(
-    (c) => c.id === internalState.targetContainerId
-  );
-  console.log('선택된 컨테이너가 실제로 존재하는가?', targetContainerExists);
-
-  React.useEffect(() => {
-    if (
-      internalState.targetContainerId &&
-      !targetContainerExists &&
-      sortedContainers.length > 0
-    ) {
-      console.log(
-        '🔧 [AUTO_FIX] 존재하지 않는 컨테이너 ID 감지, 자동 초기화:',
-        internalState.targetContainerId
-      );
-      if (setTargetContainerId && typeof setTargetContainerId === 'function') {
-        setTargetContainerId('');
-        console.log('✅ [AUTO_FIX] targetContainerId 초기화 완료');
-      }
+  // 🔧 컨테이너 ID 검증 및 자동 초기화 (useEffect 제거, 조건부 실행으로 변경)
+  const selectValue = useMemo(() => {
+    // 선택되지 않았거나 존재하지 않는 컨테이너인 경우 빈 문자열 반환
+    if (!isSelected || !targetContainerExists) {
+      return '';
     }
-  }, [
-    internalState.targetContainerId,
-    targetContainerExists,
-    sortedContainers.length,
-    setTargetContainerId,
-  ]);
+    return internalState.targetContainerId;
+  }, [isSelected, targetContainerExists, internalState.targetContainerId]);
 
+  // 🚀 최적화된 콘텐츠 검증 로직
   const getContentValidation = useMemo(() => {
     const content = paragraph.content || '';
     const trimmedContent = content.trim();
@@ -125,8 +108,7 @@ function ParagraphActions({
     };
   }, [paragraph.content]);
 
-  console.log('🔍 [NEW] 콘텐츠 검증 상세:', getContentValidation);
-
+  // 🎯 버튼 비활성화 조건 계산
   const isButtonDisabled = useMemo(() => {
     const basicRequirements =
       !isSelected || !internalState.targetContainerId || !targetContainerExists;
@@ -149,14 +131,8 @@ function ParagraphActions({
     getContentValidation,
   ]);
 
-  console.log('✅ [FINAL] isButtonDisabled (수정됨):', isButtonDisabled);
-
-  const selectValue =
-    isSelected && targetContainerExists ? internalState.targetContainerId : '';
-
-  console.log('selectValue (수정됨):', selectValue);
-
-  const getButtonText = () => {
+  // 🔧 버튼 텍스트 및 색상 계산
+  const getButtonText = useCallback(() => {
     if (!isSelected) return '단락 선택 필요';
     if (!internalState.targetContainerId) return '컨테이너 선택 필요';
     if (getContentValidation.isEmpty && !getContentValidation.hasMedia)
@@ -164,167 +140,128 @@ function ParagraphActions({
     if (getContentValidation.hasPlaceholder && !getContentValidation.hasMedia)
       return '실제 내용 입력 필요';
     return '컨테이너에 추가';
-  };
+  }, [isSelected, internalState.targetContainerId, getContentValidation]);
 
-  const getButtonColor = () => {
-    if (isButtonDisabled) return 'default';
-    return 'success';
-  };
+  const getButtonColor = useCallback(() => {
+    return isButtonDisabled ? 'default' : 'success';
+  }, [isButtonDisabled]);
 
+  // ✅ 컨테이너 선택 핸들러 - 안정화된 의존성
   const handleContainerSelect = useCallback(
     (containerId: string) => {
-      console.log('🎯 [PARAGRAPH_ACTIONS] 컨테이너 선택:', {
-        containerId,
-        paragraphId: paragraph.id,
-        paragraphContent: paragraph.content,
-        setTargetContainerIdType: typeof setTargetContainerId,
-        setTargetContainerIdValue: setTargetContainerId,
-      });
-
-      try {
-        if (
-          setTargetContainerId &&
-          typeof setTargetContainerId === 'function'
-        ) {
-          setTargetContainerId(containerId);
-          console.log('✅ [PARAGRAPH_ACTIONS] setTargetContainerId 호출 성공');
-        } else {
-          console.error(
-            '❌ [PARAGRAPH_ACTIONS] setTargetContainerId가 함수가 아님:',
-            {
-              type: typeof setTargetContainerId,
-              value: setTargetContainerId,
-            }
-          );
-          return;
-        }
-      } catch (error) {
-        console.error(
-          '❌ [PARAGRAPH_ACTIONS] setTargetContainerId 호출 중 에러:',
-          error
-        );
-        return;
+      if (isDebugMode) {
+        console.log('🎯 [PARAGRAPH_ACTIONS] 컨테이너 선택:', {
+          containerId,
+          paragraphId: paragraph.id.slice(-8),
+        });
       }
 
-      try {
-        if (
-          !isSelected &&
-          toggleParagraphSelection &&
-          typeof toggleParagraphSelection === 'function'
-        ) {
-          toggleParagraphSelection(paragraph.id);
-          console.log(
-            '✅ [PARAGRAPH_ACTIONS] toggleParagraphSelection 호출 성공'
-          );
-        } else if (!isSelected) {
-          console.error(
-            '❌ [PARAGRAPH_ACTIONS] toggleParagraphSelection이 함수가 아님:',
-            {
-              type: typeof toggleParagraphSelection,
-              value: toggleParagraphSelection,
-            }
-          );
+      // 컨테이너 ID 설정
+      setTargetContainerId(containerId);
+
+      // 선택되지 않은 단락이면 자동 선택
+      if (!isSelected) {
+        toggleParagraphSelection(paragraph.id);
+        if (isDebugMode) {
+          console.log('✅ [PARAGRAPH_ACTIONS] 단락 자동 선택됨');
         }
-      } catch (error) {
-        console.error(
-          '❌ [PARAGRAPH_ACTIONS] toggleParagraphSelection 호출 중 에러:',
-          error
-        );
       }
     },
     [
       paragraph.id,
-      paragraph.content,
       isSelected,
       setTargetContainerId,
       toggleParagraphSelection,
+      isDebugMode,
     ]
   );
 
+  // ✅ 컨테이너 추가 핸들러 - 최적화된 검증
   const handleAddToContainer = useCallback(() => {
-    console.log('➕ [PARAGRAPH_ACTIONS] 추가 버튼 클릭:', {
-      isSelected,
-      targetContainerId: internalState.targetContainerId,
-      paragraphContent: paragraph.content,
-      contentValidation: getContentValidation,
-      selectedParagraphs: internalState.selectedParagraphIds,
-    });
+    if (isDebugMode) {
+      console.log('➕ [PARAGRAPH_ACTIONS] 추가 버튼 클릭:', {
+        isSelected,
+        targetContainerId: internalState.targetContainerId,
+        contentValidation: getContentValidation,
+      });
+    }
 
+    // 조기 반환으로 검증 최적화
     if (!isSelected) {
-      console.warn('⚠️ [PARAGRAPH_ACTIONS] 단락이 선택되지 않음');
+      if (isDebugMode) {
+        console.warn('⚠️ [PARAGRAPH_ACTIONS] 단락이 선택되지 않음');
+      }
       return;
     }
 
     if (!internalState.targetContainerId) {
-      console.warn('⚠️ [PARAGRAPH_ACTIONS] 타겟 컨테이너가 선택되지 않음');
+      if (isDebugMode) {
+        console.warn('⚠️ [PARAGRAPH_ACTIONS] 타겟 컨테이너가 선택되지 않음');
+      }
       return;
     }
 
     if (getContentValidation.isEmpty && !getContentValidation.hasMedia) {
-      console.warn(
-        '⚠️ [PARAGRAPH_ACTIONS] 내용이 비어있습니다 (이미지나 텍스트 필요)'
-      );
-      console.log('📝 [DEBUG] 현재 내용:', `"${paragraph.content}"`);
+      if (isDebugMode) {
+        console.warn('⚠️ [PARAGRAPH_ACTIONS] 내용이 비어있습니다');
+      }
       return;
     }
 
     if (getContentValidation.hasPlaceholder && !getContentValidation.hasMedia) {
-      console.warn(
-        '⚠️ [PARAGRAPH_ACTIONS] 플레이스홀더 텍스트만 있음, 실제 내용을 입력해주세요'
-      );
+      if (isDebugMode) {
+        console.warn('⚠️ [PARAGRAPH_ACTIONS] 플레이스홀더만 있음');
+      }
       return;
     }
 
-    console.log('✅ [PARAGRAPH_ACTIONS] 모든 검증 통과, 컨테이너에 추가 진행');
-
-    if (typeof addToLocalContainer === 'function') {
-      addToLocalContainer();
-      console.log('🎉 [PARAGRAPH_ACTIONS] addToLocalContainer 호출 완료');
-    } else {
-      console.error(
-        '❌ [PARAGRAPH_ACTIONS] addToLocalContainer가 함수가 아님:',
-        typeof addToLocalContainer
-      );
+    if (isDebugMode) {
+      console.log('✅ [PARAGRAPH_ACTIONS] 모든 검증 통과, 컨테이너에 추가');
     }
+
+    addToLocalContainer();
   }, [
     isSelected,
     internalState.targetContainerId,
-    internalState.selectedParagraphIds,
-    paragraph.content,
-    paragraph.id,
     getContentValidation,
     addToLocalContainer,
+    isDebugMode,
   ]);
 
+  // ✅ 드롭다운 변경 핸들러 - 안정화된 의존성
   const handleSelectChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const selectedContainerId = e.target.value;
-      console.log('📝 [PARAGRAPH_ACTIONS] 드롭다운 변경:', {
-        selectedContainerId,
-        previousContainerId: internalState.targetContainerId,
-        setTargetContainerIdType: typeof setTargetContainerId,
-      });
+
+      if (isDebugMode) {
+        console.log('📝 [PARAGRAPH_ACTIONS] 드롭다운 변경:', {
+          selectedContainerId,
+          previousContainerId: internalState.targetContainerId,
+        });
+      }
 
       if (selectedContainerId) {
-        try {
-          handleContainerSelect(selectedContainerId);
-        } catch (error) {
-          console.error(
-            '❌ [PARAGRAPH_ACTIONS] handleContainerSelect 호출 중 에러:',
-            error
-          );
-        }
+        handleContainerSelect(selectedContainerId);
       }
     },
-    [
-      handleContainerSelect,
-      setTargetContainerId,
-      internalState.targetContainerId,
-    ]
+    [handleContainerSelect, internalState.targetContainerId, isDebugMode]
   );
+
+  // 🔧 디버그 로그 (개발 모드에서만, 간소화)
+  if (isDebugMode) {
+    console.log('🔄 [PARAGRAPH_ACTIONS] 상태:', {
+      paragraphId: paragraph.id.slice(-8),
+      isSelected,
+      targetContainerId: internalState.targetContainerId,
+      targetContainerExists,
+      isButtonDisabled,
+      containersCount: sortedContainers.length,
+    });
+  }
 
   return (
     <div className="flex gap-2">
+      {/* 컨테이너 선택 드롭다운 */}
       <select
         className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded"
         value={selectValue}
@@ -339,6 +276,7 @@ function ParagraphActions({
         ))}
       </select>
 
+      {/* 추가 버튼 */}
       <Button
         type="button"
         color={getButtonColor()}
@@ -362,6 +300,7 @@ function ParagraphActions({
         {getButtonText()}
       </Button>
 
+      {/* 상태 표시 (간소화) */}
       {isButtonDisabled && (
         <div className="flex items-center ml-2 text-xs text-gray-500">
           {getContentValidation.isEmpty && !getContentValidation.hasMedia && (

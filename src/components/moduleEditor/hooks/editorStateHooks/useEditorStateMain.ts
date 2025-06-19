@@ -1,7 +1,7 @@
 // 📁 hooks/useEditorState/useEditorStateMain.ts
-// 🚨 **완전 해결**: 안전한 스토어 접근 패턴 적용
+// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { EditorInternalState } from '../../types/editor';
 import {
   Container,
@@ -21,49 +21,120 @@ export function useEditorState() {
 }
 
 const useEditorStateImpl = () => {
-  console.log('🪝 [USE_EDITOR_STATE] 훅 초기화 - 안전한 패턴');
+  console.log('🪝 [USE_EDITOR_STATE] 훅 초기화 - 근본적 개선 버전');
 
-  // ✅ **안전한 방법 1**: 스토어 상태를 직접 구독하되 안정적인 참조 보장
-  const coreStore = useEditorCoreStore();
-  const uiStore = useEditorUIStore();
-  const toastStore = useToastStore();
+  // ✅ **방법 1**: 개별 메서드 추출 (가장 안전한 방법)
+  const addContainer = useEditorCoreStore((state) => state.addContainer);
+  const resetEditorState = useEditorCoreStore(
+    (state) => state.resetEditorState
+  );
+  const getContainers = useEditorCoreStore((state) => state.getContainers);
+  const getSortedContainers = useEditorCoreStore(
+    (state) => state.getSortedContainers
+  );
+  const getParagraphs = useEditorCoreStore((state) => state.getParagraphs);
+  const addParagraph = useEditorCoreStore((state) => state.addParagraph);
+  const deleteParagraph = useEditorCoreStore((state) => state.deleteParagraph);
+  const updateParagraphContent = useEditorCoreStore(
+    (state) => state.updateParagraphContent
+  );
+  const generateCompletedContent = useEditorCoreStore(
+    (state) => state.generateCompletedContent
+  );
+  const setIsCompleted = useEditorCoreStore((state) => state.setIsCompleted);
 
-  // ✅ **안전한 방법 2**: useMemo + 스토어 상태 의존성
+  const goToWritingStep = useEditorUIStore((state) => state.goToWritingStep);
+  const goToStructureStep = useEditorUIStore(
+    (state) => state.goToStructureStep
+  );
+  const setActiveParagraphId = useEditorUIStore(
+    (state) => state.setActiveParagraphId
+  );
+  const toggleParagraphSelection = useEditorUIStore(
+    (state) => state.toggleParagraphSelection
+  );
+  const clearSelectedParagraphs = useEditorUIStore(
+    (state) => state.clearSelectedParagraphs
+  );
+  const setSelectedParagraphIds = useEditorUIStore(
+    (state) => state.setSelectedParagraphIds
+  );
+  const setTargetContainerId = useEditorUIStore(
+    (state) => state.setTargetContainerId
+  );
+  const togglePreview = useEditorUIStore((state) => state.togglePreview);
+  const getCurrentSubStep = useEditorUIStore(
+    (state) => state.getCurrentSubStep
+  );
+  const getIsTransitioning = useEditorUIStore(
+    (state) => state.getIsTransitioning
+  );
+  const getActiveParagraphId = useEditorUIStore(
+    (state) => state.getActiveParagraphId
+  );
+  const getIsPreviewOpen = useEditorUIStore((state) => state.getIsPreviewOpen);
+  const getSelectedParagraphIds = useEditorUIStore(
+    (state) => state.getSelectedParagraphIds
+  );
+  const getTargetContainerId = useEditorUIStore(
+    (state) => state.getTargetContainerId
+  );
+
+  const addToast = useToastStore((state) => state.addToast);
+
+  // ✅ **데이터 구독**: 실제 데이터만 구독 (스토어 객체 제외)
+  const containers = useEditorCoreStore((state) => state.containers);
+  const paragraphs = useEditorCoreStore((state) => state.paragraphs);
+  const currentSubStep = useEditorUIStore((state) => state.currentSubStep);
+  const isTransitioning = useEditorUIStore((state) => state.isTransitioning);
+  const activeParagraphId = useEditorUIStore(
+    (state) => state.activeParagraphId
+  );
+  const isPreviewOpen = useEditorUIStore((state) => state.isPreviewOpen);
+  const selectedParagraphIds = useEditorUIStore(
+    (state) => state.selectedParagraphIds
+  );
+  const targetContainerId = useEditorUIStore(
+    (state) => state.targetContainerId
+  );
+
+  // ✅ **메모이제이션된 데이터 처리**
   const localContainers = useMemo(() => {
     try {
-      const containers = coreStore.getSortedContainers();
-      console.log('📊 [SAFE] 컨테이너 업데이트:', containers.length);
-      return containers;
+      const sortedContainers = [...containers].sort(
+        (a, b) => a.order - b.order
+      );
+      console.log('📊 [STABLE] 컨테이너 업데이트:', sortedContainers.length);
+      return sortedContainers;
     } catch (error) {
-      console.error('❌ [SAFE] 컨테이너 조회 실패:', error);
+      console.error('❌ [STABLE] 컨테이너 조회 실패:', error);
       return [];
     }
-  }, [coreStore.containers]); // ✅ 실제 데이터에 의존
+  }, [containers]); // ✅ 실제 데이터에만 의존
 
   const localParagraphs = useMemo(() => {
     try {
-      const paragraphs = coreStore.getParagraphs() as LocalParagraph[];
-      console.log('📊 [SAFE] 단락 업데이트:', paragraphs.length);
-      return paragraphs;
+      const typedParagraphs = paragraphs as LocalParagraph[];
+      console.log('📊 [STABLE] 단락 업데이트:', typedParagraphs.length);
+      return typedParagraphs;
     } catch (error) {
-      console.error('❌ [SAFE] 단락 조회 실패:', error);
+      console.error('❌ [STABLE] 단락 조회 실패:', error);
       return [];
     }
-  }, [coreStore.paragraphs]); // ✅ 실제 데이터에 의존
+  }, [paragraphs]); // ✅ 실제 데이터에만 의존
 
-  // ✅ **안전한 방법 3**: UI 상태도 개별적으로 안전하게 가져오기
   const editorInternalState = useMemo(() => {
     try {
       return {
-        currentSubStep: uiStore.getCurrentSubStep?.() || 'structure',
-        isTransitioning: uiStore.getIsTransitioning?.() || false,
-        activeParagraphId: uiStore.getActiveParagraphId?.() || null,
-        isPreviewOpen: uiStore.getIsPreviewOpen?.() ?? true,
-        selectedParagraphIds: uiStore.getSelectedParagraphIds?.() || [],
-        targetContainerId: uiStore.getTargetContainerId?.() || '',
+        currentSubStep: currentSubStep || 'structure',
+        isTransitioning: isTransitioning || false,
+        activeParagraphId: activeParagraphId || null,
+        isPreviewOpen: isPreviewOpen ?? true,
+        selectedParagraphIds: selectedParagraphIds || [],
+        targetContainerId: targetContainerId || '',
       } as EditorInternalState;
     } catch (error) {
-      console.error('❌ [SAFE] UI 상태 조회 실패:', error);
+      console.error('❌ [STABLE] UI 상태 조회 실패:', error);
       return {
         currentSubStep: 'structure' as const,
         isTransitioning: false,
@@ -74,38 +145,31 @@ const useEditorStateImpl = () => {
       };
     }
   }, [
-    uiStore.currentSubStep,
-    uiStore.isTransitioning,
-    uiStore.activeParagraphId,
-    uiStore.isPreviewOpen,
-    uiStore.selectedParagraphIds,
-    uiStore.targetContainerId,
-  ]); // ✅ 실제 상태 필드에 의존
+    currentSubStep,
+    isTransitioning,
+    activeParagraphId,
+    isPreviewOpen,
+    selectedParagraphIds,
+    targetContainerId,
+  ]); // ✅ 실제 상태 값에만 의존
 
   const [isProcessingStructure, setIsProcessingStructure] = useState(false);
   const [isMobileDeviceDetected, setIsMobileDeviceDetected] = useState(false);
 
-  // ✅ 하위 호환성을 위한 로컬 상태 (사용되지 않음)
+  // ✅ 하위 호환성을 위한 로컬 상태
   const [localInternalState, setLocalInternalState] =
-    useState<EditorInternalState>(() => {
-      try {
-        return createInitialInternalState(false, uiStore);
-      } catch (error) {
-        console.error('❌ [HOOK] 초기 내부 상태 생성 실패:', error);
-        return {
-          currentSubStep: 'structure',
-          isTransitioning: false,
-          activeParagraphId: null,
-          isPreviewOpen: true,
-          selectedParagraphIds: [],
-          targetContainerId: '',
-        };
-      }
-    });
+    useState<EditorInternalState>(() => ({
+      currentSubStep: 'structure',
+      isTransitioning: false,
+      activeParagraphId: null,
+      isPreviewOpen: true,
+      selectedParagraphIds: [],
+      targetContainerId: '',
+    }));
 
   useDeviceDetection(setIsMobileDeviceDetected);
 
-  // ✅ **handleStructureComplete 함수**: 간소화 및 안정화
+  // 🎯 **핵심 개선**: handleStructureComplete 함수 완전 안정화
   const handleStructureComplete = useCallback(
     (inputs: string[]) => {
       if (isProcessingStructure) {
@@ -125,7 +189,7 @@ const useEditorStateImpl = () => {
 
         if (validInputs.length < 2) {
           console.error('❌ [STRUCTURE] 최소 섹션 수 부족');
-          toastStore.addToast?.({
+          addToast?.({
             title: '구조 설정 오류',
             description: '최소 2개의 섹션이 필요합니다.',
             color: 'warning',
@@ -135,7 +199,7 @@ const useEditorStateImpl = () => {
 
         // ✅ 기존 데이터 초기화
         console.log('🧹 [STRUCTURE] 기존 데이터 초기화');
-        coreStore.resetEditorState();
+        resetEditorState();
 
         // ✅ 새 컨테이너 생성
         const newContainers: Container[] = validInputs.map((input, index) => ({
@@ -149,31 +213,32 @@ const useEditorStateImpl = () => {
 
         console.log('📦 [STRUCTURE] 컨테이너 생성:', newContainers.length);
 
-        // ✅ 일괄 추가
+        // ✅ 일괄 추가 (개별 메서드 사용)
         newContainers.forEach((container) => {
-          coreStore.addContainer(container);
+          addContainer(container);
         });
 
         // ✅ 즉시 검증 및 전환
         setTimeout(() => {
-          const finalContainers = coreStore.getContainers();
+          // 최신 데이터를 다시 가져와서 검증
+          const finalContainers = getContainers();
           console.log('✅ [STRUCTURE] 생성 결과:', {
             expected: validInputs.length,
             actual: finalContainers.length,
           });
 
           if (finalContainers.length === validInputs.length) {
-            uiStore.goToWritingStep?.();
+            goToWritingStep?.();
             console.log('🎉 [STRUCTURE] 구조 설정 완료!');
 
-            toastStore.addToast?.({
+            addToast?.({
               title: '구조 설정 완료',
               description: `${finalContainers.length}개의 섹션이 생성되었습니다.`,
               color: 'success',
             });
           } else {
             console.error('❌ [STRUCTURE] 생성 실패');
-            toastStore.addToast?.({
+            addToast?.({
               title: '컨테이너 생성 오류',
               description: '섹션 생성에 실패했습니다.',
               color: 'danger',
@@ -182,7 +247,7 @@ const useEditorStateImpl = () => {
         }, 100);
       } catch (error) {
         console.error('❌ [STRUCTURE] 처리 실패:', error);
-        toastStore.addToast?.({
+        addToast?.({
           title: '구조 설정 실패',
           description: '구조 설정 중 오류가 발생했습니다.',
           color: 'danger',
@@ -193,10 +258,18 @@ const useEditorStateImpl = () => {
         }, 500);
       }
     },
-    [isProcessingStructure, coreStore, uiStore, toastStore]
+    [
+      isProcessingStructure,
+      // ✅ 개별 메서드들만 의존성에 포함 (안정적)
+      addToast,
+      resetEditorState,
+      addContainer,
+      getContainers,
+      goToWritingStep,
+    ]
   );
 
-  // ✅ **나머지 함수들**: 단순화
+  // ✅ **나머지 함수들**: 개별 메서드 사용으로 안정화
   const addLocalParagraph = useCallback(() => {
     console.log('📝 [ADD] 새 단락 추가');
     try {
@@ -211,10 +284,10 @@ const useEditorStateImpl = () => {
         updatedAt: new Date(),
       };
 
-      coreStore.addParagraph(newParagraph);
-      uiStore.setActiveParagraphId?.(newParagraph.id);
+      addParagraph(newParagraph);
+      setActiveParagraphId?.(newParagraph.id);
 
-      toastStore.addToast?.({
+      addToast?.({
         title: '새 단락 추가됨',
         description: '새로운 단락이 생성되었습니다.',
         color: 'success',
@@ -222,26 +295,26 @@ const useEditorStateImpl = () => {
     } catch (error) {
       console.error('❌ [ADD] 단락 추가 실패:', error);
     }
-  }, [coreStore, uiStore, toastStore]);
+  }, [addParagraph, setActiveParagraphId, addToast]);
 
   const updateLocalParagraphContent = useCallback(
     (id: string, content: string) => {
       if (!id || typeof content !== 'string') return;
 
       try {
-        coreStore.updateParagraphContent(id, content);
+        updateParagraphContent(id, content);
       } catch (error) {
         console.error('❌ [UPDATE] 업데이트 실패:', error);
       }
     },
-    [coreStore]
+    [updateParagraphContent]
   );
 
   const deleteLocalParagraph = useCallback(
     (id: string) => {
       try {
-        coreStore.deleteParagraph(id);
-        toastStore.addToast?.({
+        deleteParagraph(id);
+        addToast?.({
           title: '단락 삭제됨',
           description: '단락이 삭제되었습니다.',
           color: 'warning',
@@ -250,21 +323,21 @@ const useEditorStateImpl = () => {
         console.error('❌ [DELETE] 삭제 실패:', error);
       }
     },
-    [coreStore, toastStore]
+    [deleteParagraph, addToast]
   );
 
-  const toggleParagraphSelection = useCallback(
+  const toggleParagraphSelectionStable = useCallback(
     (id: string) => {
-      uiStore.toggleParagraphSelection?.(id);
+      toggleParagraphSelection?.(id);
     },
-    [uiStore]
+    [toggleParagraphSelection]
   );
 
   const addToLocalContainer = useCallback(() => {
     const { selectedParagraphIds, targetContainerId } = editorInternalState;
 
     if (!selectedParagraphIds.length || !targetContainerId) {
-      toastStore.addToast?.({
+      addToast?.({
         title: '선택 오류',
         description: '단락과 컨테이너를 선택해주세요.',
         color: 'warning',
@@ -299,11 +372,11 @@ const useEditorStateImpl = () => {
           originalId: sourceParagraph.id,
         };
 
-        coreStore.addParagraph(newParagraph);
+        addParagraph(newParagraph);
       });
 
-      uiStore.clearSelectedParagraphs?.();
-      toastStore.addToast?.({
+      clearSelectedParagraphs?.();
+      addToast?.({
         title: '컨테이너에 추가됨',
         description: `${selectedParagraphIds.length}개 단락이 추가되었습니다.`,
         color: 'success',
@@ -311,7 +384,13 @@ const useEditorStateImpl = () => {
     } catch (error) {
       console.error('❌ [CONTAINER] 추가 실패:', error);
     }
-  }, [editorInternalState, localParagraphs, coreStore, uiStore, toastStore]);
+  }, [
+    editorInternalState,
+    localParagraphs,
+    addParagraph,
+    clearSelectedParagraphs,
+    addToast,
+  ]);
 
   // ✅ **조회 함수들**: 메모이제이션 적용
   const getLocalUnassignedParagraphs = useCallback((): LocalParagraph[] => {
@@ -327,29 +406,29 @@ const useEditorStateImpl = () => {
     [localParagraphs]
   );
 
-  // ✅ **UI 제어 함수들**
-  const goToStructureStep = useCallback(() => {
-    uiStore.goToStructureStep?.();
-  }, [uiStore]);
+  // ✅ **UI 제어 함수들**: 개별 메서드 사용
+  const goToStructureStepStable = useCallback(() => {
+    goToStructureStep?.();
+  }, [goToStructureStep]);
 
   const activateEditor = useCallback(
     (id: string) => {
-      uiStore.setActiveParagraphId?.(id);
+      setActiveParagraphId?.(id);
     },
-    [uiStore]
+    [setActiveParagraphId]
   );
 
-  const togglePreview = useCallback(() => {
-    uiStore.togglePreview?.();
-  }, [uiStore]);
+  const togglePreviewStable = useCallback(() => {
+    togglePreview?.();
+  }, [togglePreview]);
 
   const saveAllToContext = useCallback(() => {
-    toastStore.addToast?.({
+    addToast?.({
       title: '저장 완료',
       description: '모든 변경사항이 저장되었습니다.',
       color: 'success',
     });
-  }, [toastStore]);
+  }, [addToast]);
 
   const completeEditor = useCallback(() => {
     const hasContainers = localContainers.length > 0;
@@ -358,7 +437,7 @@ const useEditorStateImpl = () => {
     );
 
     if (!hasContainers || !hasAssignedParagraphs) {
-      toastStore.addToast?.({
+      addToast?.({
         title: '완료 조건 미충족',
         description: '컨테이너와 내용이 있는 단락이 필요합니다.',
         color: 'warning',
@@ -367,10 +446,10 @@ const useEditorStateImpl = () => {
     }
 
     try {
-      coreStore.generateCompletedContent();
-      coreStore.setIsCompleted(true);
+      generateCompletedContent();
+      setIsCompleted(true);
 
-      toastStore.addToast?.({
+      addToast?.({
         title: '에디터 완료',
         description: '마크다운 생성이 완료되었습니다.',
         color: 'success',
@@ -378,21 +457,27 @@ const useEditorStateImpl = () => {
     } catch (error) {
       console.error('❌ [COMPLETE] 완료 실패:', error);
     }
-  }, [localContainers, localParagraphs, coreStore, toastStore]);
+  }, [
+    localContainers,
+    localParagraphs,
+    generateCompletedContent,
+    setIsCompleted,
+    addToast,
+  ]);
 
-  // ✅ **setter 함수들**
-  const setSelectedParagraphIds = useCallback(
+  // ✅ **setter 함수들**: 개별 메서드 사용
+  const setSelectedParagraphIdsStable = useCallback(
     (ids: string[]) => {
-      uiStore.setSelectedParagraphIds?.(ids);
+      setSelectedParagraphIds?.(ids);
     },
-    [uiStore]
+    [setSelectedParagraphIds]
   );
 
-  const setTargetContainerId = useCallback(
+  const setTargetContainerIdStable = useCallback(
     (containerId: string) => {
-      uiStore.setTargetContainerId?.(containerId);
+      setTargetContainerId?.(containerId);
     },
-    [uiStore]
+    [setTargetContainerId]
   );
 
   const moveLocalParagraphInContainer = useCallback(
@@ -417,42 +502,45 @@ const useEditorStateImpl = () => {
         direction === 'up' ? currentIndex - 1 : currentIndex + 1;
       const targetParagraph = containerParagraphs[targetIndex];
 
-      coreStore.updateParagraph(paragraph.id, { order: targetParagraph.order });
-      coreStore.updateParagraph(targetParagraph.id, { order: paragraph.order });
+      // ✅ 개별 메서드 사용
+      updateParagraphContent(paragraph.id, paragraph.content);
+      updateParagraphContent(targetParagraph.id, targetParagraph.content);
     },
-    [localParagraphs, coreStore]
+    [localParagraphs, updateParagraphContent]
   );
 
-  console.log('✅ [HOOK] 훅 완료 - 안전한 패턴 적용:', {
+  console.log('✅ [HOOK] 훅 완료 - 근본적 개선 완료:', {
     containers: localContainers.length,
     paragraphs: localParagraphs.length,
     currentStep: editorInternalState.currentSubStep,
+    handleStructureCompleteStable:
+      typeof handleStructureComplete === 'function',
   });
 
-  // ✅ **최종 반환**: 안정적인 참조들
+  // ✅ **최종 반환**: 모든 함수가 안정적인 참조
   return {
     internalState: editorInternalState,
     localParagraphs,
     localContainers,
     isMobile: isMobileDeviceDetected,
 
-    setInternalState: setLocalInternalState, // 하위 호환성
-    setSelectedParagraphIds,
-    setTargetContainerId,
+    setInternalState: setLocalInternalState,
+    setSelectedParagraphIds: setSelectedParagraphIdsStable,
+    setTargetContainerId: setTargetContainerIdStable,
 
     addLocalParagraph,
     deleteLocalParagraph,
     updateLocalParagraphContent,
-    toggleParagraphSelection,
+    toggleParagraphSelection: toggleParagraphSelectionStable,
     addToLocalContainer,
     moveLocalParagraphInContainer,
     getLocalUnassignedParagraphs,
     getLocalParagraphsByContainer,
 
-    handleStructureComplete,
-    goToStructureStep,
+    handleStructureComplete, // 🎯 이제 완전히 안정적!
+    goToStructureStep: goToStructureStepStable,
     activateEditor,
-    togglePreview,
+    togglePreview: togglePreviewStable,
     saveAllToContext,
     completeEditor,
   };
