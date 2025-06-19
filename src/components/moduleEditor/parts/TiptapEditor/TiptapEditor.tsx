@@ -24,252 +24,209 @@ function TiptapEditor({
   onContentChange,
   isActive,
 }: TiptapEditorProps) {
-  console.log('📝 [TIPTAP] 렌더링:', {
-    paragraphId,
+  console.log('📝 [TIPTAP_BASIC] 기본 에디터 렌더링:', {
+    paragraphId: paragraphId?.slice(-8) || 'unknown',
     contentLength: (initialContent || '').length,
-    contentPreview: (initialContent || '').slice(0, 100),
+    contentPreview: (initialContent || '').slice(0, 50),
     hasImages: (initialContent || '').includes('!['),
     isActive,
-    timestamp: Date.now(),
+    renderTimestamp: Date.now(),
   });
 
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const previousContentRef = useRef<string>(initialContent);
+  // 🔧 기본 상태 관리만
+  const [isImageUploadInProgress, setIsImageUploadInProgress] = useState(false);
+  const [imageUploadErrorMessage, setImageUploadErrorMessage] = useState<
+    string | null
+  >(null);
+
+  // 🔧 에디터 참조
   const editorInstanceRef = useRef<any>(null);
-  const lastSyncTimeRef = useRef<number>(0);
 
-  const forceSyncContent = useCallback(() => {
-    if (editorInstanceRef.current && !editorInstanceRef.current.isDestroyed) {
-      const currentHtml = editorInstanceRef.current.getHTML();
-      console.log('🔄 [TIPTAP] 강제 동기화 실행:', {
-        paragraphId,
-        currentHtml: currentHtml.substring(0, 50),
-        previousContent: previousContentRef.current.substring(0, 50),
-        hasChange: currentHtml !== previousContentRef.current,
+  // 🎯 가장 단순한 콘텐츠 변경 핸들러
+  const handleContentChange = useCallback(
+    (updatedContent: string) => {
+      const safeUpdatedContent = updatedContent || '';
+
+      console.log('📝 [TIPTAP_BASIC] 콘텐츠 변경:', {
+        paragraphId: paragraphId?.slice(-8) || 'unknown',
+        contentLength: safeUpdatedContent?.length || 0,
+        contentPreview: safeUpdatedContent?.substring(0, 30) || '',
       });
 
-      if (currentHtml !== previousContentRef.current) {
-        previousContentRef.current = currentHtml;
-        if (onContentChange && typeof onContentChange === 'function') {
-          onContentChange(currentHtml);
-          lastSyncTimeRef.current = Date.now();
-        }
-      }
-    }
-  }, [paragraphId, onContentChange]);
-
-  const handleImmediateSync = useCallback(
-    (newContent: string) => {
-      const now = Date.now();
-      if (now - lastSyncTimeRef.current < 100) return;
-
-      console.log('⚡ [TIPTAP] 즉시 동기화:', {
-        paragraphId,
-        contentLength: newContent.length,
-        hasRealChange: newContent !== previousContentRef.current,
-      });
-
-      if (newContent !== previousContentRef.current) {
-        previousContentRef.current = newContent;
-        lastSyncTimeRef.current = now;
-
-        if (onContentChange && typeof onContentChange === 'function') {
-          try {
-            onContentChange(newContent);
-            console.log('✅ [TIPTAP] 즉시 동기화 성공');
-          } catch (error) {
-            console.error('❌ [TIPTAP] 즉시 동기화 실패:', error);
-          }
-        }
+      // 🎯 외부 콜백 즉시 호출 (가장 단순하게)
+      if (typeof onContentChange === 'function') {
+        onContentChange(safeUpdatedContent);
       }
     },
-    [paragraphId, onContentChange]
+    [onContentChange]
   );
 
-  const handleRealTimeContentChange = useCallback(
-    (newContent: string) => {
-      console.log('📝 [TIPTAP] 실시간 내용 변경:', {
-        paragraphId,
-        oldContent: previousContentRef.current.substring(0, 50),
-        newContent: newContent.substring(0, 50),
-        contentLength: newContent.length,
-        hasRealChange: newContent !== previousContentRef.current,
-      });
+  // 🔧 useMarkdownEditorState 훅 사용 (가장 기본 설정)
+  const { handleLocalChange: handleMarkdownStateChange, isContentChanged } =
+    useMarkdownEditorState({
+      initialContent: initialContent || '',
+      onContentChange: handleContentChange,
+      debounceDelay: 100, // 🚀 최소한의 디바운스만 (한글 조합 고려)
+    });
 
-      const isImportantChange =
-        newContent.includes('![') ||
-        newContent.length > previousContentRef.current.length + 10 ||
-        Math.abs(newContent.length - previousContentRef.current.length) > 50;
-
-      if (isImportantChange) {
-        handleImmediateSync(newContent);
-      } else {
-        if (newContent !== previousContentRef.current) {
-          previousContentRef.current = newContent;
-
-          if (onContentChange && typeof onContentChange === 'function') {
-            try {
-              onContentChange(newContent);
-              console.log('🎉 [TIPTAP] onContentChange 호출 성공');
-            } catch (error) {
-              console.error('❌ [TIPTAP] onContentChange 호출 실패:', error);
-            }
-          }
-        }
-      }
-    },
-    [paragraphId, onContentChange, handleImmediateSync]
-  );
-
-  const { handleLocalChange, isContentChanged } = useMarkdownEditorState({
-    initialContent: initialContent || '',
-    onContentChange: handleRealTimeContentChange,
-    debounceDelay: 300,
+  // 🖼️ 이미지 업로드 처리
+  const { handleImageUpload: processImageUpload } = useImageUpload({
+    setIsUploadingImage: setIsImageUploadInProgress,
+    setUploadError: setImageUploadErrorMessage,
   });
 
-  useEffect(() => {
-    if (
-      initialContent !== previousContentRef.current &&
-      initialContent !== undefined
-    ) {
-      console.log('🔄 [TIPTAP] 외부 content 변경 감지:', {
-        paragraphId,
-        oldContent: previousContentRef.current,
-        newContent: initialContent,
-      });
-
-      previousContentRef.current = initialContent;
-
-      if (editorInstanceRef.current && !editorInstanceRef.current.isDestroyed) {
-        const currentHtml = editorInstanceRef.current.getHTML();
-        if (currentHtml !== initialContent) {
-          console.log('🔧 [TIPTAP] 에디터 내용 동기화');
-          editorInstanceRef.current.commands.setContent(
-            initialContent || '<p></p>'
-          );
-        }
-      }
-    }
-  }, [initialContent, paragraphId]);
-
-  const { handleImageUpload } = useImageUpload({
-    setIsUploadingImage,
-    setUploadError,
-  });
-
-  const { editor } = useTiptapEditor({
-    paragraphId,
+  // 🎯 Tiptap 에디터 훅 사용 (기본 설정)
+  const { editor: tiptapEditorInstance } = useTiptapEditor({
+    paragraphId: paragraphId || '',
     initialContent: initialContent || '<p></p>',
-    handleLocalChange: (content: string) => {
-      console.log('🔄 [TIPTAP] 에디터 내용 업데이트:', {
-        paragraphId,
-        contentLength: content.length,
-        contentPreview: content.substring(0, 50),
+    handleLocalChange: (updatedContent: string) => {
+      console.log('🔄 [TIPTAP_BASIC] 에디터 업데이트:', {
+        paragraphId: paragraphId?.slice(-8) || 'unknown',
+        contentLength: updatedContent?.length || 0,
+        contentPreview: updatedContent?.substring(0, 30) || '',
       });
-      handleLocalChange(content);
+      // ✅ 가장 단순하게 마크다운 상태 업데이트
+      handleMarkdownStateChange(updatedContent);
     },
-    handleImageUpload,
+    handleImageUpload: processImageUpload,
   });
 
+  // 🔧 에디터 인스턴스 등록 (최소한의 설정)
   useEffect(() => {
-    if (editor && !editor.isDestroyed) {
-      editorInstanceRef.current = editor;
+    if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
+      editorInstanceRef.current = tiptapEditorInstance;
 
-      if (initialContent && editor.getHTML() !== initialContent) {
-        console.log('🔧 [TIPTAP] 에디터 초기화 - 내용 설정:', {
-          paragraphId,
-          settingContent: initialContent.substring(0, 50),
+      console.log('🔧 [TIPTAP_BASIC] 에디터 인스턴스 등록:', {
+        paragraphId: paragraphId?.slice(-8) || 'unknown',
+        editorReady: true,
+      });
+    }
+  }, [tiptapEditorInstance, paragraphId]);
+
+  // 🔄 외부 initialContent 변경 시 에디터 동기화 (기본 처리)
+  useEffect(() => {
+    const safeInitialContent = initialContent || '';
+
+    if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
+      const currentEditorContent = tiptapEditorInstance.getHTML();
+
+      if (safeInitialContent && currentEditorContent !== safeInitialContent) {
+        console.log('🔄 [TIPTAP_BASIC] 외부 content 동기화:', {
+          paragraphId: paragraphId?.slice(-8) || 'unknown',
+          oldContent: currentEditorContent?.substring(0, 30) || '',
+          newContent: safeInitialContent?.substring(0, 30) || '',
         });
-        editor.commands.setContent(initialContent);
+
+        tiptapEditorInstance.commands.setContent(safeInitialContent);
+      }
+    }
+  }, [initialContent, tiptapEditorInstance, paragraphId]);
+
+  // 🖼️ 이미지 추가 핸들러
+  const addImageToEditor = useCallback(() => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.multiple = true;
+
+    // 웹접근성 향상
+    fileInput.setAttribute('aria-label', '이미지 파일 선택');
+
+    fileInput.onchange = async (changeEvent) => {
+      const { target = null } = changeEvent;
+      const inputElement = target as HTMLInputElement;
+      const { files = null } = inputElement;
+      const selectedFiles = Array.from(files || []);
+
+      if (selectedFiles.length === 0) {
+        console.log('📷 [TIPTAP_BASIC] 이미지 선택 취소');
+        return;
       }
 
-      const handleUpdate = () => {
-        if (editor && !editor.isDestroyed) {
-          const currentHtml = editor.getHTML();
-          handleLocalChange(currentHtml);
-        }
-      };
+      try {
+        console.log('📷 [TIPTAP_BASIC] 이미지 업로드 시작:', {
+          fileCount: selectedFiles.length,
+          fileNames: selectedFiles.map((file) => file.name),
+        });
 
-      const handleBlur = () => {
-        if (editor && !editor.isDestroyed) {
-          const finalHtml = editor.getHTML();
-          console.log('🎯 [TIPTAP] 포커스 아웃, 최종 저장:', {
-            paragraphId,
-            finalContent: finalHtml.substring(0, 50),
-          });
-          handleImmediateSync(finalHtml);
-        }
-      };
+        const uploadedImageUrls = await processImageUpload(selectedFiles);
 
-      editor.on('update', handleUpdate);
-      editor.on('blur', handleBlur);
+        uploadedImageUrls.forEach((imageUrl, imageIndex) => {
+          const safeImageUrl = imageUrl || '';
+          const { current: editorInstance = null } = editorInstanceRef;
 
-      return () => {
-        if (editor && !editor.isDestroyed) {
-          editor.off('update', handleUpdate);
-          editor.off('blur', handleBlur);
-        }
-      };
-    }
-  }, [
-    editor,
-    initialContent,
-    paragraphId,
-    handleLocalChange,
-    handleImmediateSync,
-  ]);
+          if (safeImageUrl && editorInstance && !editorInstance.isDestroyed) {
+            const imageAltText = `업로드된 이미지 ${imageIndex + 1}`;
 
-  const addImage = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.multiple = true;
-    input.onchange = async (e) => {
-      const files = Array.from((e.target as HTMLInputElement).files || []);
-      const urls = await handleImageUpload(files);
+            editorInstance
+              .chain()
+              .focus()
+              .insertContent({
+                type: 'image',
+                attrs: {
+                  src: safeImageUrl,
+                  alt: imageAltText,
+                  title: imageAltText,
+                },
+              })
+              .run();
 
-      urls.forEach((url) => {
-        if (url && editor && !editor.isDestroyed) {
-          editor
-            .chain()
-            .focus()
-            .insertContent({
-              type: 'image',
-              attrs: {
-                src: url,
-                alt: 'Uploaded image',
-                title: 'Uploaded image',
-              },
-            })
-            .run();
-        }
-      });
+            console.log('📷 [TIPTAP_BASIC] 이미지 삽입 완료:', {
+              imageUrl: safeImageUrl,
+              altText: imageAltText,
+            });
+          }
+        });
+      } catch (uploadError) {
+        console.error('❌ [TIPTAP_BASIC] 이미지 업로드 실패:', uploadError);
+      }
     };
-    input.click();
-  }, [editor, handleImageUpload]);
 
-  const addLink = useCallback(() => {
-    const url = window.prompt('링크 URL을 입력하세요:');
-    if (url && editor && !editor.isDestroyed) {
-      editor.chain().focus().setLink({ href: url }).run();
+    fileInput.click();
+  }, [processImageUpload]);
+
+  // 🔗 링크 추가 핸들러
+  const addLinkToEditor = useCallback(() => {
+    const linkUrl = window.prompt('링크 URL을 입력하세요:');
+    const safeLinkUrl = linkUrl?.trim() || '';
+    const { current: editorInstance = null } = editorInstanceRef;
+
+    if (safeLinkUrl && editorInstance && !editorInstance.isDestroyed) {
+      console.log('🔗 [TIPTAP_BASIC] 링크 추가:', {
+        linkUrl: safeLinkUrl,
+      });
+
+      editorInstance.chain().focus().setLink({ href: safeLinkUrl }).run();
     }
-  }, [editor]);
+  }, []);
 
-  if (!editor) {
+  // 🔧 에디터 로딩 상태 처리
+  if (!tiptapEditorInstance) {
     return (
-      <div className="flex items-center justify-center p-8 border border-gray-200 rounded-lg">
+      <div
+        className="flex items-center justify-center p-8 border border-gray-200 rounded-lg"
+        role="status"
+        aria-label="에디터 로딩 중"
+      >
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border-2 border-gray-400 rounded-full border-t-transparent animate-spin" />
+          <div
+            className="w-4 h-4 border-2 border-gray-400 rounded-full border-t-transparent animate-spin"
+            aria-hidden="true"
+          />
           <span className="text-gray-500">에디터를 로딩 중입니다...</span>
         </div>
       </div>
     );
   }
 
-  if (editor.isDestroyed) {
+  // 🔧 에디터 파괴 상태 처리
+  if (tiptapEditorInstance.isDestroyed) {
     return (
-      <div className="flex items-center justify-center p-8 border border-red-200 rounded-lg bg-red-50">
+      <div
+        className="flex items-center justify-center p-8 border border-red-200 rounded-lg bg-red-50"
+        role="alert"
+        aria-label="에디터 오류"
+      >
         <span className="text-red-500">
           에디터가 파괴되었습니다. 새로고침해주세요.
         </span>
@@ -282,25 +239,40 @@ function TiptapEditor({
       className={`mb-4 transition-all duration-300 border border-gray-200 rounded-lg ${
         isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
       }`}
+      role="region"
+      aria-label={`문단 에디터 ${paragraphId?.slice(-8) || 'unknown'}`}
     >
       <EditorStatusBar
         isContentChanged={isContentChanged}
-        isUploadingImage={isUploadingImage}
-        uploadError={uploadError}
-        onErrorClose={() => setUploadError(null)}
+        isUploadingImage={isImageUploadInProgress}
+        uploadError={imageUploadErrorMessage}
+        onErrorClose={() => setImageUploadErrorMessage(null)}
       />
 
-      <TiptapToolbar editor={editor} addImage={addImage} addLink={addLink} />
+      <TiptapToolbar
+        editor={tiptapEditorInstance}
+        addImage={addImageToEditor}
+        addLink={addLinkToEditor}
+      />
 
       <InfoOverlay />
 
-      <EditorCore editor={editor} paragraphId={paragraphId} />
+      <EditorCore
+        editor={tiptapEditorInstance}
+        paragraphId={paragraphId || ''}
+      />
 
-      <LoadingOverlay isVisible={isUploadingImage} />
-      <ErrorOverlay error={uploadError} onClose={() => setUploadError(null)} />
+      <LoadingOverlay isVisible={isImageUploadInProgress} />
+      <ErrorOverlay
+        error={imageUploadErrorMessage}
+        onClose={() => setImageUploadErrorMessage(null)}
+      />
 
       {isActive && (
-        <div className="absolute px-2 py-1 text-xs text-white bg-blue-500 rounded top-2 right-2">
+        <div
+          className="absolute px-2 py-1 text-xs text-white bg-blue-500 rounded top-2 right-2"
+          aria-label="현재 활성 에디터"
+        >
           활성
         </div>
       )}
