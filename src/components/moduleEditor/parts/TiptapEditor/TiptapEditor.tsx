@@ -24,6 +24,19 @@ interface TiptapEditorProps {
   isActive: boolean;
 }
 
+// 🎯 렌더링 최적화를 위한 비교 함수 (핵심 props만 비교)
+const arePropsEqual = (
+  prevProps: TiptapEditorProps,
+  nextProps: TiptapEditorProps
+) => {
+  return (
+    prevProps.paragraphId === nextProps.paragraphId &&
+    prevProps.initialContent === nextProps.initialContent &&
+    prevProps.isActive === nextProps.isActive
+    // 🚨 onContentChange는 의도적으로 제외 (상위 컴포넌트 함수 재생성 무시)
+  );
+};
+
 function TiptapEditor({
   paragraphId,
   initialContent = '',
@@ -312,25 +325,4 @@ function TiptapEditor({
   );
 }
 
-export default React.memo(TiptapEditor, (prevProps, nextProps) => {
-  // 🎯 핵심 props만 비교하여 불필요한 리렌더링 완전 차단
-  const shouldUpdate =
-    prevProps.paragraphId !== nextProps.paragraphId ||
-    prevProps.initialContent !== nextProps.initialContent ||
-    prevProps.isActive !== nextProps.isActive;
-
-  // 🚨 onContentChange는 비교에서 제외 (상위 컴포넌트 리렌더링으로 인한 함수 재생성 무시)
-
-  console.log('🔍 [MEMO_CHECK] 리렌더링 필요성 검사:', {
-    paragraphId: nextProps.paragraphId?.slice(-8) || 'unknown',
-    shouldUpdate,
-    reasons: {
-      paragraphIdChanged: prevProps.paragraphId !== nextProps.paragraphId,
-      initialContentChanged:
-        prevProps.initialContent !== nextProps.initialContent,
-      isActiveChanged: prevProps.isActive !== nextProps.isActive,
-    },
-  });
-
-  return !shouldUpdate; // true면 리렌더링 스킵, false면 리렌더링
-});
+export default React.memo(TiptapEditor, arePropsEqual);
