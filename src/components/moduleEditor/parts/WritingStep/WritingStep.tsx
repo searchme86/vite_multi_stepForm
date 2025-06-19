@@ -363,7 +363,7 @@ function WritingStep({
             {totalParagraphCount}개
           </p>
         </div>
-        <div className="flex w-[100%] items-center justify-between mb-4 border-r border-gray-200 h-[800px] max-h-[800px] overflow-scroll">
+        <div className="flex w-[100%] items-center justify-between mb-4 border-gray-200 h-[800px] max-h-[800px] overflow-scroll">
           {/* 왼쪽: 에디터 영역 */}
           <ParagraphEditor {...paragraphEditorProps} />
           {/* 오른쪽: 슬라이드 사이드바 */}

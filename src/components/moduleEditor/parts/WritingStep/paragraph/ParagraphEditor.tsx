@@ -76,7 +76,7 @@ function ParagraphEditor({
     <div
       className={`${
         isMobile ? 'w-full' : 'flex-1'
-      } w-full h-full border border-gray-200 rounded-lg pb-4`}
+      } w-[50%] h-full border border-gray-200 rounded-lg pb-4 mr-[20px]`}
     >
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
         <span className="text-lg font-semibold">📝 단락 작성 (Tiptap)</span>

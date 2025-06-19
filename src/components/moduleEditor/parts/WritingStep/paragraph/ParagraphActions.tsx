@@ -429,7 +429,7 @@ function ParagraphActions({
   return (
     <div className="flex flex-col gap-2">
       {/* 메인 액션 영역 (기존 로직) */}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {/* 컨테이너 선택 드롭다운 */}
         <select
           className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded"

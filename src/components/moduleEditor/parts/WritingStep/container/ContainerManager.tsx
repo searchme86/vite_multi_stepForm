@@ -42,14 +42,14 @@ function ContainerManager({
   return (
     <div
       className={`${
-        isMobile ? 'w-full' : 'flex-1'
+        isMobile ? 'w-full' : 'h-full'
       } border border-gray-200 rounded-lg`}
     >
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
+      <div className="p-4 bg-gray-50">
         <span className="text-lg font-semibold">📦 컨테이너 관리</span>
       </div>
 
-      <div className="p-4 overflow-y-auto">
+      <div className="p-4 overflow-y-auto h-[calc(100%-61px)]">
         <div className="space-y-4">
           {sortedContainers.map((container) => (
             <ContainerCard

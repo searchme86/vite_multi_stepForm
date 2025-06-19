@@ -50,7 +50,7 @@ function PreviewContent({
   );
 
   return (
-    <div className="p-4 overflow-y-auto max-h-80">
+    <div className="p-4 overflow-y-auto">
       <div className="max-w-4xl mx-auto space-y-6">
         {sortedContainers.map((container) => {
           const containerParagraphs = getLocalParagraphsByContainer(

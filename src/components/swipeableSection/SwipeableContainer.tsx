@@ -129,6 +129,7 @@ export function SwipeableContainer({
     relative w-full h-full
     overflow-hidden
     bg-gray-50/50
+    h-full
     ${className}
   `.trim();
 
@@ -141,7 +142,7 @@ export function SwipeableContainer({
       data-total-slides={React.Children.count(children)} // 디버깅용: 총 슬라이드 수
     >
       {/* Swiper 컴포넌트 */}
-      <Swiper {...finalSwiperProps}>
+      <Swiper {...finalSwiperProps} className="h-full">
         {/* React.Children.map으로 각 child를 SwiperSlide로 감싸기 */}
         {React.Children.map(children, (child, index) => {
           console.log(`슬라이드 ${index} 렌더링 중`);
