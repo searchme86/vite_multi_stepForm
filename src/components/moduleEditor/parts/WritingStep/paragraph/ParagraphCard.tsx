@@ -308,7 +308,7 @@ function ParagraphCard({
 
   const paragraphCardClassName = useMemo(() => {
     const baseClasses =
-      'group relative bg-white rounded-lg transition-all duration-200';
+      'group relative bg-white rounded-lg transition-all duration-200 h-full';
     const borderClasses = isCurrentParagraphActive
       ? 'border-2 border-blue-500 shadow-lg ring-2 ring-blue-200'
       : 'border border-gray-200 hover:border-gray-300';
@@ -443,7 +443,7 @@ function ParagraphCard({
       className={paragraphCardClassName}
       data-paragraph-id={paragraph?.id || ''}
     >
-      <div className="p-4">
+      <div className="flex flex-col justify-between h-full p-4">
         {/* 헤더 영역 */}
         <div className="flex items-start gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -508,14 +508,12 @@ function ParagraphCard({
         </div>
 
         {/* 에디터 영역 - 최적화된 TiptapEditor 사용 */}
-        <div className="mb-4">
-          <TiptapEditor
-            paragraphId={paragraph?.id || ''}
-            initialContent={paragraph?.content || ''}
-            onContentChange={handleTiptapEditorContentChange}
-            isActive={isCurrentParagraphActive}
-          />
-        </div>
+        <TiptapEditor
+          paragraphId={paragraph?.id || ''}
+          initialContent={paragraph?.content || ''}
+          onContentChange={handleTiptapEditorContentChange}
+          isActive={isCurrentParagraphActive}
+        />
 
         {/* 액션 영역 */}
         <div className="pt-3 border-t border-gray-100">

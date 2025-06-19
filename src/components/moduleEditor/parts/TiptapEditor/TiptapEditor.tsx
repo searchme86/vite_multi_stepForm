@@ -281,7 +281,7 @@ function TiptapEditor({
 
   return (
     <div
-      className={`mb-4 transition-all duration-300 border border-gray-200 rounded-lg ${
+      className={`transition-all duration-300 border border-gray-200 rounded-lg h-[490px] max-[400px] overflow-scroll :${
         isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
       }`}
       role="region"

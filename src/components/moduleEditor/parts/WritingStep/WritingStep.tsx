@@ -306,80 +306,73 @@ function WritingStep({
   return (
     <div className="w-full h-full">
       {/* 🖥️ 데스크탑: 좌우 분할 레이아웃 */}
-      <div className="hidden h-full md:flex">
-        {/* 왼쪽: 에디터 영역 */}
-        <div className="flex flex-col flex-1 border-r border-gray-200">
-          {/* 상단 상태바 */}
-          <QuickStatusBar
-            position="top"
-            variant="minimal"
-            showProgressBar={true}
-            showQuickActions={true}
-            showStatistics={false}
-            collapsible={true}
-            onQuickTransfer={completeEditor}
-            onShowDetails={() => {
-              console.log('⚡ [WRITING_STEP] 상세 정보 보기 요청');
-            }}
-            className="border-b border-gray-200 backdrop-blur-sm"
+      <div className="hidden h-full md:flex md:flex-col">
+        {/* 상단 상태바 */}
+        <QuickStatusBar
+          position="top"
+          variant="minimal"
+          showProgressBar={true}
+          showQuickActions={true}
+          showStatistics={false}
+          collapsible={true}
+          onQuickTransfer={completeEditor}
+          onShowDetails={() => {
+            console.log('⚡ [WRITING_STEP] 상세 정보 보기 요청');
+          }}
+          className="border-b border-gray-200 backdrop-blur-sm"
+        />
+        {/* 브릿지 섹션 */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
+          <StepControls
+            sortedContainers={sortedContainers}
+            goToStructureStep={goToStructureStep}
+            saveAllToContext={saveAllToContext}
+            completeEditor={completeEditor}
           />
 
-          {/* 브릿지 섹션 */}
-          <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
-            <StepControls
-              sortedContainers={sortedContainers}
-              goToStructureStep={goToStructureStep}
-              saveAllToContext={saveAllToContext}
-              completeEditor={completeEditor}
+          <div className="mt-4 space-y-4">
+            <MarkdownStatusCard
+              size="compact"
+              variant="bordered"
+              hideValidationDetails={false}
+              hideErrorsWarnings={false}
+              className="transition-all duration-200"
+              onClick={() => {
+                console.log(
+                  '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
+                );
+              }}
             />
 
-            <div className="mt-4 space-y-4">
-              <MarkdownStatusCard
-                size="compact"
-                variant="bordered"
-                hideValidationDetails={false}
-                hideErrorsWarnings={false}
-                className="transition-all duration-200"
-                onClick={() => {
-                  console.log(
-                    '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
-                  );
-                }}
-              />
-
-              <MarkdownCompleteButton
-                buttonText="마크다운 완성하기"
-                size="medium"
-                variant="primary"
-                fullWidth={false}
-                onCompleteSuccess={completeEditor}
-                showDetailedStatus={true}
-                className="transition-all duration-200"
-              />
-            </div>
-          </div>
-
-          {/* 에디터 영역 */}
-          <div className="flex-1 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
-              <div className="text-sm text-gray-500">
-                미할당: {unassignedParagraphs.length}개 / 전체:{' '}
-                {totalParagraphCount}개
-              </div>
-            </div>
-            <div className="h-full">
-              <ParagraphEditor {...paragraphEditorProps} />
-            </div>
+            <MarkdownCompleteButton
+              buttonText="마크다운 완성하기"
+              size="medium"
+              variant="primary"
+              fullWidth={false}
+              onCompleteSuccess={completeEditor}
+              showDetailedStatus={true}
+              className="transition-all duration-200"
+            />
           </div>
         </div>
 
-        {/* 오른쪽: 슬라이드 사이드바 */}
-        <div className="flex flex-col w-96">
+        <div className="flex ">
+          <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
+          <p className="text-sm text-gray-500">
+            📝 단락 작성 미할당: {unassignedParagraphs.length}개 / 전체:{' '}
+            {totalParagraphCount}개
+          </p>
+        </div>
+        <div className="flex w-[100%] items-center justify-between mb-4 border-r border-gray-200 h-[800px] max-h-[800px] overflow-scroll">
+          {/* 왼쪽: 에디터 영역 */}
+          <ParagraphEditor {...paragraphEditorProps} />
+          {/* 오른쪽: 슬라이드 사이드바 */}
           <EditorSidebarContainer className="h-full">
             {preparedStructureSlide}
             {preparedPreviewSlide}
           </EditorSidebarContainer>
+          {/* <div className="flex flex-col w-96">
+          </div> */}
         </div>
       </div>
 

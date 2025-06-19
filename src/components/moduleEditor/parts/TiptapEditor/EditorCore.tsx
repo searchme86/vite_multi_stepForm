@@ -13,10 +13,10 @@ function EditorCore({ editor, paragraphId }: EditorCoreProps) {
     timestamp: Date.now(),
   });
   return (
-    <div className="tiptap-wrapper">
+    <div className="tiptap-wrapper overflow-y-scroll h-[340px] max-h-[340px]">
       <EditorContent
         editor={editor}
-        className="min-h-[200px] p-4 focus-within:outline-none"
+        className="p-4 overflow-y-scroll focus-within:outline-none"
       />
 
       <style

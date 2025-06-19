@@ -35,7 +35,7 @@ export function EditorSidebarContainer({
 
   return (
     <div
-      className={`h-full flex flex-col bg-white border border-gray-200 rounded-lg shadow-sm ${className}`}
+      className={`w-[50%] h-full flex flex-col bg-white border border-gray-200 rounded-lg shadow-sm ${className}`}
     >
       {/* 🎠 새로운 단순화된 SwipeableContainer */}
       <SwipeableContainer
