@@ -1,6 +1,12 @@
 // 📁 src/components/moduleEditor/parts/TiptapEditor/TiptapEditor.tsx
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from 'react';
 import EditorCore from './EditorCore';
 import TiptapToolbar from './toolbar/TiptapToolbar';
 import EditorStatusBar from './EditorStatusBar';
@@ -42,7 +48,10 @@ function TiptapEditor({
   // 🔧 에디터 참조
   const editorInstanceRef = useRef<any>(null);
 
-  // 🎯 가장 단순한 콘텐츠 변경 핸들러
+  // 🎯 안정화된 콘텐츠 변경 핸들러 (의존성 최소화)
+  const stableOnContentChangeRef = useRef(onContentChange);
+  stableOnContentChangeRef.current = onContentChange;
+
   const handleContentChange = useCallback(
     (updatedContent: string) => {
       const safeUpdatedContent = updatedContent || '';
@@ -53,45 +62,63 @@ function TiptapEditor({
         contentPreview: safeUpdatedContent?.substring(0, 30) || '',
       });
 
-      // 🎯 외부 콜백 즉시 호출 (가장 단순하게)
-      if (typeof onContentChange === 'function') {
-        onContentChange(safeUpdatedContent);
+      // 🎯 안정화된 외부 콜백 호출
+      const externalCallback = stableOnContentChangeRef.current;
+      if (typeof externalCallback === 'function') {
+        externalCallback(safeUpdatedContent);
       }
     },
-    [onContentChange]
+    [paragraphId] // onContentChange 의존성 제거
   );
 
-  // 🔧 useMarkdownEditorState 훅 사용 (가장 기본 설정)
+  // 🔧 useMarkdownEditorState 훅 사용 (상위 컴포넌트 업데이트 빈도 조절)
   const { handleLocalChange: handleMarkdownStateChange, isContentChanged } =
     useMarkdownEditorState({
       initialContent: initialContent || '',
       onContentChange: handleContentChange,
-      debounceDelay: 100, // 🚀 최소한의 디바운스만 (한글 조합 고려)
+      debounceDelay: 500, // 🚀 상위 컴포넌트 업데이트 빈도 대폭 감소 (0.5초)
     });
 
-  // 🖼️ 이미지 업로드 처리
-  const { handleImageUpload: processImageUpload } = useImageUpload({
-    setIsUploadingImage: setIsImageUploadInProgress,
-    setUploadError: setImageUploadErrorMessage,
-  });
+  // 🖼️ 이미지 업로드 처리 (메모이제이션)
+  const imageUploadConfig = useMemo(
+    () => ({
+      setIsUploadingImage: setIsImageUploadInProgress,
+      setUploadError: setImageUploadErrorMessage,
+    }),
+    []
+  );
 
-  // 🎯 Tiptap 에디터 훅 사용 (기본 설정)
-  const { editor: tiptapEditorInstance } = useTiptapEditor({
-    paragraphId: paragraphId || '',
-    initialContent: initialContent || '<p></p>',
-    handleLocalChange: (updatedContent: string) => {
-      console.log('🔄 [TIPTAP_BASIC] 에디터 업데이트:', {
-        paragraphId: paragraphId?.slice(-8) || 'unknown',
-        contentLength: updatedContent?.length || 0,
-        contentPreview: updatedContent?.substring(0, 30) || '',
-      });
-      // ✅ 가장 단순하게 마크다운 상태 업데이트
-      handleMarkdownStateChange(updatedContent);
-    },
-    handleImageUpload: processImageUpload,
-  });
+  const { handleImageUpload: processImageUpload } =
+    useImageUpload(imageUploadConfig);
 
-  // 🔧 에디터 인스턴스 등록 (최소한의 설정)
+  // 🎯 Tiptap 에디터 설정 (메모이제이션으로 불필요한 재생성 방지)
+  const stableHandleMarkdownStateChangeRef = useRef(handleMarkdownStateChange);
+  stableHandleMarkdownStateChangeRef.current = handleMarkdownStateChange;
+
+  const tiptapEditorConfig = useMemo(
+    () => ({
+      paragraphId: paragraphId || '',
+      initialContent: initialContent || '<p></p>',
+      handleLocalChange: (updatedContent: string) => {
+        console.log('🔄 [TIPTAP_BASIC] 에디터 업데이트:', {
+          paragraphId: paragraphId?.slice(-8) || 'unknown',
+          contentLength: updatedContent?.length || 0,
+          contentPreview: updatedContent?.substring(0, 30) || '',
+        });
+        // ✅ 안정화된 핸들러 사용
+        const stableHandler = stableHandleMarkdownStateChangeRef.current;
+        if (typeof stableHandler === 'function') {
+          stableHandler(updatedContent);
+        }
+      },
+      handleImageUpload: processImageUpload,
+    }),
+    [paragraphId, initialContent, processImageUpload]
+  );
+
+  const { editor: tiptapEditorInstance } = useTiptapEditor(tiptapEditorConfig);
+
+  // 🔧 에디터 인스턴스 등록 (의존성 최소화)
   useEffect(() => {
     if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
       editorInstanceRef.current = tiptapEditorInstance;
@@ -101,16 +128,21 @@ function TiptapEditor({
         editorReady: true,
       });
     }
-  }, [tiptapEditorInstance, paragraphId]);
+  }, [tiptapEditorInstance]); // paragraphId 제거
 
-  // 🔄 외부 initialContent 변경 시 에디터 동기화 (기본 처리)
+  // 🔄 외부 initialContent 변경 시 에디터 동기화 (의존성 최적화)
   useEffect(() => {
     const safeInitialContent = initialContent || '';
 
-    if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
+    if (
+      tiptapEditorInstance &&
+      !tiptapEditorInstance.isDestroyed &&
+      safeInitialContent
+    ) {
       const currentEditorContent = tiptapEditorInstance.getHTML();
 
-      if (safeInitialContent && currentEditorContent !== safeInitialContent) {
+      // 내용이 실제로 다를 때만 업데이트
+      if (currentEditorContent !== safeInitialContent) {
         console.log('🔄 [TIPTAP_BASIC] 외부 content 동기화:', {
           paragraphId: paragraphId?.slice(-8) || 'unknown',
           oldContent: currentEditorContent?.substring(0, 30) || '',
@@ -120,7 +152,7 @@ function TiptapEditor({
         tiptapEditorInstance.commands.setContent(safeInitialContent);
       }
     }
-  }, [initialContent, tiptapEditorInstance, paragraphId]);
+  }, [initialContent, tiptapEditorInstance]); // paragraphId 제거
 
   // 🖼️ 이미지 추가 핸들러
   const addImageToEditor = useCallback(() => {
@@ -280,4 +312,25 @@ function TiptapEditor({
   );
 }
 
-export default React.memo(TiptapEditor);
+export default React.memo(TiptapEditor, (prevProps, nextProps) => {
+  // 🎯 핵심 props만 비교하여 불필요한 리렌더링 완전 차단
+  const shouldUpdate =
+    prevProps.paragraphId !== nextProps.paragraphId ||
+    prevProps.initialContent !== nextProps.initialContent ||
+    prevProps.isActive !== nextProps.isActive;
+
+  // 🚨 onContentChange는 비교에서 제외 (상위 컴포넌트 리렌더링으로 인한 함수 재생성 무시)
+
+  console.log('🔍 [MEMO_CHECK] 리렌더링 필요성 검사:', {
+    paragraphId: nextProps.paragraphId?.slice(-8) || 'unknown',
+    shouldUpdate,
+    reasons: {
+      paragraphIdChanged: prevProps.paragraphId !== nextProps.paragraphId,
+      initialContentChanged:
+        prevProps.initialContent !== nextProps.initialContent,
+      isActiveChanged: prevProps.isActive !== nextProps.isActive,
+    },
+  });
+
+  return !shouldUpdate; // true면 리렌더링 스킵, false면 리렌더링
+});
