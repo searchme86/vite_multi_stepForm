@@ -13,8 +13,7 @@ import { useEditorSidebar } from './hooks/useEditorSidebar';
 
 interface EditorSidebarContainerProps {
   className?: string;
-  // children: [React.ReactNode, React.ReactNode]; // [구조관리 슬라이드, 미리보기 슬라이드]
-  children: React.ReactNode[]; // [구조관리 슬라이드, 미리보기 슬라이드]
+  children: [React.ReactNode, React.ReactNode]; // [구조관리 슬라이드, 미리보기 슬라이드]
 }
 
 export function EditorSidebarContainer({
@@ -58,6 +57,22 @@ export function EditorSidebarContainer({
     </div>
   );
 }
+
+/**
+ * 🔧 타입 누락 에러 수정 내역:
+ *
+ * 1. ✅ SwipeSlide import 제거
+ *    - SwipeSlide 컴포넌트는 더 이상 필요하지 않음
+ *    - SwipeableContainer가 자동으로 children을 SwiperSlide로 감쌈
+ *
+ * 2. ✅ 직접 children 전달 방식
+ *    - 이전: <SwipeSlide>{structureSlide}</SwipeSlide>
+ *    - 이후: {structureSlide}
+ *
+ * 3. ✅ 타입 안전성 확보
+ *    - useEditorSidebar 훅에서 올바른 타입 반환
+ *    - SwipeableContainer에 정확한 props 전달
+ */
 
 /**
  * 🎨 EditorSidebarContainer의 주요 특징 (업데이트됨):

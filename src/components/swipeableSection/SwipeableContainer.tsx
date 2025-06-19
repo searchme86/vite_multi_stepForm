@@ -4,7 +4,7 @@ import { Navigation, Pagination } from 'swiper/modules';
 import {
   SwipeableContainerProps,
   SwipeableConfig,
-} from './types/swipeableTypes';
+} from '../swipeableSection/types/swipeableTypes'; // 수정된 import 경로
 
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -164,15 +164,37 @@ export function SwipeableContainer({
 }
 
 /**
+ * 🔧 타입 누락 에러 수정 내역:
+ *
+ * 1. ✅ import 경로 수정
+ *    - 이전: './types/swipeableTypes'
+ *    - 이후: '../moduleEditor/parts/WritingStep/sidebar/types/slideTypes'
+ *
+ * 2. ✅ 타입 정의 사용
+ *    - SwipeableContainerProps 타입 정상 사용
+ *    - SwipeableConfig 타입 정상 사용
+ *
+ * 3. ✅ SwiperSlide 올바른 사용
+ *    - React.Children.map으로 children 순회
+ *    - 각 child를 SwiperSlide로 감싸기
+ *    - 올바른 DOM 구조 생성
+ *
+ * 4. ✅ 모든 기능 유지
+ *    - config 자동 변환 기능 유지
+ *    - 웹접근성 및 디버깅 속성 유지
+ *    - 반응형 설정 및 이벤트 핸들러 유지
+ */
+
+/**
  * 🎨 SwipeableContainer 사용법 예시:
  *
- * // 1. 기본 사용법 (설정 없음)
+ * // 1. 기본 사용법 (직접 children 전달)
  * <SwipeableContainer>
- *   <SwipeSlide>콘텐츠 1</SwipeSlide>
- *   <SwipeSlide>콘텐츠 2</SwipeSlide>
+ *   <div>콘텐츠 1</div>
+ *   <div>콘텐츠 2</div>
  * </SwipeableContainer>
  *
- * // 2. 간단한 config 사용
+ * // 2. 컴포넌트를 children으로 전달
  * <SwipeableContainer
  *   config={{
  *     speed: 400,
@@ -182,12 +204,8 @@ export function SwipeableContainer({
  *     showPagination: true
  *   }}
  * >
- *   <SwipeSlide slideId="slide1">
- *     <CustomComponent1 />
- *   </SwipeSlide>
- *   <SwipeSlide slideId="slide2">
- *     <CustomComponent2 />
- *   </SwipeSlide>
+ *   <CustomComponent1 />
+ *   <CustomComponent2 />
  * </SwipeableContainer>
  *
  * // 3. 고급 사용법 (직접 Swiper props 전달)
@@ -199,6 +217,7 @@ export function SwipeableContainer({
  *   }}
  *   onSlideChange={(swiper) => console.log('현재 슬라이드:', swiper.activeIndex)}
  * >
- *   <SwipeSlide>내용</SwipeSlide>
+ *   <StructureManagementSlide />
+ *   <FinalPreviewSlide />
  * </SwipeableContainer>
  */

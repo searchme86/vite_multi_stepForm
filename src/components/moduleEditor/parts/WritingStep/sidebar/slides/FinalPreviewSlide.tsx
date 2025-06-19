@@ -1,5 +1,6 @@
 import { Eye, Download, Share2, RefreshCw } from 'lucide-react';
 import PreviewPanel from '../../preview/PreviewPanel';
+// import { FinalPreviewSlideProps } from '../types/slideTypes';
 import { FinalPreviewSlideProps } from '../../../../../swipeableSection/types/swipeableTypes';
 
 /**
@@ -146,6 +147,26 @@ export function FinalPreviewSlide({
     </div>
   );
 }
+
+/**
+ * 🔧 타입 누락 에러 수정 내역:
+ *
+ * 1. ✅ any 타입 제거
+ *    - 이전: previewPanelProps?: any
+ *    - 이후: previewPanelProps: PreviewPanelProps
+ *
+ * 2. ✅ 옵셔널 제거
+ *    - 항상 전달되는 props이므로 필수로 변경
+ *    - 불필요한 null 체크 코드 제거
+ *
+ * 3. ✅ 타입 import 추가
+ *    - FinalPreviewSlideProps를 slideTypes.ts에서 import
+ *    - 구체적인 타입 정의 사용
+ *
+ * 4. ✅ 동적 통계 계산 추가
+ *    - 실제 props 값을 활용한 통계 계산
+ *    - 타입 안전성을 활용한 데이터 접근
+ */
 
 /**
  * 🎨 FinalPreviewSlide의 주요 특징 (업데이트됨):

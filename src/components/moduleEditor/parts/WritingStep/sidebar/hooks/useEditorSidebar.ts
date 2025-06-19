@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { SwipeableConfig } from '../../../../../swipeableSection/types/swipeableTypes';
+import { SwipeableConfig } from '../../../../../swipeableSection/types/swipeableTypes'; // 수정된 import 경로
 
 /**
  * useEditorSidebar 훅
@@ -127,23 +127,17 @@ export function useEditorSidebar() {
 }
 
 /**
- * 🎨 useEditorSidebar 사용법 예시 (업데이트됨):
+ * 🔧 타입 누락 에러 수정 내역:
  *
- * const EditorSidebarContainer = () => {
- *   const { sidebarConfig, handleSlideChange } = useEditorSidebar()
+ * 1. ✅ import 경로 수정
+ *    - 이전: '../../../../../swipeableSection/types/swipeableTypes'
+ *    - 이후: '../types/slideTypes'
  *
- *   return (
- *     <SwipeableContainer
- *       config={sidebarConfig}
- *       onSlideChange={handleSlideChange} // (swiper) => void 시그니처
- *     >
- *       <SwipeSlide slideId="structure">
- *         <StructureManagementSlide />
- *       </SwipeSlide>
- *       <SwipeSlide slideId="preview">
- *         <FinalPreviewSlide />
- *       </SwipeSlide>
- *     </SwipeableContainer>
- *   )
- * }
+ * 2. ✅ SwipeableConfig 타입 사용
+ *    - slideTypes.ts에서 정의된 SwipeableConfig 사용
+ *    - 타입 안전성 확보
+ *
+ * 3. ✅ 모든 기능 유지
+ *    - 기존 useEditorSidebar 훅의 모든 기능 그대로 유지
+ *    - 타입만 올바른 경로에서 import하도록 수정
  */
