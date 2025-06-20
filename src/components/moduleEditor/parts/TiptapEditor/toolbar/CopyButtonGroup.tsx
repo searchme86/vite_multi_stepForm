@@ -7,14 +7,14 @@ interface CopyButtonGroupProps {
   editor: Editor;
   copyContent: () => void;
   selectAllContent: () => void;
-  clearAllContent: () => void;
+  requestClearContent: () => void;
 }
 
 function CopyButtonGroup({
   editor,
   copyContent,
   selectAllContent,
-  clearAllContent,
+  requestClearContent,
 }: CopyButtonGroupProps) {
   console.log('📋 [COPY_GROUP] 렌더링:', {
     editorDestroyed: editor.isDestroyed,
@@ -30,9 +30,9 @@ function CopyButtonGroup({
     selectAllContent();
   };
 
-  const handleClearAll = () => {
-    console.log('📋 [COPY_GROUP] 내용 지우기 버튼 클릭');
-    clearAllContent();
+  const handleRequestClear = () => {
+    console.log('📋 [COPY_GROUP] 내용 지우기 요청 버튼 클릭');
+    requestClearContent();
   };
 
   return (
@@ -50,7 +50,7 @@ function CopyButtonGroup({
       />
       <ToolbarButton
         icon="lucide:trash-2"
-        onClick={handleClearAll}
+        onClick={handleRequestClear}
         title="모든 내용 지우기"
         variant="danger"
       />

@@ -14,7 +14,7 @@ interface TiptapToolbarProps {
   addLink: () => void;
   copyContent: () => void;
   selectAllContent: () => void;
-  clearAllContent: () => void;
+  requestClearContent: () => void;
 }
 
 function TiptapToolbar({
@@ -23,7 +23,7 @@ function TiptapToolbar({
   addLink,
   copyContent,
   selectAllContent,
-  clearAllContent,
+  requestClearContent,
 }: TiptapToolbarProps) {
   console.log('🛠️ [TIPTAP_TOOLBAR] 렌더링:', {
     editorDestroyed: editor.isDestroyed,
@@ -60,7 +60,7 @@ function TiptapToolbar({
         editor={editor}
         copyContent={copyContent}
         selectAllContent={selectAllContent}
-        clearAllContent={clearAllContent}
+        requestClearContent={requestClearContent}
       />
     </div>
   );

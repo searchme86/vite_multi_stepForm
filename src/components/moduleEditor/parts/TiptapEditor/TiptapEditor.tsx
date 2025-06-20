@@ -13,6 +13,7 @@ import EditorStatusBar from './EditorStatusBar';
 import LoadingOverlay from './overlays/LoadingOverlay';
 import ErrorOverlay from './overlays/ErrorOverlay';
 import InfoOverlay from './overlays/InfoOverlay';
+import ConfirmBar from './ConfirmBar';
 import { useMarkdownEditorState } from '../../hooks/useMarkdownEditorState';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { useTiptapEditor } from '../../hooks/useTiptapEditor';
@@ -30,6 +31,13 @@ interface CharacterCount {
   withoutSpaces: number;
   words: number;
   paragraphs: number;
+}
+
+// 확인 바 상태 인터페이스
+interface ConfirmBarState {
+  isVisible: boolean;
+  message: string;
+  onConfirm: () => void;
 }
 
 // 🎯 렌더링 최적화를 위한 비교 함수 (핵심 props만 비교)
@@ -63,6 +71,11 @@ function TiptapEditor({
     paragraphs: 0,
   });
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [confirmBarState, setConfirmBarState] = useState<ConfirmBarState>({
+    isVisible: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
   // 🔧 에디터 참조
   const editorInstanceRef = useRef<any>(null);
@@ -247,19 +260,48 @@ function TiptapEditor({
     }
   }, []);
 
-  // 🗑️ 내용 지우기 핸들러
-  const clearAllContent = useCallback(() => {
+  // 🗑️ 내용 지우기 요청 핸들러 (확인 바 표시)
+  const requestClearContent = useCallback(() => {
     const { current: editorInstance = null } = editorInstanceRef;
 
-    if (editorInstance && !editorInstance.isDestroyed) {
-      const confirmed = window.confirm('모든 내용을 삭제하시겠습니까?');
-      if (confirmed) {
-        editorInstance.commands.clearContent();
-        editorInstance.commands.focus();
-        setCopyFeedback('🗑️ 내용이 삭제되었습니다');
-        setTimeout(() => setCopyFeedback(null), 2000);
-      }
+    if (!editorInstance || editorInstance.isDestroyed) {
+      return;
     }
+
+    const currentContent = editorInstance.getText().trim();
+
+    if (currentContent.length === 0) {
+      setCopyFeedback('ℹ️ 삭제할 내용이 없습니다');
+      setTimeout(() => setCopyFeedback(null), 2000);
+      return;
+    }
+
+    // 내용 미리보기 생성
+    const contentPreview =
+      currentContent.length > 30
+        ? `${currentContent.substring(0, 30)}...`
+        : currentContent;
+
+    setConfirmBarState({
+      isVisible: true,
+      message: `"${contentPreview}" 내용을 모두 삭제하시겠습니까?`,
+      onConfirm: () => {
+        // 실제 삭제 실행
+        if (editorInstance && !editorInstance.isDestroyed) {
+          editorInstance.commands.clearContent();
+          editorInstance.commands.focus();
+          setCopyFeedback('🗑️ 모든 내용이 삭제되었습니다');
+          setTimeout(() => setCopyFeedback(null), 2000);
+        }
+        // 확인 바 닫기
+        setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
+      },
+    });
+  }, []);
+
+  // 🚫 확인 바 취소 핸들러
+  const cancelConfirm = useCallback(() => {
+    setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
   }, []);
 
   // 🖼️ 이미지 추가 핸들러
@@ -361,7 +403,9 @@ function TiptapEditor({
 
   return (
     <div
-      className={`transition-all duration-300 border border-gray-200 rounded-lg h-[490px] max-[400px] overflow-scroll :${
+      className={`relative transition-all duration-300 border border-gray-200 rounded-lg ${
+        confirmBarState.isVisible ? 'h-[530px]' : 'h-[490px]'
+      } max-[400px] overflow-scroll :${
         isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
       }`}
       role="region"
@@ -382,14 +426,33 @@ function TiptapEditor({
         addLink={addLinkToEditor}
         copyContent={copyContentToClipboard}
         selectAllContent={selectAllContent}
-        clearAllContent={clearAllContent}
+        requestClearContent={requestClearContent}
       />
 
       <InfoOverlay />
 
-      <EditorCore
-        editor={tiptapEditorInstance}
-        paragraphId={paragraphId || ''}
+      <div
+        className={`${
+          confirmBarState.isVisible
+            ? 'h-[calc(100%-120px)]'
+            : 'h-[calc(100%-80px)]'
+        } overflow-auto`}
+      >
+        <EditorCore
+          editor={tiptapEditorInstance}
+          paragraphId={paragraphId || ''}
+        />
+      </div>
+
+      {/* 🚀 새로운 확인 바 */}
+      <ConfirmBar
+        isVisible={confirmBarState.isVisible}
+        message={confirmBarState.message}
+        confirmText="삭제"
+        cancelText="취소"
+        onConfirm={confirmBarState.onConfirm}
+        onCancel={cancelConfirm}
+        variant="danger"
       />
 
       <LoadingOverlay isVisible={isImageUploadInProgress} />

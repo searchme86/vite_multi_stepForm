@@ -50,11 +50,21 @@ function EditorStatusBar({
         <div className="flex-1"></div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 text-gray-400">
-            <Icon icon="lucide:type" className="w-3 h-3" />
+            <Icon
+              icon="lucide:type"
+              className="w-3 h-3"
+              width={12}
+              height={12}
+            />
             <span>공백포함: 0자</span>
           </div>
           <div className="flex items-center gap-1 text-gray-400">
-            <Icon icon="lucide:minus" className="w-3 h-3" />
+            <Icon
+              icon="lucide:minus"
+              className="w-3 h-3"
+              width={12}
+              height={12}
+            />
             <span>공백제외: 0자</span>
           </div>
         </div>
@@ -67,7 +77,12 @@ function EditorStatusBar({
       {/* 🔧 기존 상태 표시 로직 그대로 유지 */}
       {isContentChanged && (
         <div className="flex items-center gap-1 p-2 text-xs text-blue-600 animate-pulse bg-blue-50">
-          <Icon icon="lucide:clock" className="text-blue-500" />
+          <Icon
+            icon="lucide:clock"
+            className="text-blue-500"
+            width={16}
+            height={16}
+          />
           변경사항이 저장 대기 중입니다...
         </div>
       )}
@@ -77,6 +92,8 @@ function EditorStatusBar({
           <Icon
             icon="lucide:loader-2"
             className="text-green-500 animate-spin"
+            width={16}
+            height={16}
           />
           이미지를 업로드하고 있습니다...
         </div>
@@ -84,7 +101,12 @@ function EditorStatusBar({
 
       {uploadError && (
         <div className="flex items-center gap-1 p-2 text-xs text-red-600 bg-red-50">
-          <Icon icon="lucide:alert-circle" className="text-red-500" />
+          <Icon
+            icon="lucide:alert-circle"
+            className="text-red-500"
+            width={16}
+            height={16}
+          />
           {uploadError}
           <button
             type="button"
@@ -102,7 +124,12 @@ function EditorStatusBar({
         <div className="flex items-center gap-3">
           {copyFeedback && (
             <div className="flex items-center gap-1 text-green-600">
-              <Icon icon="lucide:check-circle" className="w-3 h-3" />
+              <Icon
+                icon="lucide:check-circle"
+                className="w-3 h-3"
+                width={12}
+                height={12}
+              />
               <span>{copyFeedback}</span>
             </div>
           )}
@@ -114,7 +141,12 @@ function EditorStatusBar({
         <div className="flex items-center gap-4">
           {/* 🔢 공백 포함 글자 수 */}
           <div className="flex items-center gap-1 text-gray-600">
-            <Icon icon="lucide:type" className="w-3 h-3" />
+            <Icon
+              icon="lucide:type"
+              className="w-3 h-3"
+              width={12}
+              height={12}
+            />
             <span>
               공백포함: {characterCount?.withSpaces?.toLocaleString() || 0}자
             </span>
@@ -122,7 +154,12 @@ function EditorStatusBar({
 
           {/* 🔢 공백 제외 글자 수 */}
           <div className="flex items-center gap-1 text-gray-600">
-            <Icon icon="lucide:minus" className="w-3 h-3" />
+            <Icon
+              icon="lucide:minus"
+              className="w-3 h-3"
+              width={12}
+              height={12}
+            />
             <span>
               공백제외: {characterCount?.withoutSpaces?.toLocaleString() || 0}자
             </span>
@@ -131,7 +168,12 @@ function EditorStatusBar({
           {/* 📝 단어 수 (5개 이상일 때만 표시) */}
           {characterCount && characterCount.words >= 5 && (
             <div className="flex items-center gap-1 text-gray-500">
-              <Icon icon="lucide:file-text" className="w-3 h-3" />
+              <Icon
+                icon="lucide:file-text"
+                className="w-3 h-3"
+                width={12}
+                height={12}
+              />
               <span>단어: {characterCount.words.toLocaleString()}개</span>
             </div>
           )}
@@ -139,7 +181,12 @@ function EditorStatusBar({
           {/* 📄 문단 수 (2개 이상일 때만 표시) */}
           {characterCount && characterCount.paragraphs >= 2 && (
             <div className="flex items-center gap-1 text-gray-500">
-              <Icon icon="lucide:align-left" className="w-3 h-3" />
+              <Icon
+                icon="lucide:align-left"
+                className="w-3 h-3"
+                width={12}
+                height={12}
+              />
               <span>문단: {characterCount.paragraphs.toLocaleString()}개</span>
             </div>
           )}
