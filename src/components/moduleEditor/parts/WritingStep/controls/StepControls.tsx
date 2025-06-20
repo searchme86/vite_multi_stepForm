@@ -278,7 +278,7 @@ function StepControls({
       </div>
 
       {/* 🆕 오류 상태 요약 (오류가 있을 때만 표시) */}
-      {hasErrors && (
+      {/* {hasErrors && (
         <div className="p-3 mt-3 border border-red-200 rounded-lg bg-red-50">
           <div className="flex items-start gap-2">
             <Icon
@@ -305,7 +305,7 @@ function StepControls({
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

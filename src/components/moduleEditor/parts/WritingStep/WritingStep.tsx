@@ -390,14 +390,14 @@ function WritingStep({
             onShowErrorDetails={handleShowErrorDetails}
           />
 
-          <div className="mt-4 space-y-4">
-            {/* ✅ 간소화된 상태 카드 - 오류/경고 정보 완전 숨김 */}
+          {/* <div className="mt-4 space-y-4">
             <MarkdownStatusCard
               size="compact"
               variant="bordered"
+              hideTransferStatus={true} // ✅ 전송 상태 헤더 완전 숨김 (오류 표시 제거)
               hideValidationDetails={true} // ✅ 검증 세부사항 숨김
+              hideStatistics={false} // 기본 통계만 표시
               hideErrorsWarnings={true} // ✅ 오류/경고 숨김 (모달로 이동)
-              hideStatistics={false} // 기본 통계는 표시
               className="transition-all duration-200"
               onClick={() => {
                 console.log(
@@ -415,9 +415,10 @@ function WritingStep({
               fullWidth={false}
               onCompleteSuccess={completeEditor}
               showDetailedStatus={false} // ✅ 상세 상태 표시 간소화
+              forceDisabled={hasErrors} // 🆕 외부에서 오류 상태에 따른 비활성화 제어
               className="transition-all duration-200"
             />
-          </div>
+          </div> */}
         </div>
 
         <div className="flex ">
@@ -465,13 +466,14 @@ function WritingStep({
             />
 
             <div className="mt-4 space-y-4">
-              {/* ✅ 모바일에서도 간소화된 상태 카드 */}
+              {/* ✅ 모바일에서도 최소화된 상태 카드 */}
               <MarkdownStatusCard
                 size="compact"
                 variant="bordered"
+                hideTransferStatus={true} // ✅ 전송 상태 헤더 완전 숨김 (오류 표시 제거)
                 hideValidationDetails={true} // ✅ 검증 세부사항 숨김
+                hideStatistics={false} // 기본 통계만 표시
                 hideErrorsWarnings={true} // ✅ 오류/경고 숨김 (모달로 이동)
-                hideStatistics={false} // 기본 통계는 표시
                 className="text-sm transition-all duration-200"
                 onClick={() => {
                   console.log(
@@ -489,6 +491,7 @@ function WritingStep({
                 fullWidth={true}
                 onCompleteSuccess={completeEditor}
                 showDetailedStatus={false} // ✅ 상세 상태 표시 간소화
+                forceDisabled={hasErrors} // 🆕 외부에서 오류 상태에 따른 비활성화 제어
                 className="py-3 text-sm transition-all duration-200"
               />
             </div>
