@@ -272,32 +272,26 @@ function WritingStep({
           className="border-b border-gray-200 backdrop-blur-sm"
         />
 
-        <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
-          <StepControls
-            sortedContainers={sortedContainers}
-            goToStructureStep={goToStructureStep}
-            saveAllToContext={saveAllToContext}
-            completeEditor={completeEditor}
-            hasErrors={hasErrors}
-            errorCount={errorCount}
-            warningCount={warningCount}
-            onShowErrorDetails={handleShowErrorDetails}
-          />
-        </div>
-
-        <div className="flex">
+        <StepControls
+          sortedContainers={sortedContainers}
+          goToStructureStep={goToStructureStep}
+          saveAllToContext={saveAllToContext}
+          completeEditor={completeEditor}
+          hasErrors={hasErrors}
+          errorCount={errorCount}
+          warningCount={warningCount}
+          onShowErrorDetails={handleShowErrorDetails}
+        />
+        {/* 단락작성 */}
+        <div className="mt-[30px]">
           <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
-          <p className="text-sm text-gray-500">
-            📝 단락 작성 미할당: {unassignedParagraphs.length}개 / 전체:{' '}
-            {totalParagraphCount}개
-          </p>
-        </div>
-        <div className="flex w-[100%] items-center justify-between mb-4 border-gray-200 h-[800px] max-h-[800px] overflow-scroll">
-          <ParagraphEditor {...paragraphEditorProps} />
-          <EditorSidebarContainer className="h-full">
-            {preparedStructureSlide}
-            {preparedPreviewSlide}
-          </EditorSidebarContainer>
+          <div className="flex w-[100%] items-center justify-between mb-4 border-gray-200 h-[800px] max-h-[800px] mt-[10px] overflow-scroll">
+            <ParagraphEditor {...paragraphEditorProps} />
+            <EditorSidebarContainer className="h-full">
+              {preparedStructureSlide}
+              {preparedPreviewSlide}
+            </EditorSidebarContainer>
+          </div>
         </div>
       </div>
 
@@ -310,43 +304,40 @@ function WritingStep({
         </div>
 
         <div className="flex flex-col flex-1">
-          <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
-            <StepControls
-              sortedContainers={sortedContainers}
-              goToStructureStep={goToStructureStep}
-              saveAllToContext={saveAllToContext}
-              completeEditor={completeEditor}
-              hasErrors={hasErrors}
-              errorCount={errorCount}
-              warningCount={warningCount}
-              onShowErrorDetails={handleShowErrorDetails}
+          <StepControls
+            sortedContainers={sortedContainers}
+            goToStructureStep={goToStructureStep}
+            saveAllToContext={saveAllToContext}
+            completeEditor={completeEditor}
+            hasErrors={hasErrors}
+            errorCount={errorCount}
+            warningCount={warningCount}
+            onShowErrorDetails={handleShowErrorDetails}
+          />
+          <div className="mt-4 space-y-4">
+            <MarkdownStatusCard
+              size="compact"
+              variant="bordered"
+              hideTransferStatus={true}
+              hideValidationDetails={true}
+              hideStatistics={false}
+              hideErrorsWarnings={true}
+              className="text-sm transition-all duration-200"
+              onClick={() => {
+                handleShowErrorDetails();
+              }}
             />
 
-            <div className="mt-4 space-y-4">
-              <MarkdownStatusCard
-                size="compact"
-                variant="bordered"
-                hideTransferStatus={true}
-                hideValidationDetails={true}
-                hideStatistics={false}
-                hideErrorsWarnings={true}
-                className="text-sm transition-all duration-200"
-                onClick={() => {
-                  handleShowErrorDetails();
-                }}
-              />
-
-              <MarkdownCompleteButton
-                buttonText="마크다운 완성하기"
-                size="medium"
-                variant="primary"
-                fullWidth={true}
-                onCompleteSuccess={completeEditor}
-                showDetailedStatus={false}
-                forceDisabled={hasErrors}
-                className="py-3 text-sm transition-all duration-200"
-              />
-            </div>
+            <MarkdownCompleteButton
+              buttonText="마크다운 완성하기"
+              size="medium"
+              variant="primary"
+              fullWidth={true}
+              onCompleteSuccess={completeEditor}
+              showDetailedStatus={false}
+              forceDisabled={hasErrors}
+              className="py-3 text-sm transition-all duration-200"
+            />
           </div>
 
           <div className="flex-1 p-4">
