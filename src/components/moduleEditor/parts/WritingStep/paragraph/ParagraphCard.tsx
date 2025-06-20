@@ -1,10 +1,8 @@
 // 📁 src/components/moduleEditor/parts/WritingStep/paragraph/ParagraphCard.tsx
 
-import { Button } from '@heroui/react';
-import { Icon } from '@iconify/react';
 import TiptapEditor from '../../TiptapEditor/TiptapEditor';
 import ParagraphActions from './ParagraphActions';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 type SubStep = 'structure' | 'writing';
 
@@ -39,7 +37,7 @@ interface ParagraphCardProps {
   paragraph: LocalParagraph;
   internalState: EditorInternalState;
   sortedContainers: Container[];
-  deleteLocalParagraph: (id: string) => void;
+  // 🚨 체크박스/삭제 버튼 관련 props 제거
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
@@ -58,7 +56,6 @@ function ParagraphCard({
   paragraph,
   internalState,
   sortedContainers,
-  deleteLocalParagraph,
   updateLocalParagraphContent,
   toggleParagraphSelection,
   addToLocalContainer,
@@ -177,27 +174,6 @@ function ParagraphCard({
     return `${baseClasses} ${borderClasses} ${selectionClasses}`;
   }, [isCurrentParagraphActive, isCurrentParagraphSelected]);
 
-  // ✅ 선택 상태 변경 핸들러
-  const handleParagraphSelectionToggle = useCallback(() => {
-    const { id: currentParagraphId = '' } = paragraph || {};
-
-    // 🎯 구조분해할당으로 안전한 함수 호출
-    const { toggleParagraphSelection: selectionToggleCallback } = {
-      toggleParagraphSelection,
-    };
-    const safeSelectionToggleCallback =
-      selectionToggleCallback ||
-      (() => {
-        console.warn(
-          '⚠️ [PARAGRAPH_CARD] toggleParagraphSelection 콜백이 제공되지 않음'
-        );
-      });
-
-    if (typeof safeSelectionToggleCallback === 'function') {
-      safeSelectionToggleCallback(currentParagraphId);
-    }
-  }, [paragraph?.id, toggleParagraphSelection]);
-
   // 🚀 콘텐츠 변경 핸들러
   const handleTiptapEditorContentChange = useCallback(
     (newContent: string) => {
@@ -215,77 +191,23 @@ function ParagraphCard({
     [paragraph?.content, executeImmediateContentSync]
   );
 
-  // ✅ 삭제 핸들러
-  const handleParagraphDeletion = useCallback(() => {
-    const { id: currentParagraphId = '', content: currentContent = '' } =
-      paragraph || {};
-
-    if (currentContent.trim().length > 0) {
-      const contentPreview = currentContent.substring(0, 50);
-      const confirmationMessage = `단락을 삭제하시겠습니까?\n\n내용: "${contentPreview}${
-        currentContent.length > 50 ? '...' : ''
-      }"`;
-
-      const userConfirmedDeletion = window.confirm(confirmationMessage);
-      if (!userConfirmedDeletion) {
-        return;
-      }
-    }
-
-    // 🎯 구조분해할당으로 안전한 함수 호출
-    const { deleteLocalParagraph: paragraphDeletionCallback } = {
-      deleteLocalParagraph,
-    };
-    const safeParagraphDeletionCallback =
-      paragraphDeletionCallback ||
-      (() => {
-        console.warn(
-          '⚠️ [PARAGRAPH_CARD] deleteLocalParagraph 콜백이 제공되지 않음'
-        );
-      });
-
-    if (typeof safeParagraphDeletionCallback === 'function') {
-      safeParagraphDeletionCallback(currentParagraphId);
-    }
-  }, [paragraph?.id, paragraph?.content, deleteLocalParagraph]);
-
   return (
     <div
       className={paragraphCardClassName}
       data-paragraph-id={paragraph?.id || ''}
     >
       <div className="flex flex-col justify-between h-full p-4">
-        {/* 헤더 영역 */}
-        <div className="flex items-start justify-between mb-4">
-          <input
-            type="checkbox"
-            className="mt-2"
-            checked={isCurrentParagraphSelected}
-            onChange={handleParagraphSelectionToggle}
-            aria-label={`단락 선택`}
-          />
-
-          <Button
-            type="button"
-            isIconOnly
-            color="danger"
-            variant="light"
-            size="sm"
-            onPress={handleParagraphDeletion}
-            aria-label="단락 삭제"
-            title="단락 삭제"
-          >
-            <Icon icon="lucide:trash-2" />
-          </Button>
-        </div>
+        {/* 🚨 헤더 영역 - 체크박스와 삭제 버튼 제거됨 */}
 
         {/* 🎯 에디터 영역 */}
-        <TiptapEditor
-          paragraphId={paragraph?.id || ''}
-          initialContent={paragraph?.content || ''}
-          onContentChange={handleTiptapEditorContentChange}
-          isActive={isCurrentParagraphActive}
-        />
+        <div className="mb-4">
+          <TiptapEditor
+            paragraphId={paragraph?.id || ''}
+            initialContent={paragraph?.content || ''}
+            onContentChange={handleTiptapEditorContentChange}
+            isActive={isCurrentParagraphActive}
+          />
+        </div>
 
         {/* 액션 영역 */}
         <div className="pt-3 border-t border-gray-100">
