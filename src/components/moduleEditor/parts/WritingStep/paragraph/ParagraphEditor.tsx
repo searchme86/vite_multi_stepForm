@@ -1,4 +1,4 @@
-// 📁 editor/parts/WritingStep/paragraph/ParagraphEditor.tsx
+// 📁 src/components/moduleEditor/parts/WritingStep/paragraph/ParagraphEditor.tsx
 
 import React from 'react';
 import { Button } from '@heroui/react';
@@ -62,13 +62,7 @@ function ParagraphEditor({
   setTargetContainerId,
   setInternalState,
 }: ParagraphEditorProps) {
-  console.log('📝 [PARAGRAPH_EDITOR] 렌더링:', {
-    isMobile,
-    unassignedParagraphs: unassignedParagraphs.length,
-  });
-
   const handleAddParagraph = () => {
-    console.log('➕ [PARAGRAPH_EDITOR] 새 단락 추가 버튼 클릭');
     addLocalParagraph();
   };
 
