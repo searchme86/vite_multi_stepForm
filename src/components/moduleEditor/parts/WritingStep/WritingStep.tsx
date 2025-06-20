@@ -8,16 +8,19 @@ import { MarkdownStatusCard } from '../../../../bridges/parts/MarkdownStatusCard
 import { MarkdownResultToast } from '../../../../bridges/parts/MarkdownResultToast';
 import { QuickStatusBar } from '../../../../bridges/parts/QuickStatusBar';
 
+// 🆕 새로 추가된 import
+import {
+  ErrorStatusModal,
+  useErrorStatusModal,
+} from '../../../../bridges/parts/ErrorStatusModal';
+import { useBridgeUI } from '../../../../bridges/hooks/useBridgeUI';
+
 // 🆕 새로운 슬라이드 사이드바 시스템 import
 import { EditorSidebarContainer } from './sidebar/EditorSidebarContainer';
 import { StructureManagementSlide } from './sidebar/slides/StructureManagementSlide';
 import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
 
 // 🔒 타입 안전성을 위한 타입 import (수정된 경로)
-// import {
-//   ContainerManagerProps,
-//   PreviewPanelProps,
-// } from './sidebar/types/slideTypes';
 import {
   ContainerManagerProps,
   PreviewPanelProps,
@@ -95,20 +98,54 @@ function WritingStep({
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
 }: WritingStepProps) {
-  console.log(
-    '✍️ [WRITING_STEP] 컴포넌트 렌더링 (타입 안전한 슬라이드 사이드바):',
-    {
-      localContainers: localContainers.length,
-      localParagraphs: localParagraphs.length,
-      currentSubStep: internalState.currentSubStep,
-      updateLocalParagraphContentType: typeof updateLocalParagraphContent,
-      renderMarkdownType: typeof renderMarkdown,
-      activateEditorType: typeof activateEditor,
-      timestamp: new Date().toISOString(),
-    }
-  );
+  console.log('✍️ [WRITING_STEP] 컴포넌트 렌더링 (오류 모달 추가):', {
+    localContainers: localContainers.length,
+    localParagraphs: localParagraphs.length,
+    currentSubStep: internalState.currentSubStep,
+    updateLocalParagraphContentType: typeof updateLocalParagraphContent,
+    renderMarkdownType: typeof renderMarkdown,
+    activateEditorType: typeof activateEditor,
+    timestamp: new Date().toISOString(),
+  });
 
   const [isMobile, setIsMobile] = useState(false);
+
+  // 🆕 브릿지 UI 훅 - 오류 상태 추출
+  const { validationStatus: currentValidationStatus } = useBridgeUI();
+
+  // 🆕 오류 상태 모달 훅
+  const {
+    isOpen: isErrorModalOpen,
+    openModal: openErrorModal,
+    closeModal: closeErrorModal,
+  } = useErrorStatusModal();
+
+  // 🆕 검증 상태에서 오류 정보 추출
+  const { validationErrors, validationWarnings, isReadyForTransfer } =
+    currentValidationStatus;
+
+  // 🆕 오류 상태 계산
+  const hasErrors = useMemo(() => {
+    return validationErrors.length > 0 || !isReadyForTransfer;
+  }, [validationErrors.length, isReadyForTransfer]);
+
+  const errorCount = useMemo(() => {
+    return validationErrors.length;
+  }, [validationErrors.length]);
+
+  const warningCount = useMemo(() => {
+    return validationWarnings.length;
+  }, [validationWarnings.length]);
+
+  // 🆕 오류 상세 정보 표시 핸들러
+  const handleShowErrorDetails = useCallback(() => {
+    console.log('🚨 [WRITING_STEP] 오류 상세 정보 모달 열기 요청:', {
+      hasErrors,
+      errorCount,
+      warningCount,
+    });
+    openErrorModal();
+  }, [openErrorModal, hasErrors, errorCount, warningCount]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -303,6 +340,23 @@ function WritingStep({
     return localParagraphs.length;
   }, [localParagraphs.length]);
 
+  // 🆕 로깅: 오류 상태 변화 추적
+  useEffect(() => {
+    console.log('🚨 [WRITING_STEP] 오류 상태 변화 감지:', {
+      hasErrors,
+      errorCount,
+      warningCount,
+      isReadyForTransfer,
+      validationErrors: validationErrors.slice(0, 3), // 처음 3개만 로깅
+    });
+  }, [
+    hasErrors,
+    errorCount,
+    warningCount,
+    isReadyForTransfer,
+    validationErrors,
+  ]);
+
   return (
     <div className="w-full h-full">
       {/* 🖥️ 데스크탑: 좌우 분할 레이아웃 */}
@@ -321,26 +375,36 @@ function WritingStep({
           }}
           className="border-b border-gray-200 backdrop-blur-sm"
         />
-        {/* 브릿지 섹션 */}
+
+        {/* 🧹 브릿지 섹션 - 🆕 오류 상태 연동 */}
         <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
           <StepControls
             sortedContainers={sortedContainers}
             goToStructureStep={goToStructureStep}
             saveAllToContext={saveAllToContext}
             completeEditor={completeEditor}
+            // 🆕 오류 상태 props 추가
+            hasErrors={hasErrors}
+            errorCount={errorCount}
+            warningCount={warningCount}
+            onShowErrorDetails={handleShowErrorDetails}
           />
 
           <div className="mt-4 space-y-4">
+            {/* ✅ 간소화된 상태 카드 - 오류/경고 정보 완전 숨김 */}
             <MarkdownStatusCard
               size="compact"
               variant="bordered"
-              hideValidationDetails={false}
-              hideErrorsWarnings={false}
+              hideValidationDetails={true} // ✅ 검증 세부사항 숨김
+              hideErrorsWarnings={true} // ✅ 오류/경고 숨김 (모달로 이동)
+              hideStatistics={false} // 기본 통계는 표시
               className="transition-all duration-200"
               onClick={() => {
                 console.log(
-                  '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
+                  '📊 [WRITING_STEP] 상태 카드 클릭 - 오류 모달로 리다이렉트'
                 );
+                // 🆕 상태 카드 클릭 시 오류 모달 열기
+                handleShowErrorDetails();
               }}
             />
 
@@ -350,7 +414,7 @@ function WritingStep({
               variant="primary"
               fullWidth={false}
               onCompleteSuccess={completeEditor}
-              showDetailedStatus={true}
+              showDetailedStatus={false} // ✅ 상세 상태 표시 간소화
               className="transition-all duration-200"
             />
           </div>
@@ -371,8 +435,6 @@ function WritingStep({
             {preparedStructureSlide}
             {preparedPreviewSlide}
           </EditorSidebarContainer>
-          {/* <div className="flex flex-col w-96">
-          </div> */}
         </div>
       </div>
 
@@ -388,26 +450,35 @@ function WritingStep({
 
         {/* 하단: 에디터 영역 */}
         <div className="flex flex-col flex-1">
-          {/* 브릿지 섹션 */}
+          {/* 🧹 브릿지 섹션 - 🆕 모바일에서도 오류 상태 연동 */}
           <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
             <StepControls
               sortedContainers={sortedContainers}
               goToStructureStep={goToStructureStep}
               saveAllToContext={saveAllToContext}
               completeEditor={completeEditor}
+              // 🆕 오류 상태 props 추가
+              hasErrors={hasErrors}
+              errorCount={errorCount}
+              warningCount={warningCount}
+              onShowErrorDetails={handleShowErrorDetails}
             />
 
             <div className="mt-4 space-y-4">
+              {/* ✅ 모바일에서도 간소화된 상태 카드 */}
               <MarkdownStatusCard
                 size="compact"
                 variant="bordered"
-                hideValidationDetails={true}
-                hideErrorsWarnings={true}
+                hideValidationDetails={true} // ✅ 검증 세부사항 숨김
+                hideErrorsWarnings={true} // ✅ 오류/경고 숨김 (모달로 이동)
+                hideStatistics={false} // 기본 통계는 표시
                 className="text-sm transition-all duration-200"
                 onClick={() => {
                   console.log(
-                    '📊 [WRITING_STEP] 상태 카드 클릭 - 상세 정보 표시'
+                    '📊 [WRITING_STEP] 모바일 상태 카드 클릭 - 오류 모달로 리다이렉트'
                   );
+                  // 🆕 모바일에서도 상태 카드 클릭 시 오류 모달 열기
+                  handleShowErrorDetails();
                 }}
               />
 
@@ -417,7 +488,7 @@ function WritingStep({
                 variant="primary"
                 fullWidth={true}
                 onCompleteSuccess={completeEditor}
-                showDetailedStatus={true}
+                showDetailedStatus={false} // ✅ 상세 상태 표시 간소화
                 className="py-3 text-sm transition-all duration-200"
               />
             </div>
@@ -474,6 +545,23 @@ function WritingStep({
             toast.title
           );
         }}
+      />
+
+      {/* 🆕 오류 상태 모달 */}
+      <ErrorStatusModal
+        isOpen={isErrorModalOpen}
+        onClose={closeErrorModal}
+        size="lg"
+        title="브릿지 상태 및 오류 정보"
+        statusCardProps={{
+          size: 'detailed',
+          variant: 'default',
+          hideTransferStatus: false,
+          hideValidationDetails: false,
+          hideStatistics: false,
+          hideErrorsWarnings: false, // 🆕 모달에서는 모든 오류 정보 표시
+        }}
+        className="z-50"
       />
 
       {/* 🎨 스타일링 */}
@@ -588,6 +676,15 @@ function WritingStep({
               filter: grayscale(100%) !important;
               border: 2px dashed #ccc !important;
             }
+
+            /* 🆕 스크롤바 숨김 (구조 표시용) */
+            .scrollbar-hide {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+            }
           `,
         }}
       />
@@ -598,23 +695,36 @@ function WritingStep({
 export default WritingStep;
 
 /**
- * 🔧 타입 누락 에러 수정 내역:
+ * 🆕 오류 모달 시스템 추가 내역:
  *
- * 1. ✅ 타입 import 추가
- *    - ContainerManagerProps, PreviewPanelProps를 slideTypes.ts에서 import
- *    - 타입 안전한 props 전달을 위한 명시적 타입 지정
+ * 1. ✅ ErrorStatusModal 및 useErrorStatusModal 훅 추가
+ *    - bridges/parts/ErrorStatusModal.tsx import
+ *    - 모달 상태 관리 (열기/닫기)
+ *    - 모달 크기: large, 상세 정보 표시
  *
- * 2. ✅ 명시적 타입 애노테이션
- *    - containerManagerProps: ContainerManagerProps
- *    - previewPanelProps: PreviewPanelProps
+ * 2. ✅ useBridgeUI 훅 통합
+ *    - 브릿지 상태 실시간 추출
+ *    - validationErrors, validationWarnings 사용
+ *    - isReadyForTransfer 상태 확인
  *
- * 3. ✅ 타입 안전성 확보
- *    - any 타입 사용 완전 제거
- *    - 구체적인 함수 시그니처 및 인터페이스 사용
- *    - 컴파일 타임 에러 검출 가능
+ * 3. ✅ StepControls에 오류 상태 전달
+ *    - hasErrors: 오류 존재 여부
+ *    - errorCount: 오류 개수
+ *    - warningCount: 경고 개수
+ *    - onShowErrorDetails: 모달 열기 핸들러
  *
- * 4. ✅ 기존 기능 유지
- *    - 모든 WritingStep 기능 그대로 유지
- *    - 타입 안전성만 추가로 확보
- *    - 슬라이드 시스템 완벽 동작
+ * 4. ✅ MarkdownStatusCard 역할 변경
+ *    - hideErrorsWarnings={true} 유지 (오류 정보 숨김)
+ *    - 클릭 시 오류 모달로 리다이렉트
+ *    - 기본 통계 정보만 표시
+ *
+ * 5. ✅ 반응형 디자인 지원
+ *    - 데스크탑과 모바일 모두에서 동일한 기능
+ *    - 모달 z-index: 50 (토스트와 중복 방지)
+ *
+ * 🎯 결과:
+ * - "오류있음" 버튼이 StepControls에 표시됨 (저장 버튼 왼쪽)
+ * - 클릭 시 MarkdownStatusCard 내용이 모달로 표시됨
+ * - "완성" 버튼이 오류 시 disabled 상태가 됨
+ * - 기존 MarkdownStatusCard는 간소화되어 기본 정보만 표시
  */
