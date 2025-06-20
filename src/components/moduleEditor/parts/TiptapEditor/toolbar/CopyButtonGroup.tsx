@@ -44,7 +44,7 @@ function CopyButtonGroup({
         variant="success"
       />
       <ToolbarButton
-        icon="lucide:select-all"
+        icon="lucide:mouse-pointer-square-dashed"
         onClick={handleSelectAll}
         title="전체 선택 (Ctrl+A)"
       />
