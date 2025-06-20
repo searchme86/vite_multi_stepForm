@@ -24,6 +24,14 @@ interface TiptapEditorProps {
   isActive: boolean;
 }
 
+// 글자 수 계산 인터페이스
+interface CharacterCount {
+  withSpaces: number;
+  withoutSpaces: number;
+  words: number;
+  paragraphs: number;
+}
+
 // 🎯 렌더링 최적화를 위한 비교 함수 (핵심 props만 비교)
 const arePropsEqual = (
   prevProps: TiptapEditorProps,
@@ -43,23 +51,53 @@ function TiptapEditor({
   onContentChange,
   isActive,
 }: TiptapEditorProps) {
-  console.log('📝 [TIPTAP_BASIC] 기본 에디터 렌더링:', {
-    paragraphId: paragraphId?.slice(-8) || 'unknown',
-    contentLength: (initialContent || '').length,
-    contentPreview: (initialContent || '').slice(0, 50),
-    hasImages: (initialContent || '').includes('!['),
-    isActive,
-    renderTimestamp: Date.now(),
-  });
-
-  // 🔧 기본 상태 관리만
+  // 🔧 기본 상태 관리
   const [isImageUploadInProgress, setIsImageUploadInProgress] = useState(false);
   const [imageUploadErrorMessage, setImageUploadErrorMessage] = useState<
     string | null
   >(null);
+  const [characterCount, setCharacterCount] = useState<CharacterCount>({
+    withSpaces: 0,
+    withoutSpaces: 0,
+    words: 0,
+    paragraphs: 0,
+  });
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   // 🔧 에디터 참조
   const editorInstanceRef = useRef<any>(null);
+
+  // 🎯 글자 수 계산 함수
+  const calculateCharacterCount = useCallback(
+    (content: string): CharacterCount => {
+      // HTML 태그 제거하여 순수 텍스트만 추출
+      const plainText = content.replace(/<[^>]*>/g, '').trim();
+
+      // 공백 포함 글자 수
+      const withSpaces = plainText.length;
+
+      // 공백 제외 글자 수
+      const withoutSpaces = plainText.replace(/\s/g, '').length;
+
+      // 단어 수 (공백으로 구분)
+      const words =
+        plainText.trim() === '' ? 0 : plainText.trim().split(/\s+/).length;
+
+      // 문단 수 (줄바꿈으로 구분)
+      const paragraphs =
+        plainText.trim() === ''
+          ? 0
+          : plainText.split(/\n\n+/).filter((p) => p.trim()).length;
+
+      return {
+        withSpaces,
+        withoutSpaces,
+        words,
+        paragraphs,
+      };
+    },
+    []
+  );
 
   // 🎯 안정화된 콘텐츠 변경 핸들러 (의존성 최소화)
   const stableOnContentChangeRef = useRef(onContentChange);
@@ -69,11 +107,9 @@ function TiptapEditor({
     (updatedContent: string) => {
       const safeUpdatedContent = updatedContent || '';
 
-      console.log('📝 [TIPTAP_BASIC] 콘텐츠 변경:', {
-        paragraphId: paragraphId?.slice(-8) || 'unknown',
-        contentLength: safeUpdatedContent?.length || 0,
-        contentPreview: safeUpdatedContent?.substring(0, 30) || '',
-      });
+      // 글자 수 업데이트
+      const newCharacterCount = calculateCharacterCount(safeUpdatedContent);
+      setCharacterCount(newCharacterCount);
 
       // 🎯 안정화된 외부 콜백 호출
       const externalCallback = stableOnContentChangeRef.current;
@@ -81,7 +117,7 @@ function TiptapEditor({
         externalCallback(safeUpdatedContent);
       }
     },
-    [paragraphId] // onContentChange 의존성 제거
+    [paragraphId, calculateCharacterCount] // onContentChange 의존성 제거
   );
 
   // 🔧 useMarkdownEditorState 훅 사용 (상위 컴포넌트 업데이트 빈도 조절)
@@ -113,11 +149,6 @@ function TiptapEditor({
       paragraphId: paragraphId || '',
       initialContent: initialContent || '<p></p>',
       handleLocalChange: (updatedContent: string) => {
-        console.log('🔄 [TIPTAP_BASIC] 에디터 업데이트:', {
-          paragraphId: paragraphId?.slice(-8) || 'unknown',
-          contentLength: updatedContent?.length || 0,
-          contentPreview: updatedContent?.substring(0, 30) || '',
-        });
         // ✅ 안정화된 핸들러 사용
         const stableHandler = stableHandleMarkdownStateChangeRef.current;
         if (typeof stableHandler === 'function') {
@@ -136,12 +167,11 @@ function TiptapEditor({
     if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
       editorInstanceRef.current = tiptapEditorInstance;
 
-      console.log('🔧 [TIPTAP_BASIC] 에디터 인스턴스 등록:', {
-        paragraphId: paragraphId?.slice(-8) || 'unknown',
-        editorReady: true,
-      });
+      // 초기 글자 수 계산
+      const initialCharCount = calculateCharacterCount(initialContent || '');
+      setCharacterCount(initialCharCount);
     }
-  }, [tiptapEditorInstance]); // paragraphId 제거
+  }, [tiptapEditorInstance, initialContent, calculateCharacterCount]);
 
   // 🔄 외부 initialContent 변경 시 에디터 동기화 (의존성 최적화)
   useEffect(() => {
@@ -156,16 +186,81 @@ function TiptapEditor({
 
       // 내용이 실제로 다를 때만 업데이트
       if (currentEditorContent !== safeInitialContent) {
-        console.log('🔄 [TIPTAP_BASIC] 외부 content 동기화:', {
-          paragraphId: paragraphId?.slice(-8) || 'unknown',
-          oldContent: currentEditorContent?.substring(0, 30) || '',
-          newContent: safeInitialContent?.substring(0, 30) || '',
-        });
-
         tiptapEditorInstance.commands.setContent(safeInitialContent);
+
+        // 글자 수 업데이트
+        const newCharCount = calculateCharacterCount(safeInitialContent);
+        setCharacterCount(newCharCount);
       }
     }
-  }, [initialContent, tiptapEditorInstance]); // paragraphId 제거
+  }, [initialContent, tiptapEditorInstance, calculateCharacterCount]);
+
+  // 📋 텍스트 복사 핸들러
+  const copyContentToClipboard = useCallback(async () => {
+    const { current: editorInstance = null } = editorInstanceRef;
+
+    if (!editorInstance || editorInstance.isDestroyed) {
+      setCopyFeedback('❌ 에디터를 찾을 수 없습니다');
+      return;
+    }
+
+    try {
+      // HTML과 텍스트 두 가지 형태로 복사
+      const htmlContent = editorInstance.getHTML();
+      const textContent = editorInstance.getText();
+
+      if (!textContent.trim()) {
+        setCopyFeedback('⚠️ 복사할 내용이 없습니다');
+        return;
+      }
+
+      // 클립보드 API 사용
+      if (navigator.clipboard && navigator.clipboard.write) {
+        const clipboardItem = new ClipboardItem({
+          'text/html': new Blob([htmlContent], { type: 'text/html' }),
+          'text/plain': new Blob([textContent], { type: 'text/plain' }),
+        });
+
+        await navigator.clipboard.write([clipboardItem]);
+        setCopyFeedback('✅ 내용이 복사되었습니다');
+      } else {
+        // 대체 방법: 텍스트만 복사
+        await navigator.clipboard.writeText(textContent);
+        setCopyFeedback('✅ 텍스트가 복사되었습니다');
+      }
+    } catch (copyError) {
+      console.error('복사 실패:', copyError);
+      setCopyFeedback('❌ 복사에 실패했습니다');
+    }
+
+    // 피드백 메시지 자동 제거
+    setTimeout(() => setCopyFeedback(null), 3000);
+  }, []);
+
+  // 📋 전체 선택 핸들러
+  const selectAllContent = useCallback(() => {
+    const { current: editorInstance = null } = editorInstanceRef;
+
+    if (editorInstance && !editorInstance.isDestroyed) {
+      editorInstance.commands.selectAll();
+      editorInstance.commands.focus();
+    }
+  }, []);
+
+  // 🗑️ 내용 지우기 핸들러
+  const clearAllContent = useCallback(() => {
+    const { current: editorInstance = null } = editorInstanceRef;
+
+    if (editorInstance && !editorInstance.isDestroyed) {
+      const confirmed = window.confirm('모든 내용을 삭제하시겠습니까?');
+      if (confirmed) {
+        editorInstance.commands.clearContent();
+        editorInstance.commands.focus();
+        setCopyFeedback('🗑️ 내용이 삭제되었습니다');
+        setTimeout(() => setCopyFeedback(null), 2000);
+      }
+    }
+  }, []);
 
   // 🖼️ 이미지 추가 핸들러
   const addImageToEditor = useCallback(() => {
@@ -184,16 +279,10 @@ function TiptapEditor({
       const selectedFiles = Array.from(files || []);
 
       if (selectedFiles.length === 0) {
-        console.log('📷 [TIPTAP_BASIC] 이미지 선택 취소');
         return;
       }
 
       try {
-        console.log('📷 [TIPTAP_BASIC] 이미지 업로드 시작:', {
-          fileCount: selectedFiles.length,
-          fileNames: selectedFiles.map((file) => file.name),
-        });
-
         const uploadedImageUrls = await processImageUpload(selectedFiles);
 
         uploadedImageUrls.forEach((imageUrl, imageIndex) => {
@@ -215,11 +304,6 @@ function TiptapEditor({
                 },
               })
               .run();
-
-            console.log('📷 [TIPTAP_BASIC] 이미지 삽입 완료:', {
-              imageUrl: safeImageUrl,
-              altText: imageAltText,
-            });
           }
         });
       } catch (uploadError) {
@@ -237,10 +321,6 @@ function TiptapEditor({
     const { current: editorInstance = null } = editorInstanceRef;
 
     if (safeLinkUrl && editorInstance && !editorInstance.isDestroyed) {
-      console.log('🔗 [TIPTAP_BASIC] 링크 추가:', {
-        linkUrl: safeLinkUrl,
-      });
-
       editorInstance.chain().focus().setLink({ href: safeLinkUrl }).run();
     }
   }, []);
@@ -292,12 +372,17 @@ function TiptapEditor({
         isUploadingImage={isImageUploadInProgress}
         uploadError={imageUploadErrorMessage}
         onErrorClose={() => setImageUploadErrorMessage(null)}
+        characterCount={characterCount}
+        copyFeedback={copyFeedback}
       />
 
       <TiptapToolbar
         editor={tiptapEditorInstance}
         addImage={addImageToEditor}
         addLink={addLinkToEditor}
+        copyContent={copyContentToClipboard}
+        selectAllContent={selectAllContent}
+        clearAllContent={clearAllContent}
       />
 
       <InfoOverlay />
