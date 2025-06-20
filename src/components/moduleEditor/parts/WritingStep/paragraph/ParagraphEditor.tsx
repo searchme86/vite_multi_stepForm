@@ -1,5 +1,3 @@
-// 📁 src/components/moduleEditor/parts/WritingStep/paragraph/ParagraphEditor.tsx
-
 import React, { useMemo } from 'react';
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
@@ -47,6 +45,10 @@ interface ParagraphEditorProps {
   addToLocalContainer: () => void;
   setTargetContainerId: (containerId: string) => void;
   setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
+
+  // 🚀 목표카운트기능과 연동을 위한 새로운 props
+  recommendedChars?: number; // TextCountContainer에서 전달받는 권장 글자수
+  isGoalModeEnabled?: boolean; // 목표 모드 활성화 여부
 }
 
 // 🎯 콘텐츠 품질 디버깅 정보 인터페이스
@@ -69,16 +71,32 @@ function ParagraphEditor({
   addToLocalContainer,
   setTargetContainerId,
   setInternalState,
+  // 🚀 새로운 props
+  recommendedChars = 30, // 디폴트 30자
+  isGoalModeEnabled = false,
 }: ParagraphEditorProps) {
   console.log('📝 [PARAGRAPH_EDITOR] 렌더링:', {
     isMobile,
     unassignedParagraphsCount: unassignedParagraphs.length,
+    recommendedChars, // 🚀 로깅에 추가
+    isGoalModeEnabled, // 🚀 로깅에 추가
     timestamp: new Date().toISOString(),
   });
 
-  // 🚀 콘텐츠 품질 분석 로직
+  // 🚀 권장 글자수 동적 계산 함수
+  const getEffectiveRecommendedChars = React.useCallback(() => {
+    // 목표 모드가 활성화되어 있고 recommendedChars가 유효한 경우 해당 값 사용
+    if (isGoalModeEnabled && recommendedChars && recommendedChars > 0) {
+      return recommendedChars;
+    }
+    // 그렇지 않으면 디폴트 30자 사용
+    return 30;
+  }, [recommendedChars, isGoalModeEnabled]);
+
+  // 🚀 콘텐츠 품질 분석 로직 (권장 기준 동적 적용)
   const contentQualityIssues = useMemo((): ContentQualityIssue[] => {
     const issues: ContentQualityIssue[] = [];
+    const effectiveRecommendedChars = getEffectiveRecommendedChars();
 
     // 🔍 각 단락의 콘텐츠 분석
     unassignedParagraphs.forEach((paragraph) => {
@@ -98,12 +116,12 @@ function ParagraphEditor({
         });
       }
 
-      // ⚠️ 콘텐츠가 권장 길이 미만 (권장: 100자 이상)
-      if (contentLength > 0 && contentLength < 100) {
+      // ⚠️ 콘텐츠가 권장 길이 미만 (🚀 동적 권장 기준 적용)
+      if (contentLength > 0 && contentLength < effectiveRecommendedChars) {
         issues.push({
           id: `short-recommended-${id}`,
           type: 'warning',
-          message: `콘텐츠가 권장 길이보다 짧습니다 (현재: ${contentLength}자, 권장: 100자 이상)`,
+          message: `콘텐츠가 권장 길이보다 짧습니다 (현재: ${contentLength}자, 권장: ${effectiveRecommendedChars}자 이상)`,
           icon: 'lucide:alert-triangle',
         });
       }
@@ -113,10 +131,12 @@ function ParagraphEditor({
       totalParagraphs: unassignedParagraphs.length,
       issuesFound: issues.length,
       issueTypes: issues.map((issue) => issue.type),
+      effectiveRecommendedChars, // 🚀 현재 적용된 권장 기준 로깅
+      isGoalModeEnabled, // 🚀 목표 모드 상태 로깅
     });
 
     return issues;
-  }, [unassignedParagraphs]);
+  }, [unassignedParagraphs, getEffectiveRecommendedChars]); // 🚀 의존성에 getEffectiveRecommendedChars 추가
 
   // 🎯 이슈 타입별 분류
   const { errorIssues, warningIssues } = useMemo(() => {
@@ -151,7 +171,16 @@ function ParagraphEditor({
     >
       {/* 📋 헤더 영역 */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-        <span className="text-lg font-semibold">📝 단락 작성 (Tiptap)</span>
+        <div className="flex flex-col">
+          <span className="text-lg font-semibold">📝 단락 작성 (Tiptap)</span>
+          {/* 🚀 목표 모드 상태 표시 */}
+          {isGoalModeEnabled && (
+            <span className="mt-1 text-xs text-blue-600">
+              🎯 목표 모드 활성화 (권장: {getEffectiveRecommendedChars()}자
+              이상)
+            </span>
+          )}
+        </div>
         <Button
           type="button"
           color="primary"
@@ -171,6 +200,10 @@ function ParagraphEditor({
             <h4 className="flex items-center gap-2 text-sm font-medium text-gray-800">
               <Icon icon="lucide:clipboard-check" className="text-orange-500" />
               콘텐츠 품질 검사
+              {/* 🚀 현재 권장 기준 표시 */}
+              <span className="ml-2 text-xs text-gray-600">
+                (권장 기준: {getEffectiveRecommendedChars()}자)
+              </span>
             </h4>
           </div>
 
@@ -251,25 +284,36 @@ function ParagraphEditor({
 export default ParagraphEditor;
 
 /**
- * 🔧 콘텐츠 품질 디버깅 정보 추가 내역:
+ * 🔧 목표카운트기능 연동 추가 내역:
  *
- * 1. ✅ 콘텐츠 품질 분석 로직 추가
- *    - 각 단락의 실제 텍스트 길이 계산 (HTML 태그 제외)
- *    - 10자 미만 오류 검출
- *    - 100자 미만 권장사항 표시
+ * 1. ✅ Props 인터페이스 확장
+ *    - recommendedChars?: number (권장 글자수)
+ *    - isGoalModeEnabled?: boolean (목표 모드 상태)
  *
- * 2. ✅ 시각적 피드백 시스템
- *    - 오류/경고 아이콘과 색상 구분
- *    - 그라데이션 배경으로 주의 집중
- *    - ul li 리스트 형태로 구조화된 표시
+ * 2. ✅ 동적 권장 기준 적용
+ *    - getEffectiveRecommendedChars() 함수로 권장 기준 계산
+ *    - 목표 모드 ON: TextCountContainer에서 전달받은 값 사용
+ *    - 목표 모드 OFF: 디폴트 30자 사용
  *
- * 3. ✅ 성능 최적화
- *    - useMemo로 불필요한 재계산 방지
- *    - 콘솔 로깅으로 디버깅 지원
- *    - 메모이제이션된 이슈 분류
+ * 3. ✅ 콘텐츠 품질 분석 로직 개선
+ *    - 하드코딩된 100자 → 동적 recommendedChars 값 사용
+ *    - 의존성 배열에 getEffectiveRecommendedChars 추가
  *
- * 4. ✅ 기존 기능 완전 유지
- *    - 모든 props 전달 방식 동일
- *    - 기존 비즈니스 로직 변경 없음
- *    - 단락 추가/편집 기능 그대로 유지
+ * 4. ✅ UI 개선
+ *    - 헤더에 목표 모드 상태 및 현재 권장 기준 표시
+ *    - 품질 검사 영역에 현재 권장 기준 정보 추가
+ *
+ * 5. ✅ 디버깅 정보 강화
+ *    - 콘솔 로그에 권장 기준 및 목표 모드 상태 추가
+ *    - 품질 분석 완료 시 현재 적용된 기준 로깅
+ *
+ * 6. ✅ 기존 기능 완전 유지
+ *    - 모든 기존 props 및 기능 그대로 유지
+ *    - 단락 추가/편집/삭제 기능 변경 없음
+ *    - 기존 비즈니스 로직 보존
+ *
+ * 7. ✅ TextCountContainer와 완벽 연동
+ *    - recommendedChars props로 실시간 권장 기준 수신
+ *    - 목표 모드 변경 시 즉시 품질 검사 기준 업데이트
+ *    - parseInt 방식 타입 변환과 호환
  */

@@ -1,5 +1,3 @@
-// 📁 src/components/moduleEditor/parts/TiptapEditor/TiptapEditor.tsx
-
 import React, {
   useState,
   useCallback,
@@ -17,15 +15,16 @@ import ConfirmBar from './ConfirmBar';
 import { useMarkdownEditorState } from '../../hooks/useMarkdownEditorState';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { useTiptapEditor } from '../../hooks/useTiptapEditor';
+import TextCountContainer from './textCount/TextCountContainer';
 
 interface TiptapEditorProps {
   paragraphId: string;
   initialContent: string;
   onContentChange: (content: string) => void;
   isActive: boolean;
+  enableTextCount?: boolean;
 }
 
-// 글자 수 계산 인터페이스
 interface CharacterCount {
   withSpaces: number;
   withoutSpaces: number;
@@ -33,14 +32,12 @@ interface CharacterCount {
   paragraphs: number;
 }
 
-// 확인 바 상태 인터페이스
 interface ConfirmBarState {
   isVisible: boolean;
   message: string;
   onConfirm: () => void;
 }
 
-// 🎯 렌더링 최적화를 위한 비교 함수 (핵심 props만 비교)
 const arePropsEqual = (
   prevProps: TiptapEditorProps,
   nextProps: TiptapEditorProps
@@ -48,8 +45,8 @@ const arePropsEqual = (
   return (
     prevProps.paragraphId === nextProps.paragraphId &&
     prevProps.initialContent === nextProps.initialContent &&
-    prevProps.isActive === nextProps.isActive
-    // 🚨 onContentChange는 의도적으로 제외 (상위 컴포넌트 함수 재생성 무시)
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.enableTextCount === nextProps.enableTextCount
   );
 };
 
@@ -58,8 +55,8 @@ function TiptapEditor({
   initialContent = '',
   onContentChange,
   isActive,
+  enableTextCount = true,
 }: TiptapEditorProps) {
-  // 🔧 기본 상태 관리
   const [isImageUploadInProgress, setIsImageUploadInProgress] = useState(false);
   const [imageUploadErrorMessage, setImageUploadErrorMessage] = useState<
     string | null
@@ -77,42 +74,26 @@ function TiptapEditor({
     onConfirm: () => {},
   });
 
-  // 🔧 에디터 참조
   const editorInstanceRef = useRef<any>(null);
 
-  // 🎯 글자 수 계산 함수
   const calculateCharacterCount = useCallback(
     (content: string): CharacterCount => {
-      // HTML 태그 제거하여 순수 텍스트만 추출
       const plainText = content.replace(/<[^>]*>/g, '').trim();
 
-      // 공백 포함 글자 수
       const withSpaces = plainText.length;
-
-      // 공백 제외 글자 수
       const withoutSpaces = plainText.replace(/\s/g, '').length;
-
-      // 단어 수 (공백으로 구분)
       const words =
         plainText.trim() === '' ? 0 : plainText.trim().split(/\s+/).length;
-
-      // 문단 수 (줄바꿈으로 구분)
       const paragraphs =
         plainText.trim() === ''
           ? 0
           : plainText.split(/\n\n+/).filter((p) => p.trim()).length;
 
-      return {
-        withSpaces,
-        withoutSpaces,
-        words,
-        paragraphs,
-      };
+      return { withSpaces, withoutSpaces, words, paragraphs };
     },
     []
   );
 
-  // 🎯 안정화된 콘텐츠 변경 핸들러 (의존성 최소화)
   const stableOnContentChangeRef = useRef(onContentChange);
   stableOnContentChangeRef.current = onContentChange;
 
@@ -120,28 +101,24 @@ function TiptapEditor({
     (updatedContent: string) => {
       const safeUpdatedContent = updatedContent || '';
 
-      // 글자 수 업데이트
       const newCharacterCount = calculateCharacterCount(safeUpdatedContent);
       setCharacterCount(newCharacterCount);
 
-      // 🎯 안정화된 외부 콜백 호출
       const externalCallback = stableOnContentChangeRef.current;
       if (typeof externalCallback === 'function') {
         externalCallback(safeUpdatedContent);
       }
     },
-    [paragraphId, calculateCharacterCount] // onContentChange 의존성 제거
+    [paragraphId, calculateCharacterCount]
   );
 
-  // 🔧 useMarkdownEditorState 훅 사용 (상위 컴포넌트 업데이트 빈도 조절)
   const { handleLocalChange: handleMarkdownStateChange, isContentChanged } =
     useMarkdownEditorState({
       initialContent: initialContent || '',
       onContentChange: handleContentChange,
-      debounceDelay: 500, // 🚀 상위 컴포넌트 업데이트 빈도 대폭 감소 (0.5초)
+      debounceDelay: 500,
     });
 
-  // 🖼️ 이미지 업로드 처리 (메모이제이션)
   const imageUploadConfig = useMemo(
     () => ({
       setIsUploadingImage: setIsImageUploadInProgress,
@@ -153,7 +130,6 @@ function TiptapEditor({
   const { handleImageUpload: processImageUpload } =
     useImageUpload(imageUploadConfig);
 
-  // 🎯 Tiptap 에디터 설정 (메모이제이션으로 불필요한 재생성 방지)
   const stableHandleMarkdownStateChangeRef = useRef(handleMarkdownStateChange);
   stableHandleMarkdownStateChangeRef.current = handleMarkdownStateChange;
 
@@ -162,7 +138,6 @@ function TiptapEditor({
       paragraphId: paragraphId || '',
       initialContent: initialContent || '<p></p>',
       handleLocalChange: (updatedContent: string) => {
-        // ✅ 안정화된 핸들러 사용
         const stableHandler = stableHandleMarkdownStateChangeRef.current;
         if (typeof stableHandler === 'function') {
           stableHandler(updatedContent);
@@ -175,18 +150,14 @@ function TiptapEditor({
 
   const { editor: tiptapEditorInstance } = useTiptapEditor(tiptapEditorConfig);
 
-  // 🔧 에디터 인스턴스 등록 (의존성 최소화)
   useEffect(() => {
     if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
       editorInstanceRef.current = tiptapEditorInstance;
-
-      // 초기 글자 수 계산
       const initialCharCount = calculateCharacterCount(initialContent || '');
       setCharacterCount(initialCharCount);
     }
   }, [tiptapEditorInstance, initialContent, calculateCharacterCount]);
 
-  // 🔄 외부 initialContent 변경 시 에디터 동기화 (의존성 최적화)
   useEffect(() => {
     const safeInitialContent = initialContent || '';
 
@@ -197,18 +168,14 @@ function TiptapEditor({
     ) {
       const currentEditorContent = tiptapEditorInstance.getHTML();
 
-      // 내용이 실제로 다를 때만 업데이트
       if (currentEditorContent !== safeInitialContent) {
         tiptapEditorInstance.commands.setContent(safeInitialContent);
-
-        // 글자 수 업데이트
         const newCharCount = calculateCharacterCount(safeInitialContent);
         setCharacterCount(newCharCount);
       }
     }
   }, [initialContent, tiptapEditorInstance, calculateCharacterCount]);
 
-  // 📋 텍스트 복사 핸들러
   const copyContentToClipboard = useCallback(async () => {
     const { current: editorInstance = null } = editorInstanceRef;
 
@@ -218,7 +185,6 @@ function TiptapEditor({
     }
 
     try {
-      // HTML과 텍스트 두 가지 형태로 복사
       const htmlContent = editorInstance.getHTML();
       const textContent = editorInstance.getText();
 
@@ -227,7 +193,6 @@ function TiptapEditor({
         return;
       }
 
-      // 클립보드 API 사용
       if (navigator.clipboard && navigator.clipboard.write) {
         const clipboardItem = new ClipboardItem({
           'text/html': new Blob([htmlContent], { type: 'text/html' }),
@@ -237,7 +202,6 @@ function TiptapEditor({
         await navigator.clipboard.write([clipboardItem]);
         setCopyFeedback('✅ 내용이 복사되었습니다');
       } else {
-        // 대체 방법: 텍스트만 복사
         await navigator.clipboard.writeText(textContent);
         setCopyFeedback('✅ 텍스트가 복사되었습니다');
       }
@@ -246,11 +210,9 @@ function TiptapEditor({
       setCopyFeedback('❌ 복사에 실패했습니다');
     }
 
-    // 피드백 메시지 자동 제거
     setTimeout(() => setCopyFeedback(null), 3000);
   }, []);
 
-  // 📋 전체 선택 핸들러
   const selectAllContent = useCallback(() => {
     const { current: editorInstance = null } = editorInstanceRef;
 
@@ -260,7 +222,6 @@ function TiptapEditor({
     }
   }, []);
 
-  // 🗑️ 내용 지우기 요청 핸들러 (확인 바 표시)
   const requestClearContent = useCallback(() => {
     const { current: editorInstance = null } = editorInstanceRef;
 
@@ -276,7 +237,6 @@ function TiptapEditor({
       return;
     }
 
-    // 내용 미리보기 생성
     const contentPreview =
       currentContent.length > 30
         ? `${currentContent.substring(0, 30)}...`
@@ -286,32 +246,26 @@ function TiptapEditor({
       isVisible: true,
       message: `"${contentPreview}" 내용을 모두 삭제하시겠습니까?`,
       onConfirm: () => {
-        // 실제 삭제 실행
         if (editorInstance && !editorInstance.isDestroyed) {
           editorInstance.commands.clearContent();
           editorInstance.commands.focus();
           setCopyFeedback('🗑️ 모든 내용이 삭제되었습니다');
           setTimeout(() => setCopyFeedback(null), 2000);
         }
-        // 확인 바 닫기
         setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
       },
     });
   }, []);
 
-  // 🚫 확인 바 취소 핸들러
   const cancelConfirm = useCallback(() => {
     setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
   }, []);
 
-  // 🖼️ 이미지 추가 핸들러
   const addImageToEditor = useCallback(() => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/*';
     fileInput.multiple = true;
-
-    // 웹접근성 향상
     fileInput.setAttribute('aria-label', '이미지 파일 선택');
 
     fileInput.onchange = async (changeEvent) => {
@@ -349,14 +303,13 @@ function TiptapEditor({
           }
         });
       } catch (uploadError) {
-        console.error('❌ [TIPTAP_BASIC] 이미지 업로드 실패:', uploadError);
+        console.error('이미지 업로드 실패:', uploadError);
       }
     };
 
     fileInput.click();
   }, [processImageUpload]);
 
-  // 🔗 링크 추가 핸들러
   const addLinkToEditor = useCallback(() => {
     const linkUrl = window.prompt('링크 URL을 입력하세요:');
     const safeLinkUrl = linkUrl?.trim() || '';
@@ -367,7 +320,6 @@ function TiptapEditor({
     }
   }, []);
 
-  // 🔧 에디터 로딩 상태 처리
   if (!tiptapEditorInstance) {
     return (
       <div
@@ -386,7 +338,6 @@ function TiptapEditor({
     );
   }
 
-  // 🔧 에디터 파괴 상태 처리
   if (tiptapEditorInstance.isDestroyed) {
     return (
       <div
@@ -405,12 +356,19 @@ function TiptapEditor({
     <div
       className={`relative transition-all duration-300 border border-gray-200 rounded-lg ${
         confirmBarState.isVisible ? 'h-[530px]' : 'h-[490px]'
-      } max-[400px] overflow-scroll :${
+      } max-[400px] overflow-scroll ${
         isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
       }`}
       role="region"
       aria-label={`문단 에디터 ${paragraphId?.slice(-8) || 'unknown'}`}
     >
+      {enableTextCount && (
+        <TextCountContainer
+          editorContent={initialContent}
+          initialTargetChars={30}
+        />
+      )}
+
       <EditorStatusBar
         isContentChanged={isContentChanged}
         isUploadingImage={isImageUploadInProgress}
@@ -444,7 +402,6 @@ function TiptapEditor({
         />
       </div>
 
-      {/* 🚀 새로운 확인 바 */}
       <ConfirmBar
         isVisible={confirmBarState.isVisible}
         message={confirmBarState.message}
