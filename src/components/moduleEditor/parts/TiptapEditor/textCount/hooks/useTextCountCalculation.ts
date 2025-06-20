@@ -24,6 +24,21 @@ interface UseTextCountCalculationReturn {
   ringData: RingData[];
 }
 
+// 🎨 애플워치 실제 색상 팔레트 적용
+const APPLE_WATCH_COLORS = {
+  // Move 링 (빨간색 계열) - 더 생동감 있는 핫핑크
+  MOVE: '#FA114F',
+  MOVE_BG: 'rgba(250, 17, 79, 0.15)',
+
+  // Exercise 링 (초록색 계열) - 밝고 화려한 네온 그린
+  EXERCISE: '#92D050',
+  EXERCISE_BG: 'rgba(146, 208, 80, 0.15)',
+
+  // Stand 링 (파란색 계열) - 생동감 있는 시안 블루
+  STAND: '#00D4FF',
+  STAND_BG: 'rgba(0, 212, 255, 0.15)',
+} as const;
+
 const countCharacters = (
   text: string,
   includeSpaces: boolean = true
@@ -63,22 +78,26 @@ export function useTextCountCalculation({
     };
   }, [currentChars, targetChars, progress]);
 
+  // 🎨 애플워치 스타일의 화려한 색상으로 링 데이터 생성
   const ringData = useMemo((): RingData[] => {
     return [
+      // Move 링 - 메인 진행률 (생동감 있는 핫핑크)
       {
         progress: progress,
-        color: '#ff2d92',
-        backgroundColor: 'rgba(255, 45, 146, 0.15)',
+        color: APPLE_WATCH_COLORS.MOVE,
+        backgroundColor: APPLE_WATCH_COLORS.MOVE_BG,
       },
+      // Exercise 링 - 50% 기준 (밝은 네온 그린)
       {
         progress: Math.min((currentChars / (targetChars * 0.5)) * 100, 100),
-        color: '#32d74b',
-        backgroundColor: 'rgba(50, 215, 75, 0.15)',
+        color: APPLE_WATCH_COLORS.EXERCISE,
+        backgroundColor: APPLE_WATCH_COLORS.EXERCISE_BG,
       },
+      // Stand 링 - 25% 기준 (화려한 시안 블루)
       {
         progress: Math.min((currentChars / (targetChars * 0.25)) * 100, 100),
-        color: '#007aff',
-        backgroundColor: 'rgba(0, 122, 255, 0.15)',
+        color: APPLE_WATCH_COLORS.STAND,
+        backgroundColor: APPLE_WATCH_COLORS.STAND_BG,
       },
     ];
   }, [progress, currentChars, targetChars]);

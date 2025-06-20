@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import TextCountMessage from './TextCountMessage'; // 🚀 동적 메시지 컴포넌트 추가
 
 interface RingData {
   progress: number;
@@ -119,19 +120,43 @@ function CompactProgressDisplay({
   includeSpaces: boolean;
 }) {
   return (
-    <div className="p-2 border-b border-gray-200 bg-gray-50">
-      <div className="flex items-center gap-2">
-        <MultiActivityRings rings={rings} size={28} />
+    <div className="border-b border-gray-200 bg-gray-50">
+      {/* 🎯 메인 진행률 표시 영역 */}
+      <div className="p-2">
+        <div className="flex items-center gap-3">
+          <MultiActivityRings rings={rings} size={32} />
 
-        <div className="flex-1 text-xs text-blue-700">
-          <span className="font-bold">{metrics.currentChars}</span>
-          <span className="mx-1">/</span>
-          <span className="font-bold">{targetChars}</span>
-          <span className="ml-1">({Math.round(metrics.progress)}%)</span>
-          <span className="ml-2 opacity-75">
-            {includeSpaces ? '공백포함' : '공백미포함'}
-          </span>
+          {/* 📊 글자수 상세 정보 - 요청된 형식으로 변경 */}
+          <div className="flex-1 text-xs text-blue-700">
+            <div className="font-medium">
+              <span className="text-blue-800">현재: </span>
+              <span className="font-bold text-blue-900">
+                {metrics.currentChars}
+              </span>
+              <span className="mx-2 text-gray-400">/</span>
+              <span className="text-orange-600">남은글자: </span>
+              <span className="font-bold text-orange-700">
+                {metrics.remainingChars}
+              </span>
+              <span className="mx-2 text-gray-400">/</span>
+              <span className="text-green-600">목표: </span>
+              <span className="font-bold text-green-700">{targetChars}</span>
+            </div>
+            <div className="mt-1 text-xs opacity-75">
+              <span className="text-purple-600">
+                진행률: {Math.round(metrics.progress)}%
+              </span>
+              <span className="ml-2 text-gray-500">
+                ({includeSpaces ? '공백포함' : '공백미포함'})
+              </span>
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* 🚀 동적 메시지 영역 추가 */}
+      <div className="border-t border-gray-100">
+        <TextCountMessage progress={metrics.progress} />
       </div>
     </div>
   );
