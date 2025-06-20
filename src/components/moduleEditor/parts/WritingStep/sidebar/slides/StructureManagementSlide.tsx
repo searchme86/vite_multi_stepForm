@@ -1,13 +1,16 @@
 import { FolderOpen, Settings } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import ContainerManager from '../../container/ContainerManager';
+import useStructureAnalysis from '../../../../hooks/useStructureAnalysis';
 import { StructureManagementSlideProps } from '../../../../../swipeableSection/types/swipeableTypes';
 
 /**
  * StructureManagementSlide 컴포넌트
  * - 에디터 사이드바의 구조관리 슬라이드
- * - 기존 ContainerManager 컴포넌트를 재사용
+ * - useStructureAnalysis 훅을 사용하여 구조 분석 수행
+ * - 헤더에 에러/경고 정보 표시
+ * - ContainerManager에 분석 결과 전달
  * - 슬라이드에 최적화된 레이아웃 제공
- * - 헤더와 콘텐츠 영역 분리
  * - 구체적 타입을 사용하여 타입 안전성 확보
  */
 export function StructureManagementSlide({
@@ -20,6 +23,22 @@ export function StructureManagementSlide({
     hasGetParagraphsFunction:
       typeof containerManagerProps.getLocalParagraphsByContainer === 'function',
     timestamp: new Date().toISOString(),
+  });
+
+  // 🔍 구조 분석 훅 사용
+  const { structureAnalysis, structureIssues, errorIssues, warningIssues } =
+    useStructureAnalysis(
+      containerManagerProps.sortedContainers,
+      containerManagerProps.getLocalParagraphsByContainer
+    );
+
+  console.log('📊 [STRUCTURE_SLIDE] 구조 분석 결과:', {
+    totalContainers: structureAnalysis.totalContainers,
+    totalParagraphs: structureAnalysis.totalAssignedParagraphs,
+    emptyContainers: structureAnalysis.emptyContainerCount,
+    totalIssues: structureIssues.length,
+    errors: errorIssues.length,
+    warnings: warningIssues.length,
   });
 
   return (
@@ -62,9 +81,82 @@ export function StructureManagementSlide({
           </span>
           <span className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+            단락: {structureAnalysis.totalAssignedParagraphs}개
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
             {containerManagerProps.isMobile ? '모바일 모드' : '데스크톱 모드'}
           </span>
         </div>
+
+        {/* 🚨 구조 이슈 표시 영역 */}
+        {structureIssues.length > 0 && (
+          <div className="p-3 mt-3 border rounded-lg bg-white/60 border-white/50">
+            {/* ❌ 오류 목록 */}
+            {errorIssues.length > 0 && (
+              <div className="mb-2">
+                <div className="mb-1 text-xs font-medium text-red-700">
+                  🚨 오류 ({errorIssues.length}개)
+                </div>
+                <ul className="space-y-1">
+                  {errorIssues.map((issue) => (
+                    <li
+                      key={issue.id}
+                      className="flex items-start gap-2 text-xs text-red-600"
+                    >
+                      <Icon
+                        icon={issue.icon}
+                        className="flex-shrink-0 mt-0.5 text-red-500"
+                      />
+                      <span className="leading-relaxed">{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* ⚠️ 경고 목록 */}
+            {warningIssues.length > 0 && (
+              <div
+                className={
+                  errorIssues.length > 0 ? 'border-t border-gray-200 pt-2' : ''
+                }
+              >
+                <div className="mb-1 text-xs font-medium text-yellow-700">
+                  ⚠️ 권장사항 ({warningIssues.length}개)
+                </div>
+                <ul className="space-y-1">
+                  {warningIssues.map((issue) => (
+                    <li
+                      key={issue.id}
+                      className="flex items-start gap-2 text-xs text-yellow-600"
+                    >
+                      <Icon
+                        icon={issue.icon}
+                        className="flex-shrink-0 mt-0.5 text-yellow-500"
+                      />
+                      <span className="leading-relaxed">{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ✅ 이슈가 없을 때 성공 메시지 */}
+        {structureIssues.length === 0 &&
+          structureAnalysis.totalAssignedParagraphs > 0 && (
+            <div className="p-2 mt-3 border border-green-200 rounded-lg bg-green-50">
+              <div className="flex items-center gap-2 text-xs text-green-700">
+                <Icon
+                  icon="lucide:check-circle"
+                  className="flex-shrink-0 text-green-500"
+                />
+                <span>구조가 양호합니다</span>
+              </div>
+            </div>
+          )}
       </div>
 
       {/* 📄 콘텐츠 섹션 */}
@@ -72,11 +164,16 @@ export function StructureManagementSlide({
         {/*
           🔄 기존 ContainerManager 컴포넌트 재사용
           - 타입 안전한 props 전달
+          - 구조 분석 결과 포함
           - 컨테이너 목록 표시
           - 단락 관리 기능
           - 구조 변경 기능
         */}
-        <ContainerManager {...containerManagerProps} />
+        <ContainerManager
+          {...containerManagerProps}
+          structureAnalysis={structureAnalysis}
+          structureIssues={structureIssues}
+        />
       </div>
 
       {/* 🔍 하단 상태바 */}
@@ -84,10 +181,21 @@ export function StructureManagementSlide({
         <div className="flex items-center justify-between text-xs text-gray-500">
           <span>구조를 드래그하여 정리하세요</span>
           <div className="flex items-center gap-2">
-            <span className="text-blue-500">💡 팁</span>
-            <span className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded">
-              {containerManagerProps.sortedContainers.length}개 컨테이너
-            </span>
+            {structureIssues.length > 0 ? (
+              <>
+                <span className="text-orange-500">⚠️ 개선 필요</span>
+                <span className="px-2 py-1 text-xs text-orange-600 bg-orange-100 rounded">
+                  {structureIssues.length}개 이슈
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-blue-500">💡 팁</span>
+                <span className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded">
+                  {containerManagerProps.sortedContainers.length}개 컨테이너
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -96,47 +204,56 @@ export function StructureManagementSlide({
 }
 
 /**
- * 🔧 타입 누락 에러 수정 내역:
+ * 🔧 useStructureAnalysis 훅 도입 수정 내역:
  *
- * 1. ✅ any 타입 제거
- *    - 이전: containerManagerProps?: any
- *    - 이후: containerManagerProps: ContainerManagerProps
+ * 1. ✅ 훅 import 및 사용
+ *    - useStructureAnalysis 훅 import
+ *    - 구조 분석 로직 훅으로 이동
+ *    - 분석 결과를 상태로 관리
  *
- * 2. ✅ 옵셔널 제거
- *    - 항상 전달되는 props이므로 필수로 변경
- *    - 불필요한 null 체크 코드 제거
+ * 2. ✅ 헤더 영역 이슈 표시
+ *    - 주석 영역에 구조 이슈 UI 추가
+ *    - 오류/경고 구분하여 표시
+ *    - 성공 상태도 표시
  *
- * 3. ✅ 타입 import 추가
- *    - StructureManagementSlideProps를 slideTypes.ts에서 import
- *    - 구체적인 타입 정의 사용
+ * 3. ✅ 동적 통계 정보 개선
+ *    - 실제 단락 수 표시
+ *    - 구조 분석 결과 활용
+ *    - 시각적 구분 개선
  *
- * 4. ✅ 동적 통계 정보 추가
- *    - 실제 props 값을 활용한 통계 표시
- *    - 타입 안전성을 활용한 데이터 접근
+ * 4. ✅ ContainerManager 연동
+ *    - 구조 분석 결과를 props로 전달
+ *    - 기존 props 완전 유지
+ *    - 추가 데이터만 확장
+ *
+ * 5. ✅ 하단 상태바 개선
+ *    - 이슈 개수에 따른 동적 메시지
+ *    - 시각적 피드백 향상
+ *    - 상태 기반 색상 변경
  */
 
 /**
- * 🎨 StructureManagementSlide의 주요 특징 (업데이트됨):
+ * 🎨 StructureManagementSlide의 주요 개선사항:
  *
- * 1. 📱 슬라이드에 최적화된 레이아웃
- *    - 헤더, 콘텐츠, 하단 고정 구조
- *    - 전체 높이 활용 (h-full)
- *    - 스크롤 영역 명확히 분리
+ * 1. 📊 실시간 구조 분석
+ *    - 헤더에 실시간 이슈 표시
+ *    - 오류/경고 구분 표시
+ *    - 성공 상태 피드백
  *
- * 2. 🔄 기존 컴포넌트 재사용
- *    - ContainerManager 완전 재사용
- *    - 타입 안전한 props 전달
- *    - 추가 래핑 레이어 최소화
+ * 2. 🔄 관심사 분리 달성
+ *    - UI 컴포넌트에서 비즈니스 로직 분리
+ *    - 재사용 가능한 훅 활용
+ *    - 타입 안전성 확보
  *
  * 3. 🎨 시각적 개선
- *    - 그라데이션 헤더 배경
- *    - 동적 통계 정보 표시
- *    - 상태 표시 및 가이드 제공
+ *    - 반투명 배경으로 이슈 영역 구분
+ *    - 색상 코딩으로 이슈 유형 구분
+ *    - 아이콘과 텍스트 조합으로 가독성 향상
  *
- * 4. 🔒 타입 안전성 확보
- *    - any 타입 완전 제거
- *    - 구체적인 인터페이스 사용
- *    - 컴파일 타임 에러 검출
+ * 4. 📱 반응형 디자인
+ *    - 모바일/데스크톱 모드 구분
+ *    - 유연한 레이아웃 구조
+ *    - 적절한 간격과 크기 조정
  *
  * 5. ♿ 접근성 고려
  *    - 적절한 ARIA 라벨
