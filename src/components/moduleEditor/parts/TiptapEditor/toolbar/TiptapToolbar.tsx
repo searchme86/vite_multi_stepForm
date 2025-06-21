@@ -1,4 +1,4 @@
-// 📁 src/components/moduleEditor/parts/TiptapEditor/toolbar/TiptapToolbar.tsx
+// 📁 components/moduleEditor/parts/TiptapEditor/toolbar/TiptapToolbar.tsx
 
 import { Editor } from '@tiptap/react';
 import FormatButtonGroup from './FormatButtonGroup';
@@ -15,6 +15,7 @@ interface TiptapToolbarProps {
   copyContent: () => void;
   selectAllContent: () => void;
   requestClearContent: () => void;
+  disabled?: boolean;
 }
 
 function TiptapToolbar({
@@ -24,9 +25,11 @@ function TiptapToolbar({
   copyContent,
   selectAllContent,
   requestClearContent,
+  disabled = false,
 }: TiptapToolbarProps) {
   console.log('🛠️ [TIPTAP_TOOLBAR] 렌더링:', {
     editorDestroyed: editor.isDestroyed,
+    disabled,
   });
 
   if (editor.isDestroyed) {
@@ -34,25 +37,34 @@ function TiptapToolbar({
     return null;
   }
 
+  const toolbarClassName = `flex flex-wrap items-center gap-1 p-2 border-b border-gray-200 bg-gray-50 ${
+    disabled ? 'opacity-50 pointer-events-none' : ''
+  }`;
+
   return (
-    <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200 bg-gray-50">
-      <UndoRedoGroup editor={editor} />
+    <div className={toolbarClassName}>
+      <UndoRedoGroup editor={editor} disabled={disabled} />
 
       <div className="w-px h-6 mx-1 bg-gray-300" />
 
-      <FormatButtonGroup editor={editor} />
+      <FormatButtonGroup editor={editor} disabled={disabled} />
 
       <div className="w-px h-6 mx-1 bg-gray-300" />
 
-      <HeadingButtonGroup editor={editor} />
+      <HeadingButtonGroup editor={editor} disabled={disabled} />
 
       <div className="w-px h-6 mx-1 bg-gray-300" />
 
-      <ListButtonGroup editor={editor} />
+      <ListButtonGroup editor={editor} disabled={disabled} />
 
       <div className="w-px h-6 mx-1 bg-gray-300" />
 
-      <MediaButtonGroup editor={editor} addImage={addImage} addLink={addLink} />
+      <MediaButtonGroup
+        editor={editor}
+        addImage={addImage}
+        addLink={addLink}
+        disabled={disabled}
+      />
 
       <div className="w-px h-6 mx-1 bg-gray-300" />
 
@@ -61,6 +73,7 @@ function TiptapToolbar({
         copyContent={copyContent}
         selectAllContent={selectAllContent}
         requestClearContent={requestClearContent}
+        disabled={disabled}
       />
     </div>
   );

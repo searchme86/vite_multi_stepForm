@@ -1,7 +1,6 @@
 // 📁 hooks/useEditorState/useEditorStateMain.ts
-// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거 + 컨테이너 이동 기능 추가 + 중복 단락 생성 방지
 
-import { useState, useCallback, useMemo } from 'react'; // ✅ 사용하지 않는 useEffect, useRef 제거
+import { useState, useCallback, useMemo } from 'react';
 import { EditorInternalState } from '../../types/editor';
 import {
   Container,
@@ -13,8 +12,6 @@ import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore
 import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
 import { useToastStore } from '../../../../store/toast/toastStore';
 
-// ✅ 사용하지 않는 import 제거
-// import { createInitialInternalState } from './editorStateInitializers';
 import { useDeviceDetection } from './editorStateDeviceDetection';
 
 export function useEditorState() {
@@ -26,15 +23,11 @@ const useEditorStateImpl = () => {
     '🪝 [USE_EDITOR_STATE] 훅 초기화 - 근본적 개선 버전 + 컨테이너 이동 기능 + 중복 방지'
   );
 
-  // ✅ **방법 1**: 개별 메서드 추출 (가장 안전한 방법)
   const addContainer = useEditorCoreStore((state) => state.addContainer);
   const resetEditorState = useEditorCoreStore(
     (state) => state.resetEditorState
   );
   const getContainers = useEditorCoreStore((state) => state.getContainers);
-  // ✅ 사용하지 않는 함수 제거
-  // const getSortedContainers = useEditorCoreStore((state) => state.getSortedContainers);
-  // const getParagraphs = useEditorCoreStore((state) => state.getParagraphs);
   const addParagraph = useEditorCoreStore((state) => state.addParagraph);
   const deleteParagraph = useEditorCoreStore((state) => state.deleteParagraph);
   const updateParagraphContent = useEditorCoreStore(
@@ -45,7 +38,6 @@ const useEditorStateImpl = () => {
   );
   const setIsCompleted = useEditorCoreStore((state) => state.setIsCompleted);
 
-  // 🔄 **새로 추가**: 컨테이너 이동 관련 메서드들
   const moveToContainerStore = useEditorCoreStore(
     (state) => state.moveToContainer
   );
@@ -92,17 +84,8 @@ const useEditorStateImpl = () => {
   );
   const togglePreview = useEditorUIStore((state) => state.togglePreview);
 
-  // ✅ 사용하지 않는 getter 함수들 제거
-  // const getCurrentSubStep = useEditorUIStore((state) => state.getCurrentSubStep);
-  // const getIsTransitioning = useEditorUIStore((state) => state.getIsTransitioning);
-  // const getActiveParagraphId = useEditorUIStore((state) => state.getActiveParagraphId);
-  // const getIsPreviewOpen = useEditorUIStore((state) => state.getIsPreviewOpen);
-  // const getSelectedParagraphIds = useEditorUIStore((state) => state.getSelectedParagraphIds);
-  // const getTargetContainerId = useEditorUIStore((state) => state.getTargetContainerId);
-
   const addToast = useToastStore((state) => state.addToast);
 
-  // ✅ **데이터 구독**: 실제 데이터만 구독 (스토어 객체 제외)
   const containers = useEditorCoreStore((state) => state.containers);
   const paragraphs = useEditorCoreStore((state) => state.paragraphs);
   const currentSubStep = useEditorUIStore((state) => state.currentSubStep);
@@ -118,7 +101,6 @@ const useEditorStateImpl = () => {
     (state) => state.targetContainerId
   );
 
-  // ✅ **메모이제이션된 데이터 처리**
   const localContainers = useMemo(() => {
     try {
       const sortedContainers = [...containers].sort(
@@ -130,7 +112,7 @@ const useEditorStateImpl = () => {
       console.error('❌ [STABLE] 컨테이너 조회 실패:', error);
       return [];
     }
-  }, [containers]); // ✅ 실제 데이터에만 의존
+  }, [containers]);
 
   const localParagraphs = useMemo(() => {
     try {
@@ -141,7 +123,7 @@ const useEditorStateImpl = () => {
       console.error('❌ [STABLE] 단락 조회 실패:', error);
       return [];
     }
-  }, [paragraphs]); // ✅ 실제 데이터에만 의존
+  }, [paragraphs]);
 
   const editorInternalState = useMemo(() => {
     try {
@@ -171,27 +153,14 @@ const useEditorStateImpl = () => {
     isPreviewOpen,
     selectedParagraphIds,
     targetContainerId,
-  ]); // ✅ 실제 상태 값에만 의존
+  ]);
 
   const [isProcessingStructure, setIsProcessingStructure] = useState(false);
   const [isMobileDeviceDetected, setIsMobileDeviceDetected] = useState(false);
-
-  // 🚨 **새로 추가**: 단락 생성 중복 방지를 위한 상태
   const [isAddingParagraph, setIsAddingParagraph] = useState(false);
-
-  // ✅ 하위 호환성을 위한 로컬 상태 (사용하지 않음 주석 제거)
-  // const [localInternalState, setLocalInternalState] = useState<EditorInternalState>(() => ({
-  //   currentSubStep: 'structure',
-  //   isTransitioning: false,
-  //   activeParagraphId: null,
-  //   isPreviewOpen: true,
-  //   selectedParagraphIds: [],
-  //   targetContainerId: '',
-  // }));
 
   useDeviceDetection(setIsMobileDeviceDetected);
 
-  // 🎯 **핵심 개선**: handleStructureComplete 함수 완전 안정화
   const handleStructureComplete = useCallback(
     (inputs: string[]) => {
       if (isProcessingStructure) {
@@ -219,11 +188,9 @@ const useEditorStateImpl = () => {
           return;
         }
 
-        // ✅ 기존 데이터 초기화
         console.log('🧹 [STRUCTURE] 기존 데이터 초기화');
         resetEditorState();
 
-        // ✅ 새 컨테이너 생성 (updatedAt 속성 추가)
         const newContainers: Container[] = validInputs.map((input, index) => ({
           id: `container-${Date.now()}-${index}-${Math.random()
             .toString(36)
@@ -231,19 +198,16 @@ const useEditorStateImpl = () => {
           name: input.trim(),
           order: index,
           createdAt: new Date(),
-          updatedAt: new Date(), // ✅ updatedAt 속성 추가
+          updatedAt: new Date(),
         }));
 
         console.log('📦 [STRUCTURE] 컨테이너 생성:', newContainers.length);
 
-        // ✅ 일괄 추가 (개별 메서드 사용)
         newContainers.forEach((container) => {
           addContainer(container);
         });
 
-        // ✅ 즉시 검증 및 전환
         setTimeout(() => {
-          // 최신 데이터를 다시 가져와서 검증
           const finalContainers = getContainers();
           console.log('✅ [STRUCTURE] 생성 결과:', {
             expected: validInputs.length,
@@ -283,7 +247,6 @@ const useEditorStateImpl = () => {
     },
     [
       isProcessingStructure,
-      // ✅ 개별 메서드들만 의존성에 포함 (안정적)
       addToast,
       resetEditorState,
       addContainer,
@@ -292,12 +255,12 @@ const useEditorStateImpl = () => {
     ]
   );
 
-  // 🔄 **새로 추가**: 컨테이너 간 이동 함수 (토스트 알림 포함)
   const moveToContainer = useCallback(
     (paragraphId: string, targetContainerId: string) => {
       console.log('🔄 [MOVE_CONTAINER] 컨테이너 이동 요청:', {
         paragraphId,
         targetContainerId,
+        currentActive: editorInternalState.activeParagraphId,
         currentContainers: localContainers.map((c) => ({
           id: c.id,
           name: c.name,
@@ -305,7 +268,6 @@ const useEditorStateImpl = () => {
       });
 
       try {
-        // 입력값 검증
         if (!paragraphId || typeof paragraphId !== 'string') {
           console.error('❌ [MOVE_CONTAINER] 잘못된 단락 ID:', paragraphId);
           addToast?.({
@@ -329,7 +291,6 @@ const useEditorStateImpl = () => {
           return;
         }
 
-        // 단락 및 컨테이너 존재 확인
         const paragraph = localParagraphs.find((p) => p.id === paragraphId);
         if (!paragraph) {
           console.error(
@@ -360,7 +321,6 @@ const useEditorStateImpl = () => {
           return;
         }
 
-        // 동일한 컨테이너로 이동 시도 확인
         if (paragraph.containerId === targetContainerId) {
           console.warn('⚠️ [MOVE_CONTAINER] 동일한 컨테이너로 이동 시도');
           addToast?.({
@@ -371,8 +331,12 @@ const useEditorStateImpl = () => {
           return;
         }
 
-        // Zustand 스토어 함수 호출
         moveToContainerStore(paragraphId, targetContainerId);
+
+        if (editorInternalState.activeParagraphId === paragraphId) {
+          console.log('🔒 [MOVE_CONTAINER] 에디터 자동 비활성화:', paragraphId);
+          setActiveParagraphId?.(null);
+        }
 
         console.log('✅ [MOVE_CONTAINER] 컨테이너 이동 성공');
         addToast?.({
@@ -389,10 +353,16 @@ const useEditorStateImpl = () => {
         });
       }
     },
-    [moveToContainerStore, localParagraphs, localContainers, addToast]
+    [
+      moveToContainerStore,
+      localParagraphs,
+      localContainers,
+      editorInternalState.activeParagraphId,
+      setActiveParagraphId,
+      addToast,
+    ]
   );
 
-  // 🔄 **새로 추가**: 이동 이력 추적 래핑 함수
   const trackContainerMoveWithToast = useCallback(
     (moveRecord: {
       paragraphId: string;
@@ -410,7 +380,6 @@ const useEditorStateImpl = () => {
     [trackContainerMove]
   );
 
-  // 🔄 **새로 추가**: 이동 이력 조회 래핑 함수들
   const getContainerMoveHistoryStable = useCallback(() => {
     try {
       return getContainerMoveHistory();
@@ -499,17 +468,14 @@ const useEditorStateImpl = () => {
     [removeContainerMoveRecord, addToast]
   );
 
-  // 🚨 **핵심 수정**: addLocalParagraph 함수에 중복 방지 로직 추가
   const addLocalParagraph = useCallback(() => {
     console.log('📝 [ADD] 새 단락 추가 요청');
 
-    // 🚨 중복 방지 1: 이미 처리 중인 경우 무시
     if (isAddingParagraph) {
       console.warn('⚠️ [ADD] 단락 추가 중 - 중복 요청 무시');
       return;
     }
 
-    // 🚨 중복 방지 2: 이미 빈 단락이 있는 경우 새로 생성하지 않음
     const existingEmptyParagraphs = localParagraphs.filter((p) => {
       const trimmedContent = (p.content || '').trim();
       const isUnassigned = p.containerId === null;
@@ -523,7 +489,6 @@ const useEditorStateImpl = () => {
         existingIds: existingEmptyParagraphs.map((p) => p.id),
       });
 
-      // 기존 빈 단락에 포커스
       const firstEmptyParagraph = existingEmptyParagraphs[0];
       setActiveParagraphId?.(firstEmptyParagraph.id);
 
@@ -535,7 +500,6 @@ const useEditorStateImpl = () => {
       return;
     }
 
-    // 🚨 중복 방지 3: 처리 중 상태 설정
     setIsAddingParagraph(true);
 
     try {
@@ -571,14 +535,13 @@ const useEditorStateImpl = () => {
         color: 'danger',
       });
     } finally {
-      // 🚨 중복 방지 4: 처리 완료 후 상태 해제 (딜레이 추가로 중복 클릭 방지)
       setTimeout(() => {
         setIsAddingParagraph(false);
-      }, 1000); // 1초 딜레이로 중복 클릭 완전 방지
+      }, 1000);
     }
   }, [
-    isAddingParagraph, // 🚨 새로 추가된 의존성
-    localParagraphs, // 🚨 빈 단락 체크를 위해 추가
+    isAddingParagraph,
+    localParagraphs,
     addParagraph,
     setActiveParagraphId,
     addToast,
@@ -620,7 +583,6 @@ const useEditorStateImpl = () => {
     [toggleParagraphSelection]
   );
 
-  // 🚨 **핵심 수정**: addToLocalContainer 함수를 moveToContainer 사용하도록 변경
   const addToLocalContainer = useCallback(() => {
     const { selectedParagraphIds, targetContainerId } = editorInternalState;
 
@@ -639,7 +601,6 @@ const useEditorStateImpl = () => {
     }
 
     try {
-      // ✅ 각 선택된 단락을 moveToContainer 함수로 이동 (복사 대신 이동)
       selectedParagraphIds.forEach((paragraphId) => {
         const sourceParagraph = localParagraphs.find(
           (p) => p.id === paragraphId
@@ -650,7 +611,6 @@ const useEditorStateImpl = () => {
           return;
         }
 
-        // ✅ moveToContainer 함수 직접 호출 (새로운 단락 생성하지 않음)
         console.log('🔄 [ADD_TO_CONTAINER] 단락 이동:', {
           from: sourceParagraph.containerId,
           to: targetContainerId,
@@ -660,7 +620,6 @@ const useEditorStateImpl = () => {
         moveToContainer(paragraphId, targetContainerId);
       });
 
-      // ✅ 선택 해제
       clearSelectedParagraphs?.();
 
       addToast?.({
@@ -679,12 +638,11 @@ const useEditorStateImpl = () => {
   }, [
     editorInternalState,
     localParagraphs,
-    moveToContainer, // ✅ addParagraph 대신 moveToContainer 의존성
+    moveToContainer,
     clearSelectedParagraphs,
     addToast,
   ]);
 
-  // ✅ **조회 함수들**: 메모이제이션 적용
   const getLocalUnassignedParagraphs = useCallback((): LocalParagraph[] => {
     return localParagraphs.filter((p) => p.containerId === null);
   }, [localParagraphs]);
@@ -698,16 +656,37 @@ const useEditorStateImpl = () => {
     [localParagraphs]
   );
 
-  // ✅ **UI 제어 함수들**: 개별 메서드 사용
   const goToStructureStepStable = useCallback(() => {
     goToStructureStep?.();
   }, [goToStructureStep]);
 
   const activateEditor = useCallback(
     (id: string) => {
+      console.log('🎯 [EDITOR_STATE] 에디터 활성화 요청:', {
+        paragraphId: id,
+        currentActive: editorInternalState.activeParagraphId,
+      });
+
+      const targetParagraph = localParagraphs.find((p) => p.id === id);
+      if (!targetParagraph) {
+        console.warn('⚠️ [EDITOR_STATE] 존재하지 않는 단락:', id);
+        return;
+      }
+
       setActiveParagraphId?.(id);
+
+      addToast?.({
+        title: '에디터 활성화',
+        description: '단락 편집 모드로 전환되었습니다.',
+        color: 'primary',
+      });
     },
-    [setActiveParagraphId]
+    [
+      setActiveParagraphId,
+      localParagraphs,
+      editorInternalState.activeParagraphId,
+      addToast,
+    ]
   );
 
   const togglePreviewStable = useCallback(() => {
@@ -757,7 +736,6 @@ const useEditorStateImpl = () => {
     addToast,
   ]);
 
-  // ✅ **setter 함수들**: 개별 메서드 사용
   const setSelectedParagraphIdsStable = useCallback(
     (ids: string[]) => {
       setSelectedParagraphIds?.(ids);
@@ -794,19 +772,15 @@ const useEditorStateImpl = () => {
         direction === 'up' ? currentIndex - 1 : currentIndex + 1;
       const targetParagraph = containerParagraphs[targetIndex];
 
-      // ✅ 개별 메서드 사용
       updateParagraphContent(paragraph.id, paragraph.content);
       updateParagraphContent(targetParagraph.id, targetParagraph.content);
     },
     [localParagraphs, updateParagraphContent]
   );
 
-  // ✅ setInternalState 함수 추가 (호환성을 위해)
   const setInternalState = useCallback(
     (newState: React.SetStateAction<EditorInternalState>) => {
-      // 실제로는 Zustand 스토어를 사용하므로 이 함수는 로깅만 수행
       console.log('📝 [SET_INTERNAL_STATE] 상태 변경 요청:', newState);
-      // 필요시 여기에 실제 상태 업데이트 로직 추가 가능
     },
     []
   );
@@ -819,41 +793,39 @@ const useEditorStateImpl = () => {
       currentStep: editorInternalState.currentSubStep,
       handleStructureCompleteStable:
         typeof handleStructureComplete === 'function',
-      moveToContainerStable: typeof moveToContainer === 'function', // 🔄 새로 추가
-      addToLocalContainerUsesMove: true, // 🔄 이제 moveToContainer 사용
-      duplicatePreventionActive: true, // 🚨 중복 방지 활성화
+      moveToContainerStable: typeof moveToContainer === 'function',
+      addToLocalContainerUsesMove: true,
+      duplicatePreventionActive: true,
     }
   );
 
-  // ✅ **최종 반환**: 모든 함수가 안정적인 참조 + 컨테이너 이동 기능 + 중복 방지 포함
   return {
     internalState: editorInternalState,
     localParagraphs,
     localContainers,
     isMobile: isMobileDeviceDetected,
 
-    setInternalState, // ✅ 추가
+    setInternalState,
     setSelectedParagraphIds: setSelectedParagraphIdsStable,
     setTargetContainerId: setTargetContainerIdStable,
 
-    addLocalParagraph, // 🚨 중복 방지 로직 추가됨
+    addLocalParagraph,
     deleteLocalParagraph,
     updateLocalParagraphContent,
     toggleParagraphSelection: toggleParagraphSelectionStable,
-    addToLocalContainer, // ✅ 이제 내부적으로 moveToContainer 사용
+    addToLocalContainer,
     moveLocalParagraphInContainer,
     getLocalUnassignedParagraphs,
     getLocalParagraphsByContainer,
 
-    handleStructureComplete, // 🎯 이제 완전히 안정적!
+    handleStructureComplete,
     goToStructureStep: goToStructureStepStable,
     activateEditor,
     togglePreview: togglePreviewStable,
     saveAllToContext,
     completeEditor,
 
-    // 🔄 **새로 추가**: 컨테이너 이동 관련 함수들
-    moveToContainer, // 메인 이동 함수
+    moveToContainer,
     trackContainerMove: trackContainerMoveWithToast,
     getContainerMoveHistory: getContainerMoveHistoryStable,
     getContainerMovesByParagraph: getContainerMovesByParagraphStable,
@@ -863,33 +835,3 @@ const useEditorStateImpl = () => {
     removeContainerMoveRecord: removeContainerMoveRecordWithToast,
   };
 };
-
-/**
- * 🔧 useEditorStateMain.ts 중복 단락 생성 방지 수정 사항:
- *
- * 1. 🚨 **중복 방지 로직 4단계 추가**
- *    - 처리 중 상태 체크 (isAddingParagraph)
- *    - 기존 빈 단락 존재 확인
- *    - 처리 중 상태 설정/해제
- *    - 1초 딜레이로 중복 클릭 완전 차단
- *
- * 2. ✅ **기존 빈 단락 재사용**
- *    - 새로 생성하는 대신 기존 빈 단락에 포커스
- *    - 사용자에게 명확한 피드백 제공
- *    - 리소스 낭비 방지
- *
- * 3. 🔍 **향상된 로깅 및 디버깅**
- *    - 단락 생성 과정 상세 로깅
- *    - 중복 방지 동작 추적 가능
- *    - 에러 발생 시 정확한 원인 파악
- *
- * 4. ⚡ **성능 최적화**
- *    - 불필요한 단락 생성 방지
- *    - 메모리 사용량 감소
- *    - 스토어 업데이트 빈도 감소
- *
- * 5. 🎯 **사용자 경험 개선**
- *    - 버튼 연타 방지
- *    - 명확한 상태 피드백
- *    - 예상치 못한 단락 생성 방지
- */

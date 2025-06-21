@@ -1,3 +1,5 @@
+// 📁 components/moduleEditor/parts/WritingStep/TiptapEditor/TiptapEditor.tsx
+
 import React, {
   useState,
   useCallback,
@@ -23,6 +25,7 @@ interface TiptapEditorProps {
   onContentChange: (content: string) => void;
   isActive: boolean;
   enableTextCount?: boolean;
+  disabled?: boolean;
 }
 
 interface CharacterCount {
@@ -46,7 +49,8 @@ const arePropsEqual = (
     prevProps.paragraphId === nextProps.paragraphId &&
     prevProps.initialContent === nextProps.initialContent &&
     prevProps.isActive === nextProps.isActive &&
-    prevProps.enableTextCount === nextProps.enableTextCount
+    prevProps.enableTextCount === nextProps.enableTextCount &&
+    prevProps.disabled === nextProps.disabled
   );
 };
 
@@ -56,6 +60,7 @@ function TiptapEditor({
   onContentChange,
   isActive,
   enableTextCount = true,
+  disabled = false,
 }: TiptapEditorProps) {
   const [isImageUploadInProgress, setIsImageUploadInProgress] = useState(false);
   const [imageUploadErrorMessage, setImageUploadErrorMessage] = useState<
@@ -99,6 +104,8 @@ function TiptapEditor({
 
   const handleContentChange = useCallback(
     (updatedContent: string) => {
+      if (disabled) return;
+
       const safeUpdatedContent = updatedContent || '';
 
       const newCharacterCount = calculateCharacterCount(safeUpdatedContent);
@@ -109,7 +116,7 @@ function TiptapEditor({
         externalCallback(safeUpdatedContent);
       }
     },
-    [paragraphId, calculateCharacterCount]
+    [paragraphId, calculateCharacterCount, disabled]
   );
 
   const { handleLocalChange: handleMarkdownStateChange, isContentChanged } =
@@ -138,14 +145,16 @@ function TiptapEditor({
       paragraphId: paragraphId || '',
       initialContent: initialContent || '<p></p>',
       handleLocalChange: (updatedContent: string) => {
+        if (disabled) return;
         const stableHandler = stableHandleMarkdownStateChangeRef.current;
         if (typeof stableHandler === 'function') {
           stableHandler(updatedContent);
         }
       },
       handleImageUpload: processImageUpload,
+      editable: !disabled,
     }),
-    [paragraphId, initialContent, processImageUpload]
+    [paragraphId, initialContent, processImageUpload, disabled]
   );
 
   const { editor: tiptapEditorInstance } = useTiptapEditor(tiptapEditorConfig);
@@ -155,8 +164,16 @@ function TiptapEditor({
       editorInstanceRef.current = tiptapEditorInstance;
       const initialCharCount = calculateCharacterCount(initialContent || '');
       setCharacterCount(initialCharCount);
+
+      tiptapEditorInstance.setEditable(!disabled);
     }
-  }, [tiptapEditorInstance, initialContent, calculateCharacterCount]);
+  }, [tiptapEditorInstance, initialContent, calculateCharacterCount, disabled]);
+
+  useEffect(() => {
+    if (tiptapEditorInstance && !tiptapEditorInstance.isDestroyed) {
+      tiptapEditorInstance.setEditable(!disabled);
+    }
+  }, [tiptapEditorInstance, disabled]);
 
   useEffect(() => {
     const safeInitialContent = initialContent || '';
@@ -176,7 +193,24 @@ function TiptapEditor({
     }
   }, [initialContent, tiptapEditorInstance, calculateCharacterCount]);
 
+  const editorContainerClassName = useMemo(() => {
+    const baseClasses = `relative transition-all duration-300 border border-gray-200 rounded-lg ${
+      confirmBarState.isVisible ? 'h-[530px]' : 'h-[490px]'
+    } max-[400px] overflow-scroll`;
+
+    const activeClasses = isActive
+      ? 'ring-2 ring-blue-500 ring-opacity-50'
+      : '';
+    const disabledClasses = disabled
+      ? 'opacity-50 pointer-events-none bg-gray-50'
+      : '';
+
+    return `${baseClasses} ${activeClasses} ${disabledClasses}`;
+  }, [confirmBarState.isVisible, isActive, disabled]);
+
   const copyContentToClipboard = useCallback(async () => {
+    if (disabled) return;
+
     const { current: editorInstance = null } = editorInstanceRef;
 
     if (!editorInstance || editorInstance.isDestroyed) {
@@ -211,18 +245,22 @@ function TiptapEditor({
     }
 
     setTimeout(() => setCopyFeedback(null), 3000);
-  }, []);
+  }, [disabled]);
 
   const selectAllContent = useCallback(() => {
+    if (disabled) return;
+
     const { current: editorInstance = null } = editorInstanceRef;
 
     if (editorInstance && !editorInstance.isDestroyed) {
       editorInstance.commands.selectAll();
       editorInstance.commands.focus();
     }
-  }, []);
+  }, [disabled]);
 
   const requestClearContent = useCallback(() => {
+    if (disabled) return;
+
     const { current: editorInstance = null } = editorInstanceRef;
 
     if (!editorInstance || editorInstance.isDestroyed) {
@@ -255,13 +293,15 @@ function TiptapEditor({
         setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
       },
     });
-  }, []);
+  }, [disabled]);
 
   const cancelConfirm = useCallback(() => {
     setConfirmBarState((prev) => ({ ...prev, isVisible: false }));
   }, []);
 
   const addImageToEditor = useCallback(() => {
+    if (disabled) return;
+
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/*';
@@ -308,9 +348,11 @@ function TiptapEditor({
     };
 
     fileInput.click();
-  }, [processImageUpload]);
+  }, [processImageUpload, disabled]);
 
   const addLinkToEditor = useCallback(() => {
+    if (disabled) return;
+
     const linkUrl = window.prompt('링크 URL을 입력하세요:');
     const safeLinkUrl = linkUrl?.trim() || '';
     const { current: editorInstance = null } = editorInstanceRef;
@@ -318,7 +360,7 @@ function TiptapEditor({
     if (safeLinkUrl && editorInstance && !editorInstance.isDestroyed) {
       editorInstance.chain().focus().setLink({ href: safeLinkUrl }).run();
     }
-  }, []);
+  }, [disabled]);
 
   if (!tiptapEditorInstance) {
     return (
@@ -354,11 +396,7 @@ function TiptapEditor({
 
   return (
     <div
-      className={`relative transition-all duration-300 border border-gray-200 rounded-lg ${
-        confirmBarState.isVisible ? 'h-[530px]' : 'h-[490px]'
-      } max-[400px] overflow-scroll ${
-        isActive ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
-      }`}
+      className={editorContainerClassName}
       role="region"
       aria-label={`문단 에디터 ${paragraphId?.slice(-8) || 'unknown'}`}
     >
@@ -385,6 +423,7 @@ function TiptapEditor({
         copyContent={copyContentToClipboard}
         selectAllContent={selectAllContent}
         requestClearContent={requestClearContent}
+        disabled={disabled}
       />
 
       <InfoOverlay />
@@ -394,13 +433,21 @@ function TiptapEditor({
           confirmBarState.isVisible
             ? 'h-[calc(100%-120px)]'
             : 'h-[calc(100%-80px)]'
-        } overflow-auto`}
+        } overflow-auto ${disabled ? 'pointer-events-none' : ''}`}
       >
         <EditorCore
           editor={tiptapEditorInstance}
           paragraphId={paragraphId || ''}
         />
       </div>
+
+      {disabled && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
+          <div className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg shadow-lg">
+            📝 편집하려면 컨테이너에서 '편집' 버튼을 클릭하세요
+          </div>
+        </div>
+      )}
 
       <ConfirmBar
         isVisible={confirmBarState.isVisible}
@@ -418,7 +465,7 @@ function TiptapEditor({
         onClose={() => setImageUploadErrorMessage(null)}
       />
 
-      {isActive && (
+      {isActive && !disabled && (
         <div
           className="absolute px-2 py-1 text-xs text-white bg-blue-500 rounded top-2 right-2"
           aria-label="현재 활성 에디터"

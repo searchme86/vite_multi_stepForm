@@ -19,7 +19,6 @@ import { StructureManagementSlide } from './sidebar/slides/StructureManagementSl
 import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
 
 import { PreviewPanelProps } from '../../../swipeableSection/types/swipeableTypes.ts';
-// ✅ commonTypes에서 Container import (타입 통일)
 import type { Container } from '../../../../store/shared/commonTypes';
 
 type SubStep = 'structure' | 'writing';
@@ -43,20 +42,17 @@ interface LocalParagraph {
   originalId?: string;
 }
 
-// ✅ 로컬 Container 정의 제거하고 commonTypes에서 import한 Container 사용
-
-// ✅ ExtendedContainerManagerProps 타입 정의 (commonTypes Container 사용)
 interface ExtendedContainerManagerProps {
   isMobile: boolean;
-  sortedContainers: Container[]; // ✅ commonTypes의 Container 타입 사용
+  sortedContainers: Container[];
   getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
-  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // ✅ 필수 함수
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void;
 }
 
 interface WritingStepProps {
-  localContainers: Container[]; // ✅ commonTypes Container 사용
+  localContainers: Container[];
   localParagraphs: LocalParagraph[];
   internalState: EditorInternalState;
   renderMarkdown: (text: string) => React.ReactNode;
@@ -75,9 +71,7 @@ interface WritingStepProps {
   setTargetContainerId: (containerId: string) => void;
   getLocalUnassignedParagraphs: () => LocalParagraph[];
   getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
-
-  // 🔄 새로 추가되는 props
-  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // 컨테이너 간 이동 함수
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void;
 }
 
 function WritingStep({
@@ -100,9 +94,13 @@ function WritingStep({
   setTargetContainerId,
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
-  moveToContainer, // 🔄 새로 추가
+  moveToContainer,
 }: WritingStepProps) {
   const [isMobile, setIsMobile] = useState(false);
+  const [currentEditingParagraphId, setCurrentEditingParagraphId] = useState<
+    string | null
+  >(null);
+
   const { validationStatus: currentValidationStatus } = useBridgeUI();
 
   const {
@@ -142,7 +140,7 @@ function WritingStep({
     };
   }, []);
 
-  const unassignedParagraphs = useMemo(() => {
+  const unassignedParagraphsForStats = useMemo(() => {
     return getLocalUnassignedParagraphs();
   }, [getLocalUnassignedParagraphs, localParagraphs.length]);
 
@@ -185,10 +183,23 @@ function WritingStep({
     [toggleParagraphSelection]
   );
 
+  const handleActivateEditModeForParagraph = useCallback(
+    (paragraphId: string) => {
+      setCurrentEditingParagraphId(paragraphId);
+      activateEditor(paragraphId);
+    },
+    [activateEditor]
+  );
+
+  const handleDeactivateEditMode = useCallback(() => {
+    setCurrentEditingParagraphId(null);
+    activateEditor('');
+  }, [activateEditor]);
+
   const paragraphEditorProps = useMemo(
     () => ({
       isMobile,
-      unassignedParagraphs,
+      allVisibleParagraphs: localParagraphs,
       internalState,
       sortedContainers,
       addLocalParagraph,
@@ -198,10 +209,13 @@ function WritingStep({
       addToLocalContainer,
       setTargetContainerId,
       setInternalState,
+      currentEditingParagraphId,
+      onActivateEditMode: handleActivateEditModeForParagraph,
+      onDeactivateEditMode: handleDeactivateEditMode,
     }),
     [
       isMobile,
-      unassignedParagraphs,
+      localParagraphs,
       internalState,
       sortedContainers,
       addLocalParagraph,
@@ -211,26 +225,28 @@ function WritingStep({
       addToLocalContainer,
       setTargetContainerId,
       setInternalState,
+      currentEditingParagraphId,
+      handleActivateEditModeForParagraph,
+      handleDeactivateEditMode,
     ]
   );
 
-  // ✅ ExtendedContainerManagerProps 타입 사용 (이제 타입 호환성 확보)
   const containerManagerProps: ExtendedContainerManagerProps = useMemo(
     () => ({
       isMobile,
-      sortedContainers, // ✅ 이제 commonTypes Container[] 타입
+      sortedContainers,
       getLocalParagraphsByContainer,
       moveLocalParagraphInContainer,
-      activateEditor,
-      moveToContainer, // ✅ 타입 에러 해결
+      activateEditor: handleActivateEditModeForParagraph,
+      moveToContainer,
     }),
     [
       isMobile,
       sortedContainers,
       getLocalParagraphsByContainer,
       moveLocalParagraphInContainer,
-      activateEditor,
-      moveToContainer, // 🔄 의존성 배열에 추가
+      handleActivateEditModeForParagraph,
+      moveToContainer,
     ]
   );
 
@@ -240,7 +256,7 @@ function WritingStep({
       sortedContainers,
       getLocalParagraphsByContainer,
       renderMarkdown,
-      activateEditor,
+      activateEditor: handleActivateEditModeForParagraph,
       togglePreview,
     }),
     [
@@ -248,7 +264,7 @@ function WritingStep({
       sortedContainers,
       getLocalParagraphsByContainer,
       renderMarkdown,
-      activateEditor,
+      handleActivateEditModeForParagraph,
       togglePreview,
     ]
   );
@@ -294,7 +310,6 @@ function WritingStep({
           warningCount={warningCount}
           onShowErrorDetails={handleShowErrorDetails}
         />
-        {/* 단락작성 */}
         <div className="mt-[30px]">
           <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
           <div className="flex w-[100%] items-center justify-between mb-4 border-gray-200 h-[800px] max-h-[800px] mt-[10px] overflow-scroll">
@@ -356,7 +371,7 @@ function WritingStep({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">📝 단락 작성</h2>
               <div className="text-xs text-gray-500">
-                미할당: {unassignedParagraphs.length}개 / 전체:{' '}
+                미할당: {unassignedParagraphsForStats.length}개 / 전체:{' '}
                 {totalParagraphCount}개
               </div>
             </div>
@@ -531,32 +546,3 @@ function WritingStep({
 }
 
 export default WritingStep;
-
-/**
- * 🔧 WritingStep.tsx 타입 통일 수정 사항:
- *
- * 1. ✅ Container 타입 통일
- *    - 로컬 Container 인터페이스 제거
- *    - commonTypes에서 Container import 사용
- *    - createdAt, updatedAt 속성 필수로 통일
- *
- * 2. ✅ 타입 호환성 확보
- *    - ExtendedContainerManagerProps에서 commonTypes Container 사용
- *    - StructureManagementSlide와 동일한 Container 타입 참조
- *    - TS2719 에러 완전 해결
- *
- * 3. 🔄 기존 기능 완전 보존
- *    - 모든 기존 로직 그대로 유지
- *    - Props 전달 방식 동일
- *    - UI/UX 변화 없음
- *
- * 4. 📝 Import 정리
- *    - 필요한 타입만 명시적으로 import
- *    - 타입 의존성 명확화
- *    - 코드 가독성 향상
- *
- * 5. 🎯 향후 확장성
- *    - 단일 소스 Container 타입 사용
- *    - 타입 변경 시 일관성 보장
- *    - 유지보수성 향상
- */

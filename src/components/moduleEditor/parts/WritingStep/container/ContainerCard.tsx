@@ -21,10 +21,8 @@ interface ContainerCardProps {
   containerParagraphs: LocalParagraph[];
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
-
-  // 🔄 새로 추가되는 props
-  sortedContainers: Container[]; // 전체 컨테이너 목록
-  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // 컨테이너 간 이동 함수
+  sortedContainers: Container[];
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void;
 }
 
 function ContainerCard({
@@ -32,18 +30,16 @@ function ContainerCard({
   containerParagraphs,
   moveLocalParagraphInContainer,
   activateEditor,
-  sortedContainers, // 🔄 새로 추가
-  moveToContainer, // 🔄 새로 추가
+  sortedContainers,
+  moveToContainer,
 }: ContainerCardProps) {
-  // 기존 console.log 수정
   console.log('🗂️ [CONTAINER_CARD] 렌더링:', {
     containerId: container.id,
     containerName: container.name,
     paragraphsCount: containerParagraphs.length,
-    totalContainers: sortedContainers.length, // 🔄 새로 추가
+    totalContainers: sortedContainers.length,
   });
 
-  // 기존 핸들러들 유지...
   const handleMoveUp = (paragraphId: string) => {
     console.log('⬆️ [CONTAINER_CARD] 단락 위로 이동:', paragraphId);
     moveLocalParagraphInContainer(paragraphId, 'up');
@@ -63,7 +59,6 @@ function ContainerCard({
     activateEditor(targetId);
   };
 
-  // 🔄 새로 추가되는 핸들러
   const handleContainerMove = (
     paragraphId: string,
     targetContainerId: string
@@ -112,23 +107,22 @@ function ContainerCard({
                   <span className="text-xs text-gray-400">
                     {new Date(paragraph.updatedAt).toLocaleTimeString()}
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs text-blue-500 underline cursor-pointer hover:text-blue-700"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditParagraph(paragraph);
-                    }}
-                    aria-label="원본 에디터로 이동하여 편집"
-                  >
-                    Tiptap 에디터로 편집
-                  </button>
                 </div>
               </div>
 
-              {/* 🔄 버튼 영역 수정 - 셀렉트 박스 추가 */}
               <div className="flex gap-1 ml-3">
-                {/* 🔄 새로 추가 - 컨테이너 선택 셀렉트 박스 */}
+                <Button
+                  type="button"
+                  size="sm"
+                  color="primary"
+                  variant="flat"
+                  onPress={() => handleEditParagraph(paragraph)}
+                  startContent={<Icon icon="lucide:edit" />}
+                  aria-label="Tiptap 에디터에서 편집"
+                >
+                  편집
+                </Button>
+
                 <ContainerSelector
                   currentContainerId={container.id}
                   availableContainers={sortedContainers}
@@ -138,7 +132,6 @@ function ContainerCard({
                   className="mr-1"
                 />
 
-                {/* 기존 버튼들 유지 */}
                 <Button
                   type="button"
                   isIconOnly
@@ -161,23 +154,11 @@ function ContainerCard({
                 >
                   <Icon icon="lucide:chevron-down" />
                 </Button>
-                <Button
-                  type="button"
-                  isIconOnly
-                  size="sm"
-                  variant="light"
-                  color="primary"
-                  onPress={() => handleEditParagraph(paragraph)}
-                  aria-label="Tiptap 에디터로 편집"
-                >
-                  <Icon icon="lucide:edit" />
-                </Button>
               </div>
             </div>
           </div>
         ))}
 
-        {/* 기존 빈 상태 표시 유지 */}
         {containerParagraphs.length === 0 && (
           <div className="py-6 text-center text-gray-400 border-2 border-gray-200 border-dashed rounded-lg">
             <Icon icon="lucide:inbox" className="mx-auto mb-2 text-3xl" />
