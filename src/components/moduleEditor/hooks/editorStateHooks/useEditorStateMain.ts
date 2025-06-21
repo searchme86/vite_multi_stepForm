@@ -1,5 +1,5 @@
 // 📁 hooks/useEditorState/useEditorStateMain.ts
-// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거 + 컨테이너 이동 기능 추가 + addToLocalContainer 수정
+// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거 + 컨테이너 이동 기능 추가 + 중복 단락 생성 방지
 
 import { useState, useCallback, useMemo } from 'react'; // ✅ 사용하지 않는 useEffect, useRef 제거
 import { EditorInternalState } from '../../types/editor';
@@ -23,7 +23,7 @@ export function useEditorState() {
 
 const useEditorStateImpl = () => {
   console.log(
-    '🪝 [USE_EDITOR_STATE] 훅 초기화 - 근본적 개선 버전 + 컨테이너 이동 기능'
+    '🪝 [USE_EDITOR_STATE] 훅 초기화 - 근본적 개선 버전 + 컨테이너 이동 기능 + 중복 방지'
   );
 
   // ✅ **방법 1**: 개별 메서드 추출 (가장 안전한 방법)
@@ -175,6 +175,9 @@ const useEditorStateImpl = () => {
 
   const [isProcessingStructure, setIsProcessingStructure] = useState(false);
   const [isMobileDeviceDetected, setIsMobileDeviceDetected] = useState(false);
+
+  // 🚨 **새로 추가**: 단락 생성 중복 방지를 위한 상태
+  const [isAddingParagraph, setIsAddingParagraph] = useState(false);
 
   // ✅ 하위 호환성을 위한 로컬 상태 (사용하지 않음 주석 제거)
   // const [localInternalState, setLocalInternalState] = useState<EditorInternalState>(() => ({
@@ -496,9 +499,45 @@ const useEditorStateImpl = () => {
     [removeContainerMoveRecord, addToast]
   );
 
-  // ✅ **나머지 함수들**: 개별 메서드 사용으로 안정화
+  // 🚨 **핵심 수정**: addLocalParagraph 함수에 중복 방지 로직 추가
   const addLocalParagraph = useCallback(() => {
-    console.log('📝 [ADD] 새 단락 추가');
+    console.log('📝 [ADD] 새 단락 추가 요청');
+
+    // 🚨 중복 방지 1: 이미 처리 중인 경우 무시
+    if (isAddingParagraph) {
+      console.warn('⚠️ [ADD] 단락 추가 중 - 중복 요청 무시');
+      return;
+    }
+
+    // 🚨 중복 방지 2: 이미 빈 단락이 있는 경우 새로 생성하지 않음
+    const existingEmptyParagraphs = localParagraphs.filter((p) => {
+      const trimmedContent = (p.content || '').trim();
+      const isUnassigned = p.containerId === null;
+      const isEmpty = trimmedContent.length === 0;
+      return isUnassigned && isEmpty;
+    });
+
+    if (existingEmptyParagraphs.length > 0) {
+      console.warn('⚠️ [ADD] 이미 빈 단락이 존재함 - 새로 생성하지 않음:', {
+        existingEmpty: existingEmptyParagraphs.length,
+        existingIds: existingEmptyParagraphs.map((p) => p.id),
+      });
+
+      // 기존 빈 단락에 포커스
+      const firstEmptyParagraph = existingEmptyParagraphs[0];
+      setActiveParagraphId?.(firstEmptyParagraph.id);
+
+      addToast?.({
+        title: '기존 빈 단락 사용',
+        description: '이미 작성 중인 빈 단락이 있습니다.',
+        color: 'warning',
+      });
+      return;
+    }
+
+    // 🚨 중복 방지 3: 처리 중 상태 설정
+    setIsAddingParagraph(true);
+
     try {
       const newParagraph: ParagraphBlock = {
         id: `paragraph-${Date.now()}-${Math.random()
@@ -511,6 +550,11 @@ const useEditorStateImpl = () => {
         updatedAt: new Date(),
       };
 
+      console.log('📝 [ADD] 새 단락 생성:', {
+        id: newParagraph.id,
+        timestamp: newParagraph.createdAt.toISOString(),
+      });
+
       addParagraph(newParagraph);
       setActiveParagraphId?.(newParagraph.id);
 
@@ -521,8 +565,24 @@ const useEditorStateImpl = () => {
       });
     } catch (error) {
       console.error('❌ [ADD] 단락 추가 실패:', error);
+      addToast?.({
+        title: '단락 추가 실패',
+        description: '단락 생성 중 오류가 발생했습니다.',
+        color: 'danger',
+      });
+    } finally {
+      // 🚨 중복 방지 4: 처리 완료 후 상태 해제 (딜레이 추가로 중복 클릭 방지)
+      setTimeout(() => {
+        setIsAddingParagraph(false);
+      }, 1000); // 1초 딜레이로 중복 클릭 완전 방지
     }
-  }, [addParagraph, setActiveParagraphId, addToast]);
+  }, [
+    isAddingParagraph, // 🚨 새로 추가된 의존성
+    localParagraphs, // 🚨 빈 단락 체크를 위해 추가
+    addParagraph,
+    setActiveParagraphId,
+    addToast,
+  ]);
 
   const updateLocalParagraphContent = useCallback(
     (id: string, content: string) => {
@@ -751,17 +811,21 @@ const useEditorStateImpl = () => {
     []
   );
 
-  console.log('✅ [HOOK] 훅 완료 - 근본적 개선 + 컨테이너 이동 기능 완료:', {
-    containers: localContainers.length,
-    paragraphs: localParagraphs.length,
-    currentStep: editorInternalState.currentSubStep,
-    handleStructureCompleteStable:
-      typeof handleStructureComplete === 'function',
-    moveToContainerStable: typeof moveToContainer === 'function', // 🔄 새로 추가
-    addToLocalContainerUsesMove: true, // 🔄 이제 moveToContainer 사용
-  });
+  console.log(
+    '✅ [HOOK] 훅 완료 - 근본적 개선 + 컨테이너 이동 기능 + 중복 방지 완료:',
+    {
+      containers: localContainers.length,
+      paragraphs: localParagraphs.length,
+      currentStep: editorInternalState.currentSubStep,
+      handleStructureCompleteStable:
+        typeof handleStructureComplete === 'function',
+      moveToContainerStable: typeof moveToContainer === 'function', // 🔄 새로 추가
+      addToLocalContainerUsesMove: true, // 🔄 이제 moveToContainer 사용
+      duplicatePreventionActive: true, // 🚨 중복 방지 활성화
+    }
+  );
 
-  // ✅ **최종 반환**: 모든 함수가 안정적인 참조 + 컨테이너 이동 기능 포함
+  // ✅ **최종 반환**: 모든 함수가 안정적인 참조 + 컨테이너 이동 기능 + 중복 방지 포함
   return {
     internalState: editorInternalState,
     localParagraphs,
@@ -772,7 +836,7 @@ const useEditorStateImpl = () => {
     setSelectedParagraphIds: setSelectedParagraphIdsStable,
     setTargetContainerId: setTargetContainerIdStable,
 
-    addLocalParagraph,
+    addLocalParagraph, // 🚨 중복 방지 로직 추가됨
     deleteLocalParagraph,
     updateLocalParagraphContent,
     toggleParagraphSelection: toggleParagraphSelectionStable,
@@ -801,30 +865,31 @@ const useEditorStateImpl = () => {
 };
 
 /**
- * 🔧 useEditorStateMain.ts 핵심 수정 사항:
+ * 🔧 useEditorStateMain.ts 중복 단락 생성 방지 수정 사항:
  *
- * 1. ✅ addToLocalContainer 함수 완전 재작성
- *    - 새로운 단락 생성하지 않음 (addParagraph 제거)
- *    - originalId 속성 추가하지 않음
- *    - moveToContainer 함수 직접 사용하여 이동
- *    - 복사가 아닌 이동으로 동작 변경
+ * 1. 🚨 **중복 방지 로직 4단계 추가**
+ *    - 처리 중 상태 체크 (isAddingParagraph)
+ *    - 기존 빈 단락 존재 확인
+ *    - 처리 중 상태 설정/해제
+ *    - 1초 딜레이로 중복 클릭 완전 차단
  *
- * 2. ✅ 데이터 중복 문제 해결
- *    - 단락 복사 로직 완전 제거
- *    - 원본 단락의 containerId만 변경
- *    - 새로운 ID 생성하지 않음
+ * 2. ✅ **기존 빈 단락 재사용**
+ *    - 새로 생성하는 대신 기존 빈 단락에 포커스
+ *    - 사용자에게 명확한 피드백 제공
+ *    - 리소스 낭비 방지
  *
- * 3. ✅ 토스트 메시지 정확성
- *    - "추가됨" → "이동되었습니다"로 변경
- *    - 사용자에게 정확한 액션 피드백 제공
+ * 3. 🔍 **향상된 로깅 및 디버깅**
+ *    - 단락 생성 과정 상세 로깅
+ *    - 중복 방지 동작 추적 가능
+ *    - 에러 발생 시 정확한 원인 파악
  *
- * 4. ✅ 기존 함수 호환성 유지
- *    - addToLocalContainer 함수명 그대로 유지
- *    - 기존 컴포넌트들이 수정 없이 작동
- *    - 내부 로직만 moveToContainer 사용으로 변경
+ * 4. ⚡ **성능 최적화**
+ *    - 불필요한 단락 생성 방지
+ *    - 메모리 사용량 감소
+ *    - 스토어 업데이트 빈도 감소
  *
- * 5. ✅ 의존성 배열 정리
- *    - addParagraph → moveToContainer로 변경
- *    - 불필요한 의존성 제거
- *    - 성능 최적화 유지
+ * 5. 🎯 **사용자 경험 개선**
+ *    - 버튼 연타 방지
+ *    - 명확한 상태 피드백
+ *    - 예상치 못한 단락 생성 방지
  */
