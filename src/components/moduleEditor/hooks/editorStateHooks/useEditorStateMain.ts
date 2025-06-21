@@ -1,5 +1,5 @@
 // 📁 hooks/useEditorState/useEditorStateMain.ts
-// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거 + 컨테이너 이동 기능 추가
+// 🎯 **근본적 개선**: Zustand 스토어 의존성 완전 제거 + 컨테이너 이동 기능 추가 + addToLocalContainer 수정
 
 import { useState, useCallback, useMemo } from 'react'; // ✅ 사용하지 않는 useEffect, useRef 제거
 import { EditorInternalState } from '../../types/editor';
@@ -560,8 +560,14 @@ const useEditorStateImpl = () => {
     [toggleParagraphSelection]
   );
 
+  // 🚨 **핵심 수정**: addToLocalContainer 함수를 moveToContainer 사용하도록 변경
   const addToLocalContainer = useCallback(() => {
     const { selectedParagraphIds, targetContainerId } = editorInternalState;
+
+    console.log('🔄 [ADD_TO_CONTAINER] 함수 호출 (moveToContainer 사용):', {
+      selectedParagraphIds,
+      targetContainerId,
+    });
 
     if (!selectedParagraphIds.length || !targetContainerId) {
       addToast?.({
@@ -573,48 +579,47 @@ const useEditorStateImpl = () => {
     }
 
     try {
-      selectedParagraphIds.forEach((paragraphId, index) => {
+      // ✅ 각 선택된 단락을 moveToContainer 함수로 이동 (복사 대신 이동)
+      selectedParagraphIds.forEach((paragraphId) => {
         const sourceParagraph = localParagraphs.find(
           (p) => p.id === paragraphId
         );
-        if (!sourceParagraph?.content?.trim()) return;
 
-        const existingParagraphs = localParagraphs.filter(
-          (p) => p.containerId === targetContainerId
-        );
-        const maxOrder =
-          existingParagraphs.length > 0
-            ? Math.max(...existingParagraphs.map((p) => p.order))
-            : 0;
+        if (!sourceParagraph?.content?.trim()) {
+          console.warn('⚠️ [ADD_TO_CONTAINER] 빈 단락 건너뜀:', paragraphId);
+          return;
+        }
 
-        const newParagraph: ParagraphBlock = {
-          id: `paragraph-${Date.now()}-${Math.random()
-            .toString(36)
-            .substr(2, 9)}`,
-          content: sourceParagraph.content,
-          containerId: targetContainerId,
-          order: maxOrder + index + 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          originalId: sourceParagraph.id,
-        };
+        // ✅ moveToContainer 함수 직접 호출 (새로운 단락 생성하지 않음)
+        console.log('🔄 [ADD_TO_CONTAINER] 단락 이동:', {
+          from: sourceParagraph.containerId,
+          to: targetContainerId,
+          paragraphId,
+        });
 
-        addParagraph(newParagraph);
+        moveToContainer(paragraphId, targetContainerId);
       });
 
+      // ✅ 선택 해제
       clearSelectedParagraphs?.();
+
       addToast?.({
-        title: '컨테이너에 추가됨',
-        description: `${selectedParagraphIds.length}개 단락이 추가되었습니다.`,
+        title: '컨테이너로 이동 완료',
+        description: `${selectedParagraphIds.length}개 단락이 이동되었습니다.`,
         color: 'success',
       });
     } catch (error) {
-      console.error('❌ [CONTAINER] 추가 실패:', error);
+      console.error('❌ [ADD_TO_CONTAINER] 이동 실패:', error);
+      addToast?.({
+        title: '이동 실패',
+        description: '컨테이너 이동 중 오류가 발생했습니다.',
+        color: 'danger',
+      });
     }
   }, [
     editorInternalState,
     localParagraphs,
-    addParagraph,
+    moveToContainer, // ✅ addParagraph 대신 moveToContainer 의존성
     clearSelectedParagraphs,
     addToast,
   ]);
@@ -753,6 +758,7 @@ const useEditorStateImpl = () => {
     handleStructureCompleteStable:
       typeof handleStructureComplete === 'function',
     moveToContainerStable: typeof moveToContainer === 'function', // 🔄 새로 추가
+    addToLocalContainerUsesMove: true, // 🔄 이제 moveToContainer 사용
   });
 
   // ✅ **최종 반환**: 모든 함수가 안정적인 참조 + 컨테이너 이동 기능 포함
@@ -770,7 +776,7 @@ const useEditorStateImpl = () => {
     deleteLocalParagraph,
     updateLocalParagraphContent,
     toggleParagraphSelection: toggleParagraphSelectionStable,
-    addToLocalContainer,
+    addToLocalContainer, // ✅ 이제 내부적으로 moveToContainer 사용
     moveLocalParagraphInContainer,
     getLocalUnassignedParagraphs,
     getLocalParagraphsByContainer,
@@ -795,30 +801,30 @@ const useEditorStateImpl = () => {
 };
 
 /**
- * 🔧 useEditorStateMain.ts 타입 에러 수정 사항:
+ * 🔧 useEditorStateMain.ts 핵심 수정 사항:
  *
- * 1. ✅ Container updatedAt 속성 추가
- *    - handleStructureComplete에서 Container 생성 시 updatedAt 속성 추가
- *    - commonTypes.ts의 업데이트된 Container 타입과 호환
- *    - TS2322 에러 해결
+ * 1. ✅ addToLocalContainer 함수 완전 재작성
+ *    - 새로운 단락 생성하지 않음 (addParagraph 제거)
+ *    - originalId 속성 추가하지 않음
+ *    - moveToContainer 함수 직접 사용하여 이동
+ *    - 복사가 아닌 이동으로 동작 변경
  *
- * 2. ✅ 사용하지 않는 import 제거
- *    - useEffect, useRef 제거 (TS6133 해결)
- *    - createInitialInternalState 제거
- *    - 사용하지 않는 getter 함수들 제거
- *    - localInternalState 변수 제거
+ * 2. ✅ 데이터 중복 문제 해결
+ *    - 단락 복사 로직 완전 제거
+ *    - 원본 단락의 containerId만 변경
+ *    - 새로운 ID 생성하지 않음
  *
- * 3. 🔄 moveToContainer 함수 완전 구현
- *    - 토스트 알림과 함께 안전한 이동 처리
- *    - 입력값 검증 및 에러 처리
- *    - Zustand 스토어와의 연동
+ * 3. ✅ 토스트 메시지 정확성
+ *    - "추가됨" → "이동되었습니다"로 변경
+ *    - 사용자에게 정확한 액션 피드백 제공
  *
- * 4. 🛡️ 안전성 강화
- *    - 모든 함수에 try-catch 적용
- *    - 입력값 검증 로직 강화
- *    - fallback 처리 완비
+ * 4. ✅ 기존 함수 호환성 유지
+ *    - addToLocalContainer 함수명 그대로 유지
+ *    - 기존 컴포넌트들이 수정 없이 작동
+ *    - 내부 로직만 moveToContainer 사용으로 변경
  *
- * 5. 📝 setInternalState 함수 추가
- *    - WritingStep.tsx와의 호환성 확보
- *    - 하위 호환성 유지
+ * 5. ✅ 의존성 배열 정리
+ *    - addParagraph → moveToContainer로 변경
+ *    - 불필요한 의존성 제거
+ *    - 성능 최적화 유지
  */
