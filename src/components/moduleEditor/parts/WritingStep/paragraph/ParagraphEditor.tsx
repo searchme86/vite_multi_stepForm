@@ -1,6 +1,6 @@
 // 📁 components/moduleEditor/parts/WritingStep/paragraph/ParagraphEditor.tsx
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import ParagraphCard from './ParagraphCard';
@@ -41,12 +41,10 @@ interface ParagraphEditorProps {
   internalState: EditorInternalState;
   sortedContainers: Container[];
   addLocalParagraph: () => void;
-  deleteLocalParagraph: (id: string) => void;
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
   setTargetContainerId: (containerId: string) => void;
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
   currentEditingParagraphId: string | null;
   onActivateEditMode: (paragraphId: string) => void;
   onDeactivateEditMode: () => void;
@@ -67,18 +65,19 @@ function ParagraphEditor({
   internalState,
   sortedContainers,
   addLocalParagraph,
-  deleteLocalParagraph,
   updateLocalParagraphContent,
   toggleParagraphSelection,
   addToLocalContainer,
   setTargetContainerId,
-  setInternalState,
   currentEditingParagraphId,
   onActivateEditMode,
   onDeactivateEditMode,
   recommendedChars = 30,
   isGoalModeEnabled = false,
 }: ParagraphEditorProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const paragraphRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
+
   console.log('📝 [PARAGRAPH_EDITOR] 렌더링:', {
     isMobile,
     totalParagraphsCount: allVisibleParagraphs.length,
@@ -94,6 +93,82 @@ function ParagraphEditor({
     }
     return 30;
   }, [recommendedChars, isGoalModeEnabled]);
+
+  const scrollToEditingParagraph = useCallback((paragraphId: string) => {
+    console.log('📍 [PARAGRAPH_EDITOR] 에디터로 스크롤 시작:', paragraphId);
+
+    const paragraphElement = paragraphRefsMap.current.get(paragraphId);
+    const scrollContainer = scrollContainerRef.current;
+
+    if (!paragraphElement || !scrollContainer) {
+      console.warn('⚠️ [PARAGRAPH_EDITOR] 스크롤 대상 요소를 찾을 수 없음:', {
+        paragraphElement: !!paragraphElement,
+        scrollContainer: !!scrollContainer,
+        paragraphId,
+      });
+      return;
+    }
+
+    try {
+      const containerRect = scrollContainer.getBoundingClientRect();
+
+      const targetScrollPosition = paragraphElement.offsetTop - 20;
+
+      console.log('📊 [PARAGRAPH_EDITOR] 스크롤 계산:', {
+        containerHeight: containerRect.height,
+        paragraphOffsetTop: paragraphElement.offsetTop,
+        targetScrollPosition,
+        currentScrollTop: scrollContainer.scrollTop,
+      });
+
+      scrollContainer.scrollTo({
+        top: targetScrollPosition,
+        behavior: 'smooth',
+      });
+
+      setTimeout(() => {
+        const finalScrollPosition = scrollContainer.scrollTop;
+        console.log('✅ [PARAGRAPH_EDITOR] 스크롤 완료:', {
+          finalScrollPosition,
+          targetScrollPosition,
+          paragraphId,
+        });
+      }, 500);
+    } catch (scrollError) {
+      console.error('❌ [PARAGRAPH_EDITOR] 스크롤 실패:', scrollError);
+    }
+  }, []);
+
+  const handleActivateEditModeWithScroll = useCallback(
+    (paragraphId: string) => {
+      console.log(
+        '🎯 [PARAGRAPH_EDITOR] 편집 모드 활성화 및 스크롤:',
+        paragraphId
+      );
+
+      onActivateEditMode(paragraphId);
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          scrollToEditingParagraph(paragraphId);
+        }, 100);
+      });
+    },
+    [onActivateEditMode, scrollToEditingParagraph]
+  );
+
+  const registerParagraphRef = useCallback(
+    (paragraphId: string, element: HTMLDivElement | null) => {
+      if (element) {
+        paragraphRefsMap.current.set(paragraphId, element);
+        console.log('📍 [PARAGRAPH_EDITOR] 단락 ref 등록:', paragraphId);
+      } else {
+        paragraphRefsMap.current.delete(paragraphId);
+        console.log('🗑️ [PARAGRAPH_EDITOR] 단락 ref 제거:', paragraphId);
+      }
+    },
+    []
+  );
 
   const unassignedParagraphsForQualityCheck = useMemo(() => {
     return allVisibleParagraphs.filter(
@@ -167,6 +242,50 @@ function ParagraphEditor({
     };
   }, [contentQualityAnalysisResults]);
 
+  const previousParagraphCountRef = useRef(allVisibleParagraphs.length);
+
+  // 새 단락 생성 감지 및 자동 스크롤
+  useEffect(() => {
+    const currentCount = allVisibleParagraphs.length;
+    const previousCount = previousParagraphCountRef.current;
+
+    console.log('📊 [PARAGRAPH_EDITOR] 단락 개수 변화 감지:', {
+      previous: previousCount,
+      current: currentCount,
+      isIncreased: currentCount > previousCount,
+    });
+
+    // 단락이 증가했고, 현재 2개 이상인 경우 (첫 번째 제외)
+    if (currentCount > previousCount && currentCount >= 2) {
+      console.log('🎯 [PARAGRAPH_EDITOR] 새 단락 자동 스크롤 조건 충족');
+
+      // 새로 생성된 단락 (마지막 단락)으로 스크롤
+      const newestParagraph =
+        allVisibleParagraphs[allVisibleParagraphs.length - 1];
+
+      if (newestParagraph?.id) {
+        console.log(
+          '🆕 [PARAGRAPH_EDITOR] 새 단락으로 스크롤:',
+          newestParagraph.id
+        );
+
+        // DOM 렌더링 완료 후 스크롤 실행
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            scrollToEditingParagraph(newestParagraph.id);
+          }, 200);
+        });
+      }
+    }
+
+    // 이전 개수 업데이트
+    previousParagraphCountRef.current = currentCount;
+  }, [
+    allVisibleParagraphs.length,
+    allVisibleParagraphs,
+    scrollToEditingParagraph,
+  ]);
+
   const handleAddNewParagraph = () => {
     console.log('➕ [PARAGRAPH_EDITOR] 새 단락 추가 요청');
     addLocalParagraph();
@@ -180,9 +299,9 @@ function ParagraphEditor({
     <div
       className={`${
         isMobile ? 'w-full' : 'flex-1'
-      } w-[50%] h-full border border-gray-200 rounded-lg pb-4 mr-[20px]`}
+      } w-[50%] h-full border border-gray-200 rounded-lg pb-4 mr-[20px] flex flex-col`}
     >
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between flex-shrink-0 p-4 border-b border-gray-200 bg-gray-50">
         <div className="flex flex-col">
           <span className="text-lg font-semibold">📝 단락 작성 (Tiptap)</span>
           {isGoalModeEnabled && (
@@ -225,7 +344,7 @@ function ParagraphEditor({
       </div>
 
       {contentQualityAnalysisResults.length > 0 && (
-        <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-yellow-50">
+        <div className="flex-shrink-0 p-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-yellow-50">
           <div className="mb-2">
             <h4 className="flex items-center gap-2 text-sm font-medium text-gray-800">
               <Icon icon="lucide:clipboard-check" className="text-orange-500" />
@@ -282,7 +401,10 @@ function ParagraphEditor({
         </div>
       )}
 
-      <div className="p-4 overflow-y-auto h-[calc(100%-65px)]">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 min-h-0 p-4 overflow-y-auto"
+      >
         <div className="mb-4">
           <div className="flex items-center justify-between text-sm text-gray-600">
             <span>전체 단락: {allVisibleParagraphs.length}개</span>
@@ -290,7 +412,7 @@ function ParagraphEditor({
           </div>
         </div>
 
-        <div className="h-full space-y-6">
+        <div className="space-y-6">
           {allVisibleParagraphs.map((paragraph) => (
             <ParagraphCard
               key={paragraph.id}
@@ -302,8 +424,9 @@ function ParagraphEditor({
               addToLocalContainer={addToLocalContainer}
               setTargetContainerId={setTargetContainerId}
               currentEditingParagraphId={currentEditingParagraphId}
-              onActivateEditMode={onActivateEditMode}
+              onActivateEditMode={handleActivateEditModeWithScroll}
               onDeactivateEditMode={onDeactivateEditMode}
+              onRegisterRef={registerParagraphRef}
             />
           ))}
 

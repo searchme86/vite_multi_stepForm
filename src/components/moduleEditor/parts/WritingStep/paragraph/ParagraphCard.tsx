@@ -2,7 +2,7 @@
 
 import TiptapEditor from '../../TiptapEditor/TiptapEditor';
 import ParagraphActions from './ParagraphActions';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
 
@@ -46,6 +46,7 @@ interface ParagraphCardProps {
   currentEditingParagraphId: string | null;
   onActivateEditMode: (paragraphId: string) => void;
   onDeactivateEditMode: () => void;
+  onRegisterRef: (paragraphId: string, element: HTMLDivElement | null) => void;
 }
 
 interface ContentSynchronizationState {
@@ -66,7 +67,9 @@ function ParagraphCard({
   currentEditingParagraphId,
   onActivateEditMode,
   onDeactivateEditMode,
+  onRegisterRef,
 }: ParagraphCardProps) {
+  const paragraphCardRef = useRef<HTMLDivElement>(null);
   const lastProcessedContentRef = useRef<string>(paragraph?.content || '');
 
   const contentSynchronizationStateRef = useRef<ContentSynchronizationState>({
@@ -75,6 +78,21 @@ function ParagraphCard({
     syncInProgress: false,
     pendingContentUpdate: null,
   });
+
+  useEffect(() => {
+    const currentElement = paragraphCardRef.current;
+    const paragraphId = paragraph?.id;
+
+    if (paragraphId && onRegisterRef) {
+      onRegisterRef(paragraphId, currentElement);
+    }
+
+    return () => {
+      if (paragraphId && onRegisterRef) {
+        onRegisterRef(paragraphId, null);
+      }
+    };
+  }, [paragraph?.id, onRegisterRef]);
 
   const selectedParagraphIdsString = useMemo(() => {
     const { selectedParagraphIds = [] } = internalState || {};
@@ -138,7 +156,7 @@ function ParagraphCard({
       : '';
 
     const editModeClasses = isCurrentlyInEditMode
-      ? 'ring-2 ring-green-400 border-green-400'
+      ? 'ring-2 ring-green-400 border-green-400 shadow-lg'
       : '';
 
     return `${baseClasses} ${borderClasses} ${selectionClasses} ${disabledClasses} ${editModeClasses}`;
@@ -224,7 +242,10 @@ function ParagraphCard({
   );
 
   const handleActivateEditModeForThisParagraph = useCallback(() => {
-    console.log('✏️ [PARAGRAPH_CARD] 편집 모드 활성화:', paragraph?.id);
+    console.log(
+      '✏️ [PARAGRAPH_CARD] 편집 모드 활성화 및 스크롤 요청:',
+      paragraph?.id
+    );
     if (paragraph?.id && onActivateEditMode) {
       onActivateEditMode(paragraph.id);
     }
@@ -239,6 +260,7 @@ function ParagraphCard({
 
   return (
     <div
+      ref={paragraphCardRef}
       className={paragraphCardDisplayClassName}
       data-paragraph-id={paragraph?.id || ''}
     >
@@ -282,9 +304,12 @@ function ParagraphCard({
 
         {isCurrentlyInEditMode && (
           <div className="px-4 py-2 mb-3 bg-green-50 border border-green-200 rounded -m-4 mt-[-16px] mb-3">
-            <span className="text-xs text-green-600">
-              ✏️ 편집 모드 활성화됨 - 이 단락을 수정할 수 있습니다
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-green-600">
+                ✏️ 편집 모드 활성화됨 - 이 단락을 수정할 수 있습니다
+              </span>
+              <span className="text-xs text-green-500">📍 자동 스크롤됨</span>
+            </div>
           </div>
         )}
 
