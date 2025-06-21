@@ -1,6 +1,10 @@
 //====여기부터 수정됨====
 // 📁 store/editorCore/initialEditorCoreState.ts
-import type { Container, ParagraphBlock } from '../shared/commonTypes';
+import type {
+  Container,
+  ParagraphBlock,
+  ContainerMoveHistory,
+} from '../shared/commonTypes';
 
 // EditorCoreState 인터페이스 정의
 // 1. 에디터 핵심 데이터를 관리하는 상태 구조
@@ -25,6 +29,11 @@ export interface EditorCoreState {
   // 1. 섹션 입력 필드들 - 구조 설정 단계에서 사용
   // 2. 사용자가 입력한 섹션명들을 임시 저장
   sectionInputs: string[];
+
+  // 🔄 컨테이너 이동 이력 - 단락의 컨테이너 간 이동 기록
+  // 1. 사용자의 이동 패턴 추적 및 분석에 활용
+  // 2. 실수로 이동한 경우 되돌리기 기능의 기반 데이터
+  containerMoveHistory: ContainerMoveHistory;
 }
 
 // 초기 상태 정의
@@ -36,6 +45,7 @@ export const initialEditorCoreState: EditorCoreState = {
   completedContent: '', // 1. 빈 완성 콘텐츠 2. 아직 글이 완성되지 않은 상태
   isCompleted: false, // 1. 미완료 상태 2. 에디터 작업이 진행 중
   sectionInputs: ['', '', '', ''], // 1. 기본 4개 빈 섹션 입력 필드 2. 구조 설정 단계 초기값
+  containerMoveHistory: [], // 🔄 빈 이동 이력 배열 - 아직 이동 기록이 없는 상태
 };
 
 // 초기 상태 검증 함수
@@ -52,6 +62,7 @@ export const validateInitialEditorCoreState = (
       'completedContent',
       'isCompleted',
       'sectionInputs',
+      'containerMoveHistory', // 🔄 새로 추가된 필수 속성
     ];
 
     for (const key of requiredKeys) {
@@ -74,6 +85,12 @@ export const validateInitialEditorCoreState = (
 
     if (!Array.isArray(state.sectionInputs)) {
       console.error('❌ [CORE_STATE] sectionInputs는 배열이어야 합니다');
+      return false;
+    }
+
+    // 🔄 컨테이너 이동 이력 배열 검증 추가
+    if (!Array.isArray(state.containerMoveHistory)) {
+      console.error('❌ [CORE_STATE] containerMoveHistory는 배열이어야 합니다');
       return false;
     }
 
@@ -115,6 +132,7 @@ export const createSafeInitialEditorCoreState = (): EditorCoreState => {
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
+      containerMoveHistory: [], // 🔄 안전한 기본값 추가
     };
   } catch (error) {
     console.error('❌ [CORE_STATE] 안전한 초기 상태 생성 중 오류:', error);
@@ -126,6 +144,7 @@ export const createSafeInitialEditorCoreState = (): EditorCoreState => {
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
+      containerMoveHistory: [], // 🔄 최후 안전장치에도 추가
     };
   }
 };
@@ -146,6 +165,7 @@ export const resetToInitialEditorCoreState = (): EditorCoreState => {
       completedContent: freshInitialState.completedContent,
       isCompleted: freshInitialState.isCompleted,
       sectionInputs: [...freshInitialState.sectionInputs], // 새로운 배열 생성
+      containerMoveHistory: [...freshInitialState.containerMoveHistory], // 🔄 새로운 배열 생성
     };
 
     console.log('✅ [CORE_STATE] 초기 상태 복원 완료');
@@ -160,6 +180,7 @@ export const resetToInitialEditorCoreState = (): EditorCoreState => {
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
+      containerMoveHistory: [], // 🔄 오류 시에도 안전한 기본값
     };
   }
 };

@@ -1,7 +1,13 @@
 // 📁 store/editorCore/editorCoreStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Container, ParagraphBlock } from '../shared/commonTypes';
+import type {
+  Container,
+  ParagraphBlock,
+  ContainerMoveRecord,
+  ContainerMoveHistory,
+  ContainerMoveStats,
+} from '../shared/commonTypes';
 import {
   initialEditorCoreState,
   type EditorCoreState,
@@ -29,6 +35,12 @@ interface EditorCoreGetters {
   getUnassignedParagraphs: () => ParagraphBlock[];
   getSortedContainers: () => Container[];
   validateEditorState: () => boolean;
+
+  // 🔄 컨테이너 이동 관련 Getter 함수들
+  getContainerMoveHistory: () => ContainerMoveHistory;
+  getContainerMovesByParagraph: (paragraphId: string) => ContainerMoveRecord[];
+  getRecentContainerMoves: (limit?: number) => ContainerMoveRecord[];
+  getContainerMoveStats: () => ContainerMoveStats;
 }
 
 interface EditorCoreSetters {
@@ -63,6 +75,14 @@ interface EditorCoreSetters {
   resetEditorState: () => void;
   resetEditorStateCompletely: () => void;
   generateCompletedContent: () => void;
+
+  // 🔄 컨테이너 이동 관련 Setter 함수들
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void;
+  trackContainerMove: (
+    moveRecord: Omit<ContainerMoveRecord, 'id' | 'timestamp'>
+  ) => void;
+  clearContainerMoveHistory: () => void;
+  removeContainerMoveRecord: (recordId: string) => void;
 }
 
 type EditorCoreStore = EditorCoreState & EditorCoreGetters & EditorCoreSetters;
@@ -72,6 +92,7 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
     (set, get) => ({
       ...initialEditorCoreState,
 
+      // 기존 함수들은 그대로 유지...
       getCompletedContent: () => {
         const { completedContent } = get();
         const validCompletedContent =
@@ -347,6 +368,267 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         return isValidEditorState;
       },
 
+      // 🔄 컨테이너 이동 관련 Getter 구현
+      getContainerMoveHistory: () => {
+        const { containerMoveHistory } = get();
+        const validMoveHistory = Array.isArray(containerMoveHistory)
+          ? containerMoveHistory
+          : [];
+        return validMoveHistory;
+      },
+
+      getContainerMovesByParagraph: (paragraphId: string) => {
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
+        const { containerMoveHistory } = get();
+        const validMoveHistory = Array.isArray(containerMoveHistory)
+          ? containerMoveHistory
+          : [];
+
+        const paragraphMoves = validMoveHistory.filter((moveRecord) => {
+          const hasValidRecord =
+            moveRecord && typeof moveRecord.paragraphId === 'string';
+          const isMatchingParagraph =
+            hasValidRecord && moveRecord.paragraphId === validParagraphId;
+          return isMatchingParagraph;
+        });
+
+        console.log('📊 [STORE] 단락별 이동 이력:', {
+          paragraphId: validParagraphId,
+          moveCount: paragraphMoves.length,
+        });
+
+        return paragraphMoves;
+      },
+
+      getRecentContainerMoves: (limit: number = 10) => {
+        const validLimit = typeof limit === 'number' && limit > 0 ? limit : 10;
+        const { containerMoveHistory } = get();
+        const validMoveHistory = Array.isArray(containerMoveHistory)
+          ? containerMoveHistory
+          : [];
+
+        const sortedMoves = [...validMoveHistory].sort((a, b) => {
+          const timestampA =
+            a.timestamp instanceof Date ? a.timestamp.getTime() : 0;
+          const timestampB =
+            b.timestamp instanceof Date ? b.timestamp.getTime() : 0;
+          return timestampB - timestampA; // 최신순 정렬
+        });
+
+        return sortedMoves.slice(0, validLimit);
+      },
+
+      getContainerMoveStats: () => {
+        const { containerMoveHistory } = get();
+        const validMoveHistory = Array.isArray(containerMoveHistory)
+          ? containerMoveHistory
+          : [];
+
+        const totalMoves = validMoveHistory.length;
+
+        // 가장 많이 이동된 단락 찾기
+        const paragraphMoveCounts = new Map<string, number>();
+        validMoveHistory.forEach((move) => {
+          const count = paragraphMoveCounts.get(move.paragraphId) || 0;
+          paragraphMoveCounts.set(move.paragraphId, count + 1);
+        });
+
+        const mostMovedParagraph =
+          paragraphMoveCounts.size > 0
+            ? Array.from(paragraphMoveCounts.entries()).reduce((a, b) =>
+                a[1] > b[1] ? a : b
+              )[0]
+            : null;
+
+        // 가장 많이 선택된 대상 컨테이너 찾기
+        const targetContainerCounts = new Map<string, number>();
+        validMoveHistory.forEach((move) => {
+          const count = targetContainerCounts.get(move.toContainerId) || 0;
+          targetContainerCounts.set(move.toContainerId, count + 1);
+        });
+
+        const mostTargetContainer =
+          targetContainerCounts.size > 0
+            ? Array.from(targetContainerCounts.entries()).reduce((a, b) =>
+                a[1] > b[1] ? a : b
+              )[0]
+            : null;
+
+        const averageMovesPerParagraph =
+          paragraphMoveCounts.size > 0
+            ? totalMoves / paragraphMoveCounts.size
+            : 0;
+
+        return {
+          totalMoves,
+          mostMovedParagraph,
+          mostTargetContainer,
+          averageMovesPerParagraph,
+        };
+      },
+
+      // 🔄 컨테이너 이동 관련 Setter 구현
+      moveToContainer: (paragraphId: string, targetContainerId: string) => {
+        const validParagraphId =
+          typeof paragraphId === 'string' ? paragraphId : '';
+        const validTargetContainerId =
+          typeof targetContainerId === 'string' ? targetContainerId : '';
+
+        console.log('🔄 [STORE] 컨테이너 이동 시작:', {
+          paragraphId: validParagraphId,
+          targetContainerId: validTargetContainerId,
+        });
+
+        set((currentState) => {
+          const { containers, paragraphs, containerMoveHistory } = currentState;
+          const validContainers = Array.isArray(containers) ? containers : [];
+          const validParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
+          const validMoveHistory = Array.isArray(containerMoveHistory)
+            ? containerMoveHistory
+            : [];
+
+          // 대상 컨테이너 존재 확인
+          const targetContainerExists = validContainers.some(
+            (container) => container && container.id === validTargetContainerId
+          );
+
+          if (!targetContainerExists) {
+            console.error(
+              '❌ [STORE] 대상 컨테이너가 존재하지 않음:',
+              validTargetContainerId
+            );
+            return currentState;
+          }
+
+          // 단락 찾기 및 현재 컨테이너 ID 저장
+          const paragraphIndex = validParagraphs.findIndex(
+            (paragraph) => paragraph && paragraph.id === validParagraphId
+          );
+
+          if (paragraphIndex === -1) {
+            console.error('❌ [STORE] 단락을 찾을 수 없음:', validParagraphId);
+            return currentState;
+          }
+
+          const currentParagraph = validParagraphs[paragraphIndex];
+          const fromContainerId = currentParagraph.containerId;
+
+          // 동일한 컨테이너로 이동하려는 경우 무시
+          if (fromContainerId === validTargetContainerId) {
+            console.warn(
+              '⚠️ [STORE] 동일한 컨테이너로 이동 시도:',
+              validTargetContainerId
+            );
+            return currentState;
+          }
+
+          // 단락 업데이트
+          const updatedParagraphs = [...validParagraphs];
+          updatedParagraphs[paragraphIndex] = {
+            ...currentParagraph,
+            containerId: validTargetContainerId,
+            updatedAt: new Date(),
+          };
+
+          // 이동 기록 추가
+          const moveRecord: ContainerMoveRecord = {
+            id: `move_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            paragraphId: validParagraphId,
+            fromContainerId,
+            toContainerId: validTargetContainerId,
+            timestamp: new Date(),
+          };
+
+          const updatedMoveHistory = [...validMoveHistory, moveRecord];
+
+          // 완성된 콘텐츠 재생성
+          const generatedCompletedContent = generateCompletedContent(
+            validContainers,
+            updatedParagraphs
+          );
+
+          console.log('✅ [STORE] 컨테이너 이동 완료:', {
+            paragraphId: validParagraphId,
+            from: fromContainerId,
+            to: validTargetContainerId,
+            moveRecordId: moveRecord.id,
+          });
+
+          return {
+            ...currentState,
+            paragraphs: updatedParagraphs,
+            containerMoveHistory: updatedMoveHistory,
+            completedContent: generatedCompletedContent,
+          };
+        });
+      },
+
+      trackContainerMove: (
+        moveData: Omit<ContainerMoveRecord, 'id' | 'timestamp'>
+      ) => {
+        const validMoveData = moveData || {};
+
+        set((currentState) => {
+          const { containerMoveHistory } = currentState;
+          const validMoveHistory = Array.isArray(containerMoveHistory)
+            ? containerMoveHistory
+            : [];
+
+          const moveRecord: ContainerMoveRecord = {
+            id: `track_${Date.now()}_${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
+            timestamp: new Date(),
+            ...validMoveData,
+          };
+
+          const updatedMoveHistory = [...validMoveHistory, moveRecord];
+
+          console.log('📝 [STORE] 이동 기록 추가:', moveRecord);
+
+          return {
+            ...currentState,
+            containerMoveHistory: updatedMoveHistory,
+          };
+        });
+      },
+
+      clearContainerMoveHistory: () => {
+        console.log('🗑️ [STORE] 컨테이너 이동 이력 전체 삭제');
+
+        set((currentState) => ({
+          ...currentState,
+          containerMoveHistory: [],
+        }));
+      },
+
+      removeContainerMoveRecord: (recordId: string) => {
+        const validRecordId = typeof recordId === 'string' ? recordId : '';
+
+        set((currentState) => {
+          const { containerMoveHistory } = currentState;
+          const validMoveHistory = Array.isArray(containerMoveHistory)
+            ? containerMoveHistory
+            : [];
+
+          const filteredMoveHistory = validMoveHistory.filter(
+            (record) => record && record.id !== validRecordId
+          );
+
+          console.log('🗑️ [STORE] 특정 이동 기록 삭제:', {
+            recordId: validRecordId,
+            removedCount: validMoveHistory.length - filteredMoveHistory.length,
+          });
+
+          return {
+            ...currentState,
+            containerMoveHistory: filteredMoveHistory,
+          };
+        });
+      },
+
+      // 기존 함수들 계속...
       addContainer: (newContainer: Container) => {
         const hasValidContainer =
           newContainer && typeof newContainer.id === 'string';
@@ -915,6 +1197,7 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
               completedContent: '',
               isCompleted: false,
               sectionInputs: ['', '', '', ''],
+              containerMoveHistory: [], // 🔄 완전 초기화 시에도 포함
             };
             set(defaultResetState);
           }, 100);

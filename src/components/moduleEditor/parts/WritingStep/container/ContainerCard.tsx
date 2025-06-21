@@ -1,14 +1,30 @@
+// 📁 components/moduleEditor/parts/WritingStep/sidebar/slides/ContainerCard.tsx
+
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import ContainerHeader from './ContainerHeader';
-import { Container } from '../../../types/container';
-import { LocalParagraph } from '../../../types/paragraph';
+import ContainerSelector from './ContainerSelector';
+import type { Container } from '../../../../../store/shared/commonTypes';
+
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
 
 interface ContainerCardProps {
   container: Container;
   containerParagraphs: LocalParagraph[];
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
+
+  // 🔄 새로 추가되는 props
+  sortedContainers: Container[]; // 전체 컨테이너 목록
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // 컨테이너 간 이동 함수
 }
 
 function ContainerCard({
@@ -16,13 +32,18 @@ function ContainerCard({
   containerParagraphs,
   moveLocalParagraphInContainer,
   activateEditor,
+  sortedContainers, // 🔄 새로 추가
+  moveToContainer, // 🔄 새로 추가
 }: ContainerCardProps) {
+  // 기존 console.log 수정
   console.log('🗂️ [CONTAINER_CARD] 렌더링:', {
     containerId: container.id,
     containerName: container.name,
     paragraphsCount: containerParagraphs.length,
+    totalContainers: sortedContainers.length, // 🔄 새로 추가
   });
 
+  // 기존 핸들러들 유지...
   const handleMoveUp = (paragraphId: string) => {
     console.log('⬆️ [CONTAINER_CARD] 단락 위로 이동:', paragraphId);
     moveLocalParagraphInContainer(paragraphId, 'up');
@@ -40,6 +61,26 @@ function ContainerCard({
     });
     const targetId = paragraph.originalId || paragraph.id;
     activateEditor(targetId);
+  };
+
+  // 🔄 새로 추가되는 핸들러
+  const handleContainerMove = (
+    paragraphId: string,
+    targetContainerId: string
+  ) => {
+    console.log('🔄 [CONTAINER_CARD] 컨테이너 이동:', {
+      paragraphId,
+      fromContainerId: container.id,
+      toContainerId: targetContainerId,
+    });
+
+    if (typeof moveToContainer === 'function') {
+      try {
+        moveToContainer(paragraphId, targetContainerId);
+      } catch (error) {
+        console.error('❌ [CONTAINER_CARD] 컨테이너 이동 실패:', error);
+      }
+    }
   };
 
   return (
@@ -85,7 +126,19 @@ function ContainerCard({
                 </div>
               </div>
 
+              {/* 🔄 버튼 영역 수정 - 셀렉트 박스 추가 */}
               <div className="flex gap-1 ml-3">
+                {/* 🔄 새로 추가 - 컨테이너 선택 셀렉트 박스 */}
+                <ContainerSelector
+                  currentContainerId={container.id}
+                  availableContainers={sortedContainers}
+                  onContainerMove={(targetContainerId) =>
+                    handleContainerMove(paragraph.id, targetContainerId)
+                  }
+                  className="mr-1"
+                />
+
+                {/* 기존 버튼들 유지 */}
                 <Button
                   type="button"
                   isIconOnly
@@ -124,6 +177,7 @@ function ContainerCard({
           </div>
         ))}
 
+        {/* 기존 빈 상태 표시 유지 */}
         {containerParagraphs.length === 0 && (
           <div className="py-6 text-center text-gray-400 border-2 border-gray-200 border-dashed rounded-lg">
             <Icon icon="lucide:inbox" className="mx-auto mb-2 text-3xl" />

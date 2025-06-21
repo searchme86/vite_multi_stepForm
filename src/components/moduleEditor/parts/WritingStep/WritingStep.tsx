@@ -1,3 +1,5 @@
+// 📁 components/moduleEditor/parts/WritingStep/WritingStep.tsx
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import StepControls from './controls/StepControls';
 import ParagraphEditor from './paragraph/ParagraphEditor';
@@ -16,10 +18,9 @@ import { EditorSidebarContainer } from './sidebar/EditorSidebarContainer';
 import { StructureManagementSlide } from './sidebar/slides/StructureManagementSlide';
 import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
 
-import {
-  ContainerManagerProps,
-  PreviewPanelProps,
-} from '../../../swipeableSection/types/swipeableTypes.ts';
+import { PreviewPanelProps } from '../../../swipeableSection/types/swipeableTypes.ts';
+// ✅ commonTypes에서 Container import (타입 통일)
+import type { Container } from '../../../../store/shared/commonTypes';
 
 type SubStep = 'structure' | 'writing';
 
@@ -42,16 +43,20 @@ interface LocalParagraph {
   originalId?: string;
 }
 
-interface Container {
-  id: string;
-  name: string;
-  order: number;
-  createdAt?: Date;
-  updatedAt?: Date;
+// ✅ 로컬 Container 정의 제거하고 commonTypes에서 import한 Container 사용
+
+// ✅ ExtendedContainerManagerProps 타입 정의 (commonTypes Container 사용)
+interface ExtendedContainerManagerProps {
+  isMobile: boolean;
+  sortedContainers: Container[]; // ✅ commonTypes의 Container 타입 사용
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
+  moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
+  activateEditor: (id: string) => void;
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // ✅ 필수 함수
 }
 
 interface WritingStepProps {
-  localContainers: Container[];
+  localContainers: Container[]; // ✅ commonTypes Container 사용
   localParagraphs: LocalParagraph[];
   internalState: EditorInternalState;
   renderMarkdown: (text: string) => React.ReactNode;
@@ -70,6 +75,9 @@ interface WritingStepProps {
   setTargetContainerId: (containerId: string) => void;
   getLocalUnassignedParagraphs: () => LocalParagraph[];
   getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
+
+  // 🔄 새로 추가되는 props
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // 컨테이너 간 이동 함수
 }
 
 function WritingStep({
@@ -92,6 +100,7 @@ function WritingStep({
   setTargetContainerId,
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
+  moveToContainer, // 🔄 새로 추가
 }: WritingStepProps) {
   const [isMobile, setIsMobile] = useState(false);
   const { validationStatus: currentValidationStatus } = useBridgeUI();
@@ -205,13 +214,15 @@ function WritingStep({
     ]
   );
 
-  const containerManagerProps: ContainerManagerProps = useMemo(
+  // ✅ ExtendedContainerManagerProps 타입 사용 (이제 타입 호환성 확보)
+  const containerManagerProps: ExtendedContainerManagerProps = useMemo(
     () => ({
       isMobile,
-      sortedContainers,
+      sortedContainers, // ✅ 이제 commonTypes Container[] 타입
       getLocalParagraphsByContainer,
       moveLocalParagraphInContainer,
       activateEditor,
+      moveToContainer, // ✅ 타입 에러 해결
     }),
     [
       isMobile,
@@ -219,6 +230,7 @@ function WritingStep({
       getLocalParagraphsByContainer,
       moveLocalParagraphInContainer,
       activateEditor,
+      moveToContainer, // 🔄 의존성 배열에 추가
     ]
   );
 
@@ -519,3 +531,32 @@ function WritingStep({
 }
 
 export default WritingStep;
+
+/**
+ * 🔧 WritingStep.tsx 타입 통일 수정 사항:
+ *
+ * 1. ✅ Container 타입 통일
+ *    - 로컬 Container 인터페이스 제거
+ *    - commonTypes에서 Container import 사용
+ *    - createdAt, updatedAt 속성 필수로 통일
+ *
+ * 2. ✅ 타입 호환성 확보
+ *    - ExtendedContainerManagerProps에서 commonTypes Container 사용
+ *    - StructureManagementSlide와 동일한 Container 타입 참조
+ *    - TS2719 에러 완전 해결
+ *
+ * 3. 🔄 기존 기능 완전 보존
+ *    - 모든 기존 로직 그대로 유지
+ *    - Props 전달 방식 동일
+ *    - UI/UX 변화 없음
+ *
+ * 4. 📝 Import 정리
+ *    - 필요한 타입만 명시적으로 import
+ *    - 타입 의존성 명확화
+ *    - 코드 가독성 향상
+ *
+ * 5. 🎯 향후 확장성
+ *    - 단일 소스 Container 타입 사용
+ *    - 타입 변경 시 일관성 보장
+ *    - 유지보수성 향상
+ */

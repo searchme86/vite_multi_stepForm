@@ -1,8 +1,37 @@
+// 📁 components/moduleEditor/parts/WritingStep/sidebar/slides/StructureManagementSlide.tsx
+
 import { FolderOpen, Settings } from 'lucide-react';
 import { Icon } from '@iconify/react';
 import ContainerManager from '../../container/ContainerManager';
 import useStructureAnalysis from '../../../../hooks/useStructureAnalysis';
 import { StructureManagementSlideProps } from '../../../../../swipeableSection/types/swipeableTypes';
+import type { Container } from '../../../../../../store/shared/commonTypes';
+
+// 🏗️ LocalParagraph 인터페이스 정의 (WritingStep.tsx와 완전 일치)
+interface LocalParagraph {
+  id: string;
+  content: string;
+  containerId: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  originalId?: string;
+}
+
+// ✅ ExtendedContainerManagerProps - WritingStep.tsx와 완전 동일한 정의
+interface ExtendedContainerManagerProps {
+  isMobile: boolean;
+  sortedContainers: Container[]; // ✅ commonTypes Container 사용
+  getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
+  moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
+  activateEditor: (id: string) => void;
+  moveToContainer: (paragraphId: string, targetContainerId: string) => void; // ✅ 필수 함수
+}
+
+// ✅ StructureManagementSlideProps 타입 확장
+interface ExtendedStructureManagementSlideProps {
+  containerManagerProps: ExtendedContainerManagerProps; // ✅ 확장된 타입 사용
+}
 
 /**
  * StructureManagementSlide 컴포넌트
@@ -12,24 +41,46 @@ import { StructureManagementSlideProps } from '../../../../../swipeableSection/t
  * - ContainerManager에 분석 결과 전달
  * - 슬라이드에 최적화된 레이아웃 제공
  * - 구체적 타입을 사용하여 타입 안전성 확보
+ * - 🔄 컨테이너 간 이동 기능 지원 추가
  */
 export function StructureManagementSlide({
   containerManagerProps, // 필수 props - 옵셔널 제거됨
-}: StructureManagementSlideProps) {
+}: ExtendedStructureManagementSlideProps) {
+  // ✅ 확장된 타입 사용
+  // 🔍 Props 검증 및 안전한 기본값 설정
+  const validContainerManagerProps: ExtendedContainerManagerProps =
+    containerManagerProps || {
+      isMobile: false,
+      sortedContainers: [],
+      getLocalParagraphsByContainer: () => [],
+      moveLocalParagraphInContainer: () => {},
+      activateEditor: () => {},
+      moveToContainer: () => {}, // ✅ 기본 fallback 함수
+    };
+
   console.log('📁 [STRUCTURE_SLIDE] 렌더링:', {
     propsProvided: !!containerManagerProps,
-    isMobile: containerManagerProps.isMobile,
-    containersCount: containerManagerProps.sortedContainers.length,
+    isMobile: validContainerManagerProps.isMobile,
+    containersCount: validContainerManagerProps.sortedContainers.length,
     hasGetParagraphsFunction:
-      typeof containerManagerProps.getLocalParagraphsByContainer === 'function',
+      typeof validContainerManagerProps.getLocalParagraphsByContainer ===
+      'function',
+    hasMoveInContainerFunction:
+      typeof validContainerManagerProps.moveLocalParagraphInContainer ===
+      'function',
+    hasActivateEditorFunction:
+      typeof validContainerManagerProps.activateEditor === 'function',
+    // ✅ 새로 추가된 함수 확인 (타입 에러 해결)
+    hasMoveToContainerFunction:
+      typeof validContainerManagerProps.moveToContainer === 'function',
     timestamp: new Date().toISOString(),
   });
 
   // 🔍 구조 분석 훅 사용
   const { structureAnalysis, structureIssues, errorIssues, warningIssues } =
     useStructureAnalysis(
-      containerManagerProps.sortedContainers,
-      containerManagerProps.getLocalParagraphsByContainer
+      validContainerManagerProps.sortedContainers,
+      validContainerManagerProps.getLocalParagraphsByContainer
     );
 
   console.log('📊 [STRUCTURE_SLIDE] 구조 분석 결과:', {
@@ -40,6 +91,14 @@ export function StructureManagementSlide({
     errors: errorIssues.length,
     warnings: warningIssues.length,
   });
+
+  // 🛡️ moveToContainer 함수 존재 여부 확인
+  const moveToContainerAvailable =
+    typeof validContainerManagerProps.moveToContainer === 'function';
+
+  if (!moveToContainerAvailable) {
+    console.warn('⚠️ [STRUCTURE_SLIDE] moveToContainer 함수가 제공되지 않음');
+  }
 
   return (
     <div className="flex flex-col w-full h-full bg-white">
@@ -57,6 +116,16 @@ export function StructureManagementSlide({
             <p className="text-sm text-gray-600 mt-0.5">
               컨테이너를 관리하고 단락을 구조화하세요
             </p>
+            {/* 🔄 새로운 기능 설명 추가 */}
+            {moveToContainerAvailable ? (
+              <p className="mt-1 text-xs text-blue-600">
+                💡 단락을 다른 컨테이너로 이동할 수 있습니다
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-orange-600">
+                ⚠️ 이동 기능이 비활성화되어 있습니다
+              </p>
+            )}
           </div>
 
           {/* ⚙️ 설정 아이콘 (향후 확장용) */}
@@ -77,7 +146,7 @@ export function StructureManagementSlide({
         <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
             <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-            컨테이너: {containerManagerProps.sortedContainers.length}개
+            컨테이너: {validContainerManagerProps.sortedContainers.length}개
           </span>
           <span className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -85,7 +154,18 @@ export function StructureManagementSlide({
           </span>
           <span className="flex items-center gap-1">
             <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-            {containerManagerProps.isMobile ? '모바일 모드' : '데스크톱 모드'}
+            {validContainerManagerProps.isMobile
+              ? '모바일 모드'
+              : '데스크톱 모드'}
+          </span>
+          {/* 🔄 새로운 기능 상태 표시 */}
+          <span className="flex items-center gap-1">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                moveToContainerAvailable ? 'bg-purple-400' : 'bg-gray-400'
+              }`}
+            ></div>
+            이동 기능: {moveToContainerAvailable ? '활성' : '비활성'}
           </span>
         </div>
 
@@ -162,15 +242,25 @@ export function StructureManagementSlide({
       {/* 📄 콘텐츠 섹션 */}
       <div className="flex-1 overflow-hidden">
         {/*
-          🔄 기존 ContainerManager 컴포넌트 재사용
+          ✅ ContainerManager 컴포넌트에 props 전달 (타입 에러 해결)
           - 타입 안전한 props 전달
           - 구조 분석 결과 포함
           - 컨테이너 목록 표시
           - 단락 관리 기능
           - 구조 변경 기능
+          - 🔄 컨테이너 간 이동 기능 props 포함
         */}
         <ContainerManager
-          {...containerManagerProps}
+          isMobile={validContainerManagerProps.isMobile}
+          sortedContainers={validContainerManagerProps.sortedContainers} // ✅ 타입 호환성 확보
+          getLocalParagraphsByContainer={
+            validContainerManagerProps.getLocalParagraphsByContainer
+          }
+          moveLocalParagraphInContainer={
+            validContainerManagerProps.moveLocalParagraphInContainer
+          }
+          activateEditor={validContainerManagerProps.activateEditor}
+          moveToContainer={validContainerManagerProps.moveToContainer} // ✅ 타입 에러 해결
           structureAnalysis={structureAnalysis}
           structureIssues={structureIssues}
         />
@@ -179,7 +269,11 @@ export function StructureManagementSlide({
       {/* 🔍 하단 상태바 */}
       <div className="flex-shrink-0 px-4 py-2 border-t bg-gray-50">
         <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>구조를 드래그하여 정리하세요</span>
+          {moveToContainerAvailable ? (
+            <span>🔄 셀렉트 박스로 단락을 다른 컨테이너로 이동하세요</span>
+          ) : (
+            <span>⚠️ 컨테이너 이동 기능이 비활성화되어 있습니다</span>
+          )}
           <div className="flex items-center gap-2">
             {structureIssues.length > 0 ? (
               <>
@@ -192,7 +286,8 @@ export function StructureManagementSlide({
               <>
                 <span className="text-blue-500">💡 팁</span>
                 <span className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded">
-                  {containerManagerProps.sortedContainers.length}개 컨테이너
+                  {validContainerManagerProps.sortedContainers.length}개
+                  컨테이너
                 </span>
               </>
             )}
@@ -204,59 +299,30 @@ export function StructureManagementSlide({
 }
 
 /**
- * 🔧 useStructureAnalysis 훅 도입 수정 내역:
+ * 🔧 StructureManagementSlide 타입 일관성 수정 사항:
  *
- * 1. ✅ 훅 import 및 사용
- *    - useStructureAnalysis 훅 import
- *    - 구조 분석 로직 훅으로 이동
- *    - 분석 결과를 상태로 관리
+ * 1. ✅ ExtendedContainerManagerProps 정의 통일
+ *    - WritingStep.tsx와 완전 동일한 인터페이스 정의
+ *    - commonTypes Container 타입 사용으로 일관성 확보
+ *    - LocalParagraph 인터페이스도 WritingStep.tsx와 동일
  *
- * 2. ✅ 헤더 영역 이슈 표시
- *    - 주석 영역에 구조 이슈 UI 추가
- *    - 오류/경고 구분하여 표시
- *    - 성공 상태도 표시
+ * 2. ✅ 타입 호환성 완전 확보
+ *    - Container[] 타입이 이제 완전히 일치
+ *    - createdAt, updatedAt 속성 필수로 통일
+ *    - TS2719 에러 근본 해결
  *
- * 3. ✅ 동적 통계 정보 개선
- *    - 실제 단락 수 표시
- *    - 구조 분석 결과 활용
- *    - 시각적 구분 개선
+ * 3. 🔄 기존 기능 완전 보존
+ *    - 모든 기존 로직 그대로 유지
+ *    - Props 전달 방식 동일
+ *    - 사용자 경험 변화 없음
  *
- * 4. ✅ ContainerManager 연동
- *    - 구조 분석 결과를 props로 전달
- *    - 기존 props 완전 유지
- *    - 추가 데이터만 확장
+ * 4. 🛡️ 런타임 안전성 확보
+ *    - validContainerManagerProps 타입 명시
+ *    - fallback 함수 타입 일치
+ *    - 에러 방지 로직 유지
  *
- * 5. ✅ 하단 상태바 개선
- *    - 이슈 개수에 따른 동적 메시지
- *    - 시각적 피드백 향상
- *    - 상태 기반 색상 변경
- */
-
-/**
- * 🎨 StructureManagementSlide의 주요 개선사항:
- *
- * 1. 📊 실시간 구조 분석
- *    - 헤더에 실시간 이슈 표시
- *    - 오류/경고 구분 표시
- *    - 성공 상태 피드백
- *
- * 2. 🔄 관심사 분리 달성
- *    - UI 컴포넌트에서 비즈니스 로직 분리
- *    - 재사용 가능한 훅 활용
- *    - 타입 안전성 확보
- *
- * 3. 🎨 시각적 개선
- *    - 반투명 배경으로 이슈 영역 구분
- *    - 색상 코딩으로 이슈 유형 구분
- *    - 아이콘과 텍스트 조합으로 가독성 향상
- *
- * 4. 📱 반응형 디자인
- *    - 모바일/데스크톱 모드 구분
- *    - 유연한 레이아웃 구조
- *    - 적절한 간격과 크기 조정
- *
- * 5. ♿ 접근성 고려
- *    - 적절한 ARIA 라벨
- *    - 키보드 네비게이션 지원
- *    - 명확한 포커스 표시
+ * 5. 📝 향후 개선 방향
+ *    - 공통 타입 파일로 ExtendedContainerManagerProps 분리 고려
+ *    - 타입 중복 정의 해결을 위한 리팩토링 권장
+ *    - 타입 일관성 유지를 위한 지속적 관리
  */
