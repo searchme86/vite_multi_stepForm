@@ -1,34 +1,22 @@
-// bridges/parts/MarkdownResultToast.tsx
+// bridges/editorMultiStepBridge/parts/MarkdownResultToast.tsx
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useBridgeUI } from '../hooks/useBridgeUI';
-import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeTypes';
+import { useBridgeUIComponents } from '../hooks/useBridgeUIComponents';
 
-// 토스트 알림의 타입을 정의하는 인터페이스
-// 다양한 상황에 맞는 메시지와 스타일을 제공
+import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
+
+// 🔧 토스트 메시지 인터페이스
 interface ToastMessage {
-  // 고유 식별자 - 중복 토스트 방지 및 추적용
   readonly id: string;
-
-  // 토스트 타입 - 시각적 스타일과 아이콘 결정
   readonly type: 'success' | 'error' | 'warning' | 'info';
-
-  // 사용자에게 보여질 주요 메시지
   readonly title: string;
-
-  // 추가 설명이나 세부 정보 (선택사항)
   readonly description?: string;
-
-  // 자동 닫힘 시간 (밀리초, 0이면 수동 닫기만 가능)
   readonly duration?: number;
-
-  // 토스트 생성 시각 - 순서 정렬 및 만료 계산용
   readonly timestamp: number;
 }
 
-// 토스트 컴포넌트의 프로퍼티 인터페이스
+// 🔧 토스트 컴포넌트 Props 인터페이스
 interface MarkdownResultToastProps {
-  // 토스트가 표시될 화면 위치
   readonly position?:
     | 'top-right'
     | 'top-left'
@@ -36,47 +24,16 @@ interface MarkdownResultToastProps {
     | 'bottom-left'
     | 'top-center'
     | 'bottom-center';
-
-  // 기본 자동 닫힘 시간 (밀리초)
   readonly defaultDuration?: number;
-
-  // 최대 동시 표시 가능한 토스트 개수
   readonly maxToasts?: number;
-
-  // 토스트 간의 수직 간격 (px)
   readonly spacing?: number;
-
-  // 사용자 정의 브릿지 설정
   readonly bridgeConfig?: Partial<BridgeSystemConfiguration>;
-
-  // 토스트 클릭 시 호출될 콜백 함수
   readonly onToastClick?: (toast: ToastMessage) => void;
-
-  // 토스트 닫힘 시 호출될 콜백 함수
   readonly onToastClose?: (toast: ToastMessage) => void;
-
-  // 커스텀 CSS 클래스
   readonly className?: string;
-
-  // 애니메이션 비활성화 여부
   readonly disableAnimation?: boolean;
 }
 
-/**
- * 마크다운 전송 결과를 사용자에게 알리는 토스트 컴포넌트
- * 브릿지 시스템의 전송 결과를 실시간으로 감지하여 적절한 알림 표시
- *
- * 주요 기능:
- * 1. 전송 성공/실패 자동 감지
- * 2. 타입별 차별화된 시각적 피드백
- * 3. 자동 닫힘 및 수동 닫기 지원
- * 4. 다중 토스트 관리 (순서, 제한)
- * 5. 웹접근성 완벽 지원
- * 6. 애니메이션 및 반응형 디자인
- *
- * @param props - 토스트 설정 옵션들
- * @returns JSX 엘리먼트
- */
 export function MarkdownResultToast({
   position = 'top-right',
   defaultDuration = 5000,
@@ -90,34 +47,36 @@ export function MarkdownResultToast({
 }: MarkdownResultToastProps): React.ReactElement {
   console.log('🍞 [RESULT_TOAST] 토스트 컴포넌트 초기화');
 
-  // 브릿지 UI 훅 연결 - 전송 결과 실시간 감지
+  // 🔧 Bridge UI Hook 사용 - 양방향 기능 포함
   const {
     lastTransferResult: mostRecentTransferResult,
     transferErrors: accumulatedTransferErrors,
     transferWarnings: accumulatedTransferWarnings,
     isTransferring: isCurrentlyTransferring,
     transferAttemptCount: totalTransferAttempts,
-  } = useBridgeUI(bridgeConfig);
+    lastReverseTransferResult: mostRecentReverseResult,
+    isReverseTransferring: isCurrentlyReverseTransferring,
+    lastBidirectionalSyncResult: mostRecentSyncResult,
+    isBidirectionalSyncing: isCurrentlyBidirectionalSyncing,
+  } = useBridgeUIComponents(bridgeConfig);
 
-  // 현재 활성화된 토스트들의 상태 관리
   const [activeToasts, setActiveToasts] = useState<ToastMessage[]>([]);
 
-  // 마지막으로 처리한 전송 시도 횟수 추적 (중복 알림 방지)
   const lastProcessedTransferCount = useRef<number>(0);
+  const lastProcessedReverseResult = useRef<any>(null);
+  const lastProcessedSyncResult = useRef<any>(null);
 
-  // 토스트 자동 닫기 타이머들 관리
-  const toastTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // 🔧 브라우저 환경용 타이머 타입 - NodeJS.Timeout 대신 number 사용
+  const toastTimers = useRef<Map<string, number>>(new Map());
 
-  // 고유한 토스트 ID 생성 함수
-  // 타임스탬프와 랜덤 문자열을 조합하여 충돌 방지
+  // 🔧 고유 토스트 ID 생성
   const generateUniqueToastId = useCallback((): string => {
-    const timestamp = Date.now().toString(36); // 36진수로 압축된 타임스탬프
-    const randomString = Math.random().toString(36).substring(2, 8); // 6자리 랜덤 문자열
+    const timestamp = Date.now().toString(36);
+    const randomString = Math.random().toString(36).substring(2, 8);
     return `toast_${timestamp}_${randomString}`;
   }, []);
 
-  // 새로운 토스트를 추가하는 함수
-  // 최대 개수 제한과 중복 방지 로직 포함
+  // 🔧 새 토스트 추가
   const addNewToast = useCallback(
     (newToast: Omit<ToastMessage, 'id' | 'timestamp'>): void => {
       console.log(
@@ -133,7 +92,6 @@ export function MarkdownResultToast({
       };
 
       setActiveToasts((previousToasts) => {
-        // 동일한 타입과 제목의 토스트가 이미 있는지 확인 (중복 방지)
         const isDuplicateToast = previousToasts.some(
           (existingToast) =>
             existingToast.type === completeToast.type &&
@@ -145,19 +103,17 @@ export function MarkdownResultToast({
           return previousToasts;
         }
 
-        // 최대 개수 초과 시 가장 오래된 토스트 제거
         let updatedToasts = [...previousToasts, completeToast];
         if (updatedToasts.length > maxToasts) {
-          const removedToast = updatedToasts.shift(); // 첫 번째(가장 오래된) 토스트 제거
+          const removedToast = updatedToasts.shift();
           if (removedToast) {
             console.log(
               '🍞 [RESULT_TOAST] 최대 개수 초과로 오래된 토스트 제거:',
               removedToast.id
             );
-            // 제거된 토스트의 타이머도 정리
             const existingTimer = toastTimers.current.get(removedToast.id);
             if (existingTimer) {
-              clearTimeout(existingTimer);
+              window.clearTimeout(existingTimer);
               toastTimers.current.delete(removedToast.id);
             }
           }
@@ -166,10 +122,10 @@ export function MarkdownResultToast({
         return updatedToasts;
       });
 
-      // 자동 닫기 타이머 설정 (duration이 0보다 클 때만)
       const toastDuration = newToast.duration || defaultDuration;
       if (toastDuration > 0) {
-        const timerId = setTimeout(() => {
+        // 🔧 window.setTimeout 사용으로 브라우저 환경 명시
+        const timerId = window.setTimeout(() => {
           console.log(
             '🍞 [RESULT_TOAST] 자동 닫기 타이머 실행:',
             completeToast.id
@@ -183,7 +139,7 @@ export function MarkdownResultToast({
     [generateUniqueToastId, maxToasts, defaultDuration]
   );
 
-  // 특정 ID의 토스트를 제거하는 함수
+  // 🔧 토스트 제거
   const removeToastById = useCallback(
     (toastIdToRemove: string): void => {
       console.log('🍞 [RESULT_TOAST] 토스트 제거:', toastIdToRemove);
@@ -193,7 +149,6 @@ export function MarkdownResultToast({
           (toast) => toast.id === toastIdToRemove
         );
 
-        // onToastClose 콜백 호출
         if (toastToRemove && onToastClose) {
           onToastClose(toastToRemove);
         }
@@ -201,36 +156,33 @@ export function MarkdownResultToast({
         return previousToasts.filter((toast) => toast.id !== toastIdToRemove);
       });
 
-      // 해당 토스트의 타이머 정리
       const existingTimer = toastTimers.current.get(toastIdToRemove);
       if (existingTimer) {
-        clearTimeout(existingTimer);
+        window.clearTimeout(existingTimer);
         toastTimers.current.delete(toastIdToRemove);
       }
     },
     [onToastClose]
   );
 
-  // 모든 토스트를 제거하는 함수
+  // 🔧 모든 토스트 제거
   const clearAllToasts = useCallback((): void => {
     console.log('🍞 [RESULT_TOAST] 모든 토스트 제거');
 
-    // 모든 타이머 정리
-    toastTimers.current.forEach((timer) => clearTimeout(timer));
+    toastTimers.current.forEach((timer) => window.clearTimeout(timer));
     toastTimers.current.clear();
 
     setActiveToasts([]);
   }, []);
 
-  // 브릿지 전송 결과 변화 감지 및 토스트 생성
+  // 🔧 Editor → MultiStep 전송 결과 감지 (기존 기능)
   useEffect(() => {
-    // 전송 시도 횟수가 변경되었고, 전송이 완료된 상태일 때만 처리
     if (
       totalTransferAttempts > lastProcessedTransferCount.current &&
       !isCurrentlyTransferring &&
       mostRecentTransferResult
     ) {
-      console.log('🍞 [RESULT_TOAST] 전송 결과 감지:', {
+      console.log('🍞 [RESULT_TOAST] Editor → MultiStep 전송 결과 감지:', {
         success: mostRecentTransferResult.operationSuccess,
         attempts: totalTransferAttempts,
         errors: accumulatedTransferErrors.length,
@@ -245,7 +197,6 @@ export function MarkdownResultToast({
       } = mostRecentTransferResult;
 
       if (operationSuccess) {
-        // 성공 토스트 생성
         const successMessage = transferredData
           ? `${transferredData.transformedContent.length.toLocaleString()}자의 마크다운이 생성되었습니다`
           : '마크다운 생성이 완료되었습니다';
@@ -259,7 +210,6 @@ export function MarkdownResultToast({
           duration: defaultDuration,
         });
       } else {
-        // 실패 토스트 생성
         const primaryError =
           operationErrors.length > 0
             ? operationErrors[0].errorMessage
@@ -274,11 +224,10 @@ export function MarkdownResultToast({
           type: 'error',
           title: '마크다운 생성 실패',
           description: errorDescription,
-          duration: defaultDuration * 1.5, // 오류는 더 오래 표시
+          duration: defaultDuration * 1.5,
         });
       }
 
-      // 경고가 있는 경우 별도 토스트 표시
       if (accumulatedTransferWarnings.length > 0) {
         const warningCount = accumulatedTransferWarnings.length;
         const warningDescription =
@@ -294,7 +243,6 @@ export function MarkdownResultToast({
         });
       }
 
-      // 처리 완료된 전송 횟수 업데이트
       lastProcessedTransferCount.current = totalTransferAttempts;
     }
   }, [
@@ -307,16 +255,114 @@ export function MarkdownResultToast({
     defaultDuration,
   ]);
 
-  // 컴포넌트 언마운트 시 모든 타이머 정리
+  // 🆕 MultiStep → Editor 역방향 전송 결과 감지 (새로운 기능)
+  useEffect(() => {
+    if (
+      mostRecentReverseResult &&
+      mostRecentReverseResult !== lastProcessedReverseResult.current &&
+      !isCurrentlyReverseTransferring
+    ) {
+      console.log('🍞 [RESULT_TOAST] MultiStep → Editor 역방향 결과 감지:', {
+        success: mostRecentReverseResult.transformationSuccess,
+      });
+
+      if (mostRecentReverseResult.transformationSuccess) {
+        addNewToast({
+          type: 'success',
+          title: '역방향 동기화 성공',
+          description: `Editor에 ${mostRecentReverseResult.editorContent.length}자의 콘텐츠가 동기화되었습니다`,
+          duration: defaultDuration,
+        });
+      } else {
+        const errorMessage =
+          mostRecentReverseResult.transformationErrors.join(', ');
+        addNewToast({
+          type: 'error',
+          title: '역방향 동기화 실패',
+          description: errorMessage || '알 수 없는 오류가 발생했습니다',
+          duration: defaultDuration * 1.5,
+        });
+      }
+
+      lastProcessedReverseResult.current = mostRecentReverseResult;
+    }
+  }, [
+    mostRecentReverseResult,
+    isCurrentlyReverseTransferring,
+    addNewToast,
+    defaultDuration,
+  ]);
+
+  // 🆕 양방향 동기화 결과 감지 (새로운 기능)
+  useEffect(() => {
+    if (
+      mostRecentSyncResult &&
+      mostRecentSyncResult !== lastProcessedSyncResult.current &&
+      !isCurrentlyBidirectionalSyncing
+    ) {
+      console.log('🍞 [RESULT_TOAST] 양방향 동기화 결과 감지:', {
+        overallSuccess: mostRecentSyncResult.overallSuccess,
+        editorToMultiStep: mostRecentSyncResult.editorToMultiStepSuccess,
+        multiStepToEditor: mostRecentSyncResult.multiStepToEditorSuccess,
+      });
+
+      if (mostRecentSyncResult.overallSuccess) {
+        addNewToast({
+          type: 'success',
+          title: '양방향 동기화 완료',
+          description: `Editor ↔ MultiStep 양방향 동기화가 성공적으로 완료되었습니다 (${mostRecentSyncResult.syncDuration.toFixed(
+            1
+          )}ms)`,
+          duration: defaultDuration,
+        });
+      } else {
+        const {
+          editorToMultiStepSuccess,
+          multiStepToEditorSuccess,
+          syncErrors,
+        } = mostRecentSyncResult;
+
+        let statusMessage = '';
+        if (!editorToMultiStepSuccess && !multiStepToEditorSuccess) {
+          statusMessage = '양방향 동기화 모두 실패';
+        } else if (!editorToMultiStepSuccess) {
+          statusMessage = 'Editor → MultiStep 동기화 실패';
+        } else if (!multiStepToEditorSuccess) {
+          statusMessage = 'MultiStep → Editor 동기화 실패';
+        }
+
+        const errorDescription =
+          syncErrors.length > 0
+            ? `${statusMessage}: ${syncErrors[0]}`
+            : statusMessage;
+
+        addNewToast({
+          type: 'warning',
+          title: '양방향 동기화 부분 실패',
+          description: errorDescription,
+          duration: defaultDuration * 1.5,
+        });
+      }
+
+      lastProcessedSyncResult.current = mostRecentSyncResult;
+    }
+  }, [
+    mostRecentSyncResult,
+    isCurrentlyBidirectionalSyncing,
+    addNewToast,
+    defaultDuration,
+  ]);
+
+  // 🔧 컴포넌트 정리 시 타이머 정리
   useEffect(() => {
     return () => {
       console.log('🍞 [RESULT_TOAST] 컴포넌트 정리 - 모든 타이머 취소');
-      toastTimers.current.forEach((timer) => clearTimeout(timer));
+      toastTimers.current.forEach((timer) => window.clearTimeout(timer));
       toastTimers.current.clear();
     };
   }, []);
 
-  // 토스트 위치에 따른 CSS 클래스 계산
+  // 🔧 위치 클래스 계산
   const getPositionClasses = useCallback((toastPosition: string): string => {
     const positionClassMap: Record<string, string> = {
       'top-right': 'top-4 right-4',
@@ -329,7 +375,7 @@ export function MarkdownResultToast({
     return positionClassMap[toastPosition] || positionClassMap['top-right'];
   }, []);
 
-  // 토스트 타입에 따른 스타일 클래스 계산
+  // 🔧 토스트 타입별 스타일 계산
   const getToastTypeClasses = useCallback(
     (
       toastType: ToastMessage['type']
@@ -422,7 +468,7 @@ export function MarkdownResultToast({
     []
   );
 
-  // 토스트 클릭 핸들러
+  // 🔧 토스트 클릭 핸들러
   const handleToastClick = useCallback(
     (toast: ToastMessage): void => {
       console.log('🍞 [RESULT_TOAST] 토스트 클릭:', toast.id);
@@ -433,7 +479,7 @@ export function MarkdownResultToast({
     [onToastClick]
   );
 
-  // 토스트가 없으면 렌더링하지 않음
+  // 🔧 토스트가 없으면 렌더링하지 않음
   if (activeToasts.length === 0) {
     return <></>;
   }
@@ -458,7 +504,7 @@ export function MarkdownResultToast({
           const { containerClass, iconClass, icon } = getToastTypeClasses(
             toast.type
           );
-          const translateY = index * (spacing + 4); // 토스트 간 수직 간격
+          const translateY = index * (spacing + 4);
 
           return (
             <div
@@ -495,10 +541,8 @@ export function MarkdownResultToast({
               }}
             >
               <div className="flex items-start space-x-3">
-                {/* 아이콘 */}
                 <div className={`flex-shrink-0 ${iconClass}`}>{icon}</div>
 
-                {/* 콘텐츠 */}
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-semibold leading-5">
                     {toast.title}
@@ -510,12 +554,11 @@ export function MarkdownResultToast({
                   )}
                 </div>
 
-                {/* 닫기 버튼 */}
                 <button
                   type="button"
                   className="flex-shrink-0 p-1 transition-colors rounded-md hover:bg-black hover:bg-opacity-10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-current"
                   onClick={(e) => {
-                    e.stopPropagation(); // 토스트 클릭 이벤트와 분리
+                    e.stopPropagation();
                     removeToastById(toast.id);
                   }}
                   aria-label={`${toast.title} 알림 닫기`}
@@ -540,7 +583,6 @@ export function MarkdownResultToast({
         })}
       </div>
 
-      {/* 다중 토스트가 있을 때 전체 닫기 버튼 (3개 이상일 때만 표시) */}
       {activeToasts.length >= 3 && (
         <div className="flex justify-end mt-2">
           <button
@@ -557,13 +599,12 @@ export function MarkdownResultToast({
   );
 }
 
-// 토스트 컴포넌트의 편의 기능들을 제공하는 유틸리티 훅
+// 🔧 마크다운 토스트 훅
 export const useMarkdownToast = (
   defaultConfig?: Partial<MarkdownResultToastProps>
 ) => {
   console.log('🍞 [TOAST_HOOK] 마크다운 토스트 훅 초기화');
 
-  // 토스트 컴포넌트 렌더링 함수
   const renderToast = useCallback(
     (customConfig?: Partial<MarkdownResultToastProps>) => {
       const finalConfig = { ...defaultConfig, ...customConfig };
@@ -573,10 +614,7 @@ export const useMarkdownToast = (
   );
 
   return {
-    // 토스트 컴포넌트 렌더링
     ToastComponent: renderToast,
-
-    // 직접 사용할 수 있는 토스트 컴포넌트
     MarkdownToast: MarkdownResultToast,
   };
 };

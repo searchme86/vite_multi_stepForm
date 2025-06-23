@@ -1,60 +1,29 @@
 // bridges/parts/QuickStatusBar.tsx
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { useBridgeUI } from '../hooks/useBridgeUI';
-import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeTypes';
+import { useBridgeUIComponents } from '../hooks/useBridgeUIComponents';
+import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 
-// 빠른 상태바의 위치를 정의하는 타입
-// 다양한 화면 크기와 사용자 선호도에 맞춰 유연한 배치 제공
 type QuickStatusBarPosition = 'top' | 'bottom';
 
-// 빠른 상태바의 시각적 변형을 정의하는 타입
-// 사용 맥락에 따라 적절한 스타일 선택 가능
 type QuickStatusBarVariant = 'minimal' | 'standard' | 'tab-bar' | 'floating';
 
-// 빠른 상태바 컴포넌트의 프로퍼티 인터페이스
 interface QuickStatusBarProps {
-  // 상태바가 표시될 화면 위치
   readonly position?: QuickStatusBarPosition;
-
-  // 상태바의 시각적 스타일 변형
   readonly variant?: QuickStatusBarVariant;
-
-  // 진행률 바 표시 여부
   readonly showProgressBar?: boolean;
-
-  // 빠른 액션 버튼들 표시 여부
   readonly showQuickActions?: boolean;
-
-  // 통계 정보 표시 여부 (컨테이너/문단 수)
   readonly showStatistics?: boolean;
-
-  // 상태바 자동 숨김 여부 (일정 시간 후)
   readonly autoHide?: boolean;
-
-  // 자동 숨김 지연 시간 (밀리초)
   readonly autoHideDelay?: number;
-
-  // 상태바 접기/펼치기 가능 여부
   readonly collapsible?: boolean;
-
-  // 사용자 정의 브릿지 설정
   readonly bridgeConfig?: Partial<BridgeSystemConfiguration>;
-
-  // 빠른 전송 버튼 클릭 시 호출될 콜백
   readonly onQuickTransfer?: () => void;
-
-  // 상세 정보 보기 버튼 클릭 시 호출될 콜백
   readonly onShowDetails?: () => void;
-
-  // 상태바 클릭 시 호출될 콜백
   readonly onClick?: () => void;
-
-  // 커스텀 CSS 클래스
   readonly className?: string;
 }
 
-// 기본 검증 상태 객체 - 안전한 fallback 제공
 const createDefaultValidationStatus = () => ({
   containerCount: 0,
   paragraphCount: 0,
@@ -66,7 +35,6 @@ const createDefaultValidationStatus = () => ({
   isReadyForTransfer: false,
 });
 
-// 검증 상태 타입 가드 함수 - 런타임 안전성 보장
 const isValidValidationStatus = (status: unknown): boolean => {
   if (!status || typeof status !== 'object') {
     return false;
@@ -86,21 +54,6 @@ const isValidValidationStatus = (status: unknown): boolean => {
   return requiredProperties.every((prop) => prop in status);
 };
 
-/**
- * 빠른 상태 확인 바 컴포넌트
- * 브릿지 전송 상태를 간결하게 표시하고 빠른 액션을 제공하는 고정 UI
- *
- * 주요 기능:
- * 1. 전송 가능 여부 빠른 확인
- * 2. 진행률 시각화
- * 3. 원클릭 전송 및 상세 보기
- * 4. 모바일/데스크톱 반응형 디자인
- * 5. 최소한의 공간 사용으로 방해받지 않는 UX
- * 6. 웹접근성 완벽 지원
- *
- * @param props - 상태바 설정 옵션들
- * @returns JSX 엘리먼트
- */
 export function QuickStatusBar({
   position = 'top',
   variant = 'standard',
@@ -123,15 +76,13 @@ export function QuickStatusBar({
     showQuickActions,
   });
 
-  // 브릿지 UI 훅 연결 - 실시간 상태 정보 가져오기
   const {
     canTransfer: isTransferPossible,
     isTransferring: isCurrentlyTransferring,
     validationStatus: rawValidationStatus,
     executeManualTransfer: performManualTransfer,
-  } = useBridgeUI(bridgeConfig);
+  } = useBridgeUIComponents(bridgeConfig);
 
-  // 🚨 안전한 검증 상태 처리 - fallback과 타입 가드 적용
   const safeValidationStatus = useMemo(() => {
     console.log('🔍 [QUICK_STATUS] 검증 상태 안전성 확인:', {
       rawStatus: rawValidationStatus,
@@ -146,13 +97,10 @@ export function QuickStatusBar({
     return rawValidationStatus;
   }, [rawValidationStatus]);
 
-  // 상태바 접기/펼치기 상태 관리
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
-  // 자동 숨김 상태 관리
   const [isAutoHidden, setIsAutoHidden] = useState<boolean>(false);
 
-  // 🔍 안전한 구조분해할당 - fallback 객체와 함께 사용
   const {
     containerCount = 0,
     paragraphCount = 0,
@@ -163,7 +111,6 @@ export function QuickStatusBar({
     isReadyForTransfer = false,
   } = safeValidationStatus || createDefaultValidationStatus();
 
-  // 🔍 디버깅을 위한 상태 로깅
   console.log('📊 [QUICK_STATUS] 현재 검증 상태:', {
     containerCount,
     paragraphCount,
@@ -174,9 +121,7 @@ export function QuickStatusBar({
     isReadyForTransfer,
   });
 
-  // 전체 상태 요약 계산
   const statusSummary = useMemo(() => {
-    // 오류가 있는 경우
     if (validationErrors.length > 0) {
       return {
         status: 'error',
@@ -189,7 +134,6 @@ export function QuickStatusBar({
       };
     }
 
-    // 전송 중인 경우
     if (isCurrentlyTransferring) {
       return {
         status: 'transferring',
@@ -202,7 +146,6 @@ export function QuickStatusBar({
       };
     }
 
-    // 전송 가능한 경우
     if (isTransferPossible && isReadyForTransfer) {
       return {
         status: 'ready',
@@ -215,7 +158,6 @@ export function QuickStatusBar({
       };
     }
 
-    // 경고가 있는 경우
     if (validationWarnings.length > 0) {
       return {
         status: 'warning',
@@ -228,7 +170,6 @@ export function QuickStatusBar({
       };
     }
 
-    // 기본 대기 상태
     return {
       status: 'waiting',
       color: 'gray',
@@ -246,7 +187,6 @@ export function QuickStatusBar({
     validationWarnings.length,
   ]);
 
-  // 진행률 계산 (할당된 문단 비율) - 안전한 계산
   const progressPercentage = useMemo(() => {
     if (paragraphCount === 0) {
       console.log('📊 [QUICK_STATUS] 문단 수가 0, 진행률 0%');
@@ -263,7 +203,6 @@ export function QuickStatusBar({
     return percentage;
   }, [assignedParagraphCount, paragraphCount]);
 
-  // 빠른 전송 실행 핸들러
   const handleQuickTransfer = useCallback(async (): Promise<void> => {
     console.log('⚡ [QUICK_STATUS] 빠른 전송 실행');
 
@@ -288,7 +227,6 @@ export function QuickStatusBar({
     performManualTransfer,
   ]);
 
-  // 상세 정보 보기 핸들러
   const handleShowDetails = useCallback((): void => {
     console.log('⚡ [QUICK_STATUS] 상세 정보 보기');
     if (onShowDetails) {
@@ -296,13 +234,11 @@ export function QuickStatusBar({
     }
   }, [onShowDetails]);
 
-  // 상태바 토글 핸들러
   const handleToggleCollapse = useCallback((): void => {
     console.log('⚡ [QUICK_STATUS] 상태바 토글');
     setIsCollapsed((prev) => !prev);
   }, []);
 
-  // 상태바 클릭 핸들러
   const handleStatusBarClick = useCallback((): void => {
     console.log('⚡ [QUICK_STATUS] 상태바 클릭');
     if (onClick) {
@@ -312,7 +248,6 @@ export function QuickStatusBar({
     }
   }, [onClick, onShowDetails, handleShowDetails]);
 
-  // 위치에 따른 CSS 클래스 계산
   const getPositionClasses = useCallback(
     (barPosition: QuickStatusBarPosition): string => {
       const positionClassMap: Record<QuickStatusBarPosition, string> = {
@@ -324,7 +259,6 @@ export function QuickStatusBar({
     []
   );
 
-  // 변형에 따른 CSS 클래스 계산
   const getVariantClasses = useCallback(
     (barVariant: QuickStatusBarVariant): string => {
       const variantClassMap: Record<QuickStatusBarVariant, string> = {
@@ -339,7 +273,6 @@ export function QuickStatusBar({
     []
   );
 
-  // 상태 아이콘 컴포넌트
   const StatusIcon = ({
     iconType,
     className: iconClassName,
@@ -441,7 +374,6 @@ export function QuickStatusBar({
     }
   };
 
-  // 자동 숨김 처리
   React.useEffect(() => {
     if (autoHide && autoHideDelay > 0) {
       const timer = setTimeout(() => {
@@ -452,7 +384,6 @@ export function QuickStatusBar({
     }
   }, [autoHide, autoHideDelay]);
 
-  // 자동 숨김 상태거나 접힌 상태면 최소화된 UI 표시
   if (isAutoHidden || isCollapsed) {
     return (
       <div
@@ -509,9 +440,7 @@ export function QuickStatusBar({
       aria-live="polite"
     >
       <div className="flex items-center justify-between h-full px-4">
-        {/* 왼쪽: 상태 정보 */}
         <div className="flex items-center space-x-3">
-          {/* 상태 아이콘 및 라벨 */}
           <div className="flex items-center space-x-2">
             <StatusIcon
               iconType={statusSummary.icon}
@@ -522,7 +451,6 @@ export function QuickStatusBar({
             </span>
           </div>
 
-          {/* 통계 정보 (컴팩트 모드가 아닐 때만) */}
           {showStatistics && variant !== 'minimal' && (
             <div className="flex items-center space-x-2 text-xs text-gray-600">
               <span className="px-2 py-1 bg-gray-100 rounded">
@@ -534,7 +462,6 @@ export function QuickStatusBar({
             </div>
           )}
 
-          {/* 진행률 바 (표준 모드 이상일 때만) */}
           {showProgressBar && variant !== 'minimal' && paragraphCount > 0 && (
             <div className="flex items-center space-x-2">
               <div className="w-16 h-2 overflow-hidden bg-gray-200 rounded-full">
@@ -550,10 +477,8 @@ export function QuickStatusBar({
           )}
         </div>
 
-        {/* 오른쪽: 액션 버튼들 */}
         {showQuickActions && (
           <div className="flex items-center space-x-2">
-            {/* 상세 정보 버튼 */}
             {onShowDetails && (
               <button
                 type="button"
@@ -580,7 +505,6 @@ export function QuickStatusBar({
               </button>
             )}
 
-            {/* 빠른 전송 버튼 */}
             <button
               type="button"
               disabled={
@@ -610,7 +534,6 @@ export function QuickStatusBar({
               {isCurrentlyTransferring ? '전송중...' : '전송'}
             </button>
 
-            {/* 접기 버튼 (접기 가능할 때만) */}
             {collapsible && (
               <button
                 type="button"
@@ -643,26 +566,21 @@ export function QuickStatusBar({
   );
 }
 
-// 빠른 상태바 컴포넌트 사용을 위한 편의 훅
 export const useQuickStatusBar = (
   defaultConfig?: Partial<QuickStatusBarProps>
 ) => {
   console.log('⚡ [QUICK_STATUS_HOOK] 빠른 상태바 훅 초기화');
 
-  // 상태바 표시/숨김 상태 관리
   const [isVisible, setIsVisible] = React.useState<boolean>(true);
 
-  // 상태바 설정 관리
   const [config, setConfig] = React.useState<Partial<QuickStatusBarProps>>(
     defaultConfig || {}
   );
 
-  // 상태바 표시/숨김 토글
   const toggleVisibility = React.useCallback(() => {
     setIsVisible((prev) => !prev);
   }, []);
 
-  // 상태바 설정 업데이트
   const updateConfig = React.useCallback(
     (newConfig: Partial<QuickStatusBarProps>) => {
       setConfig((prev) => ({ ...prev, ...newConfig }));
@@ -670,7 +588,6 @@ export const useQuickStatusBar = (
     []
   );
 
-  // 상태바 컴포넌트 렌더링 함수
   const renderStatusBar = React.useCallback(
     (customConfig?: Partial<QuickStatusBarProps>) => {
       if (!isVisible) return null;
@@ -682,17 +599,12 @@ export const useQuickStatusBar = (
   );
 
   return {
-    // 상태 정보
     isVisible,
     config,
-
-    // 액션 함수들
     toggleVisibility,
     updateConfig,
     show: () => setIsVisible(true),
     hide: () => setIsVisible(false),
-
-    // 컴포넌트 렌더링
     StatusBarComponent: renderStatusBar,
     QuickStatusBar: QuickStatusBar,
   };

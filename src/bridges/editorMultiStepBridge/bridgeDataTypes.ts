@@ -1,9 +1,8 @@
-// bridges/editorMultiStepBridge/bridgeTypes.ts
+// bridges/editorMultiStepBridge/bridgeDataTypes.ts
 
 import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import { FormValues } from '../../components/multiStepForm/types/formTypes';
 
-// 에디터 상태 스냅샷
 export interface EditorStateSnapshotForBridge {
   readonly editorContainers: Container[];
   readonly editorParagraphs: ParagraphBlock[];
@@ -15,7 +14,6 @@ export interface EditorStateSnapshotForBridge {
   readonly extractedTimestamp: number;
 }
 
-// 멀티스텝 폼 스냅샷
 export interface MultiStepFormSnapshotForBridge {
   readonly formCurrentStep: number;
   readonly formValues: FormValues;
@@ -26,7 +24,6 @@ export interface MultiStepFormSnapshotForBridge {
   readonly snapshotTimestamp: number;
 }
 
-// 에디터 → 멀티스텝 변환 결과
 export interface EditorToMultiStepDataTransformationResult {
   readonly transformedContent: string;
   readonly transformedIsCompleted: boolean;
@@ -35,7 +32,6 @@ export interface EditorToMultiStepDataTransformationResult {
   readonly transformationErrors: string[];
 }
 
-// 에디터 콘텐츠 메타데이터
 export interface EditorContentMetadataForBridge {
   readonly containerCount: number;
   readonly paragraphCount: number;
@@ -45,7 +41,6 @@ export interface EditorContentMetadataForBridge {
   readonly lastModified: Date;
 }
 
-// 브릿지 검증 결과
 export interface BridgeDataValidationResult {
   readonly isValidForTransfer: boolean;
   readonly validationErrors: string[];
@@ -54,7 +49,6 @@ export interface BridgeDataValidationResult {
   readonly hasRequiredStructure: boolean;
 }
 
-// 브릿지 오류 상세 정보
 export interface BridgeOperationErrorDetails {
   readonly errorCode: string;
   readonly errorMessage: string;
@@ -63,7 +57,6 @@ export interface BridgeOperationErrorDetails {
   readonly isRecoverable: boolean;
 }
 
-// 브릿지 작업 실행 결과
 export interface BridgeOperationExecutionResult {
   readonly operationSuccess: boolean;
   readonly operationErrors: BridgeOperationErrorDetails[];
@@ -72,15 +65,53 @@ export interface BridgeOperationExecutionResult {
   readonly operationDuration: number;
 }
 
-// 브릿지 시스템 설정
 export interface BridgeSystemConfiguration {
   readonly enableValidation: boolean;
   readonly enableErrorRecovery: boolean;
-  readonly validationMode: 'strict' | 'lenient';
   readonly debugMode: boolean;
 }
 
-// 함수 타입 정의
+export interface MultiStepToEditorDataTransformationResult {
+  readonly editorContent: string;
+  readonly editorIsCompleted: boolean;
+  readonly transformationSuccess: boolean;
+  readonly transformationErrors: string[];
+  readonly transformedTimestamp: number;
+}
+
+export interface BidirectionalSyncResult {
+  readonly editorToMultiStepSuccess: boolean;
+  readonly multiStepToEditorSuccess: boolean;
+  readonly overallSuccess: boolean;
+  readonly syncErrors: string[];
+  readonly syncDuration: number;
+}
+
+export interface SimplifiedMultiStepSnapshot {
+  readonly formValues: FormValues;
+  readonly formCurrentStep: number;
+  readonly snapshotTimestamp: number;
+}
+
+export interface ReverseTransferValidationResult {
+  readonly isValidForReverseTransfer: boolean;
+  readonly reverseValidationErrors: string[];
+  readonly reverseValidationWarnings: string[];
+  readonly hasValidMultiStepData: boolean;
+  readonly canUpdateEditor: boolean;
+}
+
+export interface BidirectionalValidationResult {
+  readonly forwardTransferValid: boolean;
+  readonly reverseTransferValid: boolean;
+  readonly bidirectionalSyncReady: boolean;
+  readonly validationSummary: {
+    readonly totalErrors: number;
+    readonly totalWarnings: number;
+    readonly criticalIssues: string[];
+  };
+}
+
 export type EditorStateExtractionFunction =
   () => EditorStateSnapshotForBridge | null;
 
@@ -99,3 +130,26 @@ export type BridgeValidationFunction = (
 export type BridgeErrorHandlingFunction = (
   error: unknown
 ) => BridgeOperationErrorDetails;
+
+export type MultiStepStateExtractionFunction =
+  () => SimplifiedMultiStepSnapshot | null;
+
+export type EditorStateUpdateFunction = (
+  content: string,
+  isCompleted: boolean
+) => Promise<boolean>;
+
+export type BidirectionalSyncFunction = () => Promise<BidirectionalSyncResult>;
+
+export type ReverseTransferValidationFunction = (
+  multiStepState: SimplifiedMultiStepSnapshot
+) => ReverseTransferValidationResult;
+
+export type MultiStepToEditorTransformationFunction = (
+  multiStepState: SimplifiedMultiStepSnapshot
+) => MultiStepToEditorDataTransformationResult;
+
+export type BidirectionalValidationFunction = (
+  editorState: EditorStateSnapshotForBridge,
+  multiStepState: SimplifiedMultiStepSnapshot
+) => BidirectionalValidationResult;

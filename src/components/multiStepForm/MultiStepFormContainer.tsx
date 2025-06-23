@@ -1,11 +1,12 @@
-// MultiStepFormContainer.tsx
+// src/components/multiStepForm/MultiStepFormContainer.tsx
 
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { FormProvider } from 'react-hook-form';
 import { Card, CardBody } from '@heroui/react';
 
 import { useMultiStepFormState } from './reactHookForm/useMultiStepFormState';
-import { useEditorMultiStepBridge } from '../../bridges/editorMultiStepBridge/useEditorMultiStepBridge';
+
+import { useBidirectionalBridge } from '../../bridges/hooks/useBidirectionalBridge';
 
 import PreviewPanel from '../previewPanel/PreviewPanelContainer';
 
@@ -62,10 +63,10 @@ function MultiStepFormContainer(): React.ReactNode {
   const {
     isTransferInProgress,
     lastTransferResult,
-    transferErrorDetails,
-    transferWarningMessages,
+    transferErrors,
+    transferWarnings,
     checkCanTransfer,
-  } = useEditorMultiStepBridge(bridgeConfig);
+  } = useBidirectionalBridge(bridgeConfig);
 
   const logWithThrottle = useCallback(
     (message: string, data?: any) => {
@@ -124,8 +125,8 @@ function MultiStepFormContainer(): React.ReactNode {
     logWithThrottle('📊 [BRIDGE_DEBUG] 멀티스텝 브릿지 실시간 상태', {
       transferStatus: isTransferInProgress ? 'active' : 'idle',
       canTransfer: checkCanTransfer(),
-      errorCount: transferErrorDetails?.length || 0,
-      warningCount: transferWarningMessages?.length || 0,
+      errorCount: transferErrors?.length || 0,
+      warningCount: transferWarnings?.length || 0,
       timestamp: new Date().toLocaleTimeString(),
     });
   }
@@ -308,13 +309,13 @@ function MultiStepFormContainer(): React.ReactNode {
             <div>
               Errors:{' '}
               <span className="text-red-600">
-                {transferErrorDetails?.length || 0}
+                {transferErrors?.length || 0}
               </span>
             </div>
             <div>
               Warnings:{' '}
               <span className="text-yellow-600">
-                {transferWarningMessages?.length || 0}
+                {transferWarnings?.length || 0}
               </span>
             </div>
           </div>

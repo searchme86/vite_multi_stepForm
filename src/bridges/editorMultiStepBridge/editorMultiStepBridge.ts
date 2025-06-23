@@ -1,6 +1,6 @@
 // bridges/editorMultiStepBridge/editorStateExtractor.ts
 
-import { EditorStateSnapshotForBridge } from './bridgeTypes';
+import { EditorStateSnapshotForBridge } from './bridgeDataTypes';
 import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import { generateCompletedContent } from '../../store/shared/utilityFunctions';
 import {

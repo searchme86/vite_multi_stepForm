@@ -1,37 +1,22 @@
 // bridges/parts/MarkdownStatusCard.tsx
 
 import React, { useMemo } from 'react';
-import { useBridgeUI } from '../hooks/useBridgeUI';
-import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeTypes';
+import { useBridgeUIComponents } from '../hooks/useBridgeUIComponents';
+import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 
-// 카드 프로퍼티 인터페이스
 interface MarkdownStatusCardProps {
-  // 카드의 크기 설정 (compact: 간소화, standard: 표준, detailed: 상세)
   readonly size?: 'compact' | 'standard' | 'detailed';
-
-  // 카드의 스타일 변형 (default: 기본, bordered: 테두리, elevated: 그림자)
   readonly variant?: 'default' | 'bordered' | 'elevated';
-
-  // 추가적인 CSS 클래스명
   readonly className?: string;
-
-  // 특정 섹션을 숨길지 여부
   readonly hideTransferStatus?: boolean;
   readonly hideValidationDetails?: boolean;
   readonly hideStatistics?: boolean;
   readonly hideErrorsWarnings?: boolean;
-
-  // 실시간 업데이트 간격 (밀리초, 0이면 비활성화)
   readonly refreshInterval?: number;
-
-  // 사용자 정의 브릿지 설정
   readonly bridgeConfig?: Partial<BridgeSystemConfiguration>;
-
-  // 클릭 이벤트 핸들러 (카드 클릭 시 상세 정보 표시 등)
   readonly onClick?: () => void;
 }
 
-// 기본 검증 상태 객체 - 안전한 fallback 제공
 const createDefaultValidationStatus = () => ({
   containerCount: 0,
   paragraphCount: 0,
@@ -43,14 +28,12 @@ const createDefaultValidationStatus = () => ({
   isReadyForTransfer: false,
 });
 
-// 기본 브릿지 설정 객체 - 안전한 fallback 제공
 const createDefaultBridgeConfiguration = () => ({
   enableValidation: false,
   enableErrorRecovery: false,
   debugMode: false,
 });
 
-// 검증 상태 타입 가드 함수 - 런타임 안전성 보장
 const isValidValidationStatus = (status: unknown): boolean => {
   if (!status || typeof status !== 'object') {
     return false;
@@ -70,7 +53,6 @@ const isValidValidationStatus = (status: unknown): boolean => {
   return requiredProperties.every((prop) => prop in status);
 };
 
-// 브릿지 설정 타입 가드 함수
 const isValidBridgeConfiguration = (config: unknown): boolean => {
   if (!config || typeof config !== 'object') {
     return false;
@@ -85,20 +67,6 @@ const isValidBridgeConfiguration = (config: unknown): boolean => {
   return optionalProperties.some((prop) => prop in config);
 };
 
-/**
- * 마크다운 상태 카드 컴포넌트
- * 브릿지 전송 상태, 에디터 검증 결과, 통계 정보를 시각적으로 표시
- *
- * 주요 기능:
- * 1. 전송 상태 실시간 표시 (가능/진행중/불가)
- * 2. 에디터 데이터 통계 (컨테이너/문단 수)
- * 3. 검증 오류/경고 목록 표시
- * 4. 마지막 전송 결과 표시
- * 5. 반응형 디자인 및 접근성 지원
- *
- * @param props - 카드 설정 옵션들
- * @returns JSX 엘리먼트
- */
 export function MarkdownStatusCard({
   size = 'standard',
   variant = 'default',
@@ -113,7 +81,6 @@ export function MarkdownStatusCard({
 }: MarkdownStatusCardProps): React.ReactElement {
   console.log('📊 [STATUS_CARD] 마크다운 상태 카드 렌더링');
 
-  // 브릿지 UI 훅 연결 - 모든 상태 정보 가져오기
   const {
     canTransfer: isTransferPossible,
     isTransferring: isCurrentlyTransferring,
@@ -121,9 +88,8 @@ export function MarkdownStatusCard({
     lastTransferResult: mostRecentTransferResult,
     transferAttemptCount: totalTransferAttempts,
     bridgeConfiguration: rawBridgeConfiguration,
-  } = useBridgeUI(bridgeConfig);
+  } = useBridgeUIComponents(bridgeConfig);
 
-  // 🚨 안전한 검증 상태 처리 - fallback과 타입 가드 적용
   const safeValidationStatus = useMemo(() => {
     console.log('🔍 [STATUS_CARD] 검증 상태 안전성 확인:', {
       rawStatus: rawValidationStatus,
@@ -138,7 +104,6 @@ export function MarkdownStatusCard({
     return rawValidationStatus;
   }, [rawValidationStatus]);
 
-  // 🚨 안전한 브릿지 설정 처리 - fallback과 타입 가드 적용
   const safeBridgeConfiguration = useMemo(() => {
     console.log('🔍 [STATUS_CARD] 브릿지 설정 안전성 확인:', {
       rawConfig: rawBridgeConfiguration,
@@ -153,7 +118,6 @@ export function MarkdownStatusCard({
     return rawBridgeConfiguration;
   }, [rawBridgeConfiguration]);
 
-  // 🔍 안전한 구조분해할당 - fallback 객체와 함께 사용
   const {
     containerCount = 0,
     paragraphCount = 0,
@@ -165,14 +129,12 @@ export function MarkdownStatusCard({
     isReadyForTransfer = false,
   } = safeValidationStatus || createDefaultValidationStatus();
 
-  // 브릿지 설정 안전한 구조분해할당
   const {
     enableValidation = false,
     enableErrorRecovery = false,
     debugMode = false,
   } = safeBridgeConfiguration || createDefaultBridgeConfiguration();
 
-  // 🔍 디버깅을 위한 상태 로깅
   console.log('📊 [STATUS_CARD] 현재 검증 상태:', {
     containerCount,
     paragraphCount,
@@ -184,7 +146,6 @@ export function MarkdownStatusCard({
     bridgeConfig: { enableValidation, enableErrorRecovery, debugMode },
   });
 
-  // 전체 전송 상태 계산 (UI 표시용)
   const overallTransferStatus = useMemo(() => {
     if (isCurrentlyTransferring) {
       return {
@@ -251,7 +212,6 @@ export function MarkdownStatusCard({
     mostRecentTransferResult?.operationSuccess,
   ]);
 
-  // 카드 크기에 따른 CSS 클래스 계산
   const getSizeClasses = useMemo(() => {
     const sizeClassMap = {
       compact: 'p-3 space-y-2',
@@ -261,7 +221,6 @@ export function MarkdownStatusCard({
     return sizeClassMap[size] || sizeClassMap.standard;
   }, [size]);
 
-  // 카드 변형에 따른 CSS 클래스 계산
   const getVariantClasses = useMemo(() => {
     const variantClassMap = {
       default: 'bg-white',
@@ -271,7 +230,6 @@ export function MarkdownStatusCard({
     return variantClassMap[variant] || variantClassMap.default;
   }, [variant]);
 
-  // 최종 카드 CSS 클래스 조합
   const getFinalCardClasses = useMemo(() => {
     const baseClasses = 'rounded-lg transition-all duration-200';
     const sizeClasses = getSizeClasses;
@@ -281,7 +239,6 @@ export function MarkdownStatusCard({
     return `${baseClasses} ${sizeClasses} ${variantClasses} ${clickableClasses} ${className}`.trim();
   }, [getSizeClasses, getVariantClasses, onClick, className]);
 
-  // 상태 아이콘 컴포넌트
   const StatusIcon = ({
     iconType,
     className: iconClassName,
@@ -383,7 +340,6 @@ export function MarkdownStatusCard({
     }
   };
 
-  // 통계 배지 컴포넌트
   const StatisticsBadge = ({
     label,
     value,
@@ -415,7 +371,6 @@ export function MarkdownStatusCard({
     );
   };
 
-  // 진행률 바 컴포넌트
   const ProgressBar = ({
     current,
     total,
@@ -454,7 +409,6 @@ export function MarkdownStatusCard({
     );
   };
 
-  // 카드 클릭 핸들러
   const handleCardClick = () => {
     if (onClick) {
       console.log('📊 [STATUS_CARD] 카드 클릭됨');
@@ -478,7 +432,6 @@ export function MarkdownStatusCard({
       tabIndex={onClick ? 0 : undefined}
       aria-label="마크다운 브릿지 상태 정보"
     >
-      {/* 전송 상태 헤더 */}
       {!hideTransferStatus && (
         <div
           className={`flex items-center justify-between p-3 rounded-lg ${overallTransferStatus.bgColor} ${overallTransferStatus.borderColor} border`}
@@ -510,7 +463,6 @@ export function MarkdownStatusCard({
             </div>
           </div>
 
-          {/* 전송 시도 횟수 (상세 모드일 때만) */}
           {size === 'detailed' && totalTransferAttempts > 0 && (
             <div className={`text-right ${overallTransferStatus.textColor}`}>
               <div className="text-sm font-medium">시도 횟수</div>
@@ -520,7 +472,6 @@ export function MarkdownStatusCard({
         </div>
       )}
 
-      {/* 통계 정보 */}
       {!hideStatistics && size !== 'compact' && (
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-gray-700">에디터 통계</h4>
@@ -552,7 +503,6 @@ export function MarkdownStatusCard({
             />
           </div>
 
-          {/* 콘텐츠 길이 정보 */}
           <div className="flex items-center justify-between text-sm text-gray-600">
             <span>총 콘텐츠 길이</span>
             <span className="font-medium">
@@ -560,7 +510,6 @@ export function MarkdownStatusCard({
             </span>
           </div>
 
-          {/* 할당 진행률 (상세 모드일 때만) */}
           {size === 'detailed' && paragraphCount > 0 && (
             <ProgressBar
               current={assignedParagraphCount}
@@ -574,7 +523,6 @@ export function MarkdownStatusCard({
         </div>
       )}
 
-      {/* 검증 세부 정보 */}
       {!hideValidationDetails && size !== 'compact' && (
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-gray-700">검증 상태</h4>
@@ -621,11 +569,9 @@ export function MarkdownStatusCard({
         </div>
       )}
 
-      {/* 오류 및 경고 */}
       {!hideErrorsWarnings &&
         (validationErrors.length > 0 || validationWarnings.length > 0) && (
           <div className="space-y-3">
-            {/* 검증 오류 */}
             {validationErrors.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
@@ -660,7 +606,6 @@ export function MarkdownStatusCard({
               </div>
             )}
 
-            {/* 검증 경고 */}
             {validationWarnings.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
@@ -708,7 +653,6 @@ export function MarkdownStatusCard({
           </div>
         )}
 
-      {/* 마지막 전송 결과 (상세 모드일 때만) */}
       {size === 'detailed' && mostRecentTransferResult && (
         <div className="pt-3 space-y-2 border-t border-gray-200">
           <h4 className="text-sm font-medium text-gray-700">

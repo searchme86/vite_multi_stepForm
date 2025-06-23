@@ -12,7 +12,7 @@ import {
   ErrorStatusModal,
   useErrorStatusModal,
 } from '../../../../bridges/parts/ErrorStatusModal';
-import { useBridgeUI } from '../../../../bridges/hooks/useBridgeUI';
+import { useBridgeUIComponents } from '../../../../bridges/hooks/useBridgeUIComponents';
 
 import { EditorSidebarContainer } from './sidebar/EditorSidebarContainer';
 import { StructureManagementSlide } from './sidebar/slides/StructureManagementSlide';
@@ -60,21 +60,20 @@ interface WritingStepProps {
   saveAllToContext: () => void;
   completeEditor: () => void;
   addLocalParagraph: () => void;
-  deleteLocalParagraph: (id: string) => void; // 미래 사용을 위해 보존
+  deleteLocalParagraph: (id: string) => void;
   updateLocalParagraphContent: (id: string, content: string) => void;
   toggleParagraphSelection: (id: string) => void;
   addToLocalContainer: () => void;
   moveLocalParagraphInContainer: (id: string, direction: 'up' | 'down') => void;
   activateEditor: (id: string) => void;
   togglePreview: () => void;
-  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>; // 미래 사용을 위해 보존
+  setInternalState: React.Dispatch<React.SetStateAction<EditorInternalState>>;
   setTargetContainerId: (containerId: string) => void;
   getLocalUnassignedParagraphs: () => LocalParagraph[];
   getLocalParagraphsByContainer: (containerId: string) => LocalParagraph[];
   moveToContainer: (paragraphId: string, targetContainerId: string) => void;
 }
 
-// 🔧 안전한 기본 검증 상태 생성 함수
 const createDefaultValidationStatus = () => ({
   containerCount: 0,
   paragraphCount: 0,
@@ -86,7 +85,6 @@ const createDefaultValidationStatus = () => ({
   isReadyForTransfer: false,
 });
 
-// 🔧 검증 상태 타입 가드 함수
 const isValidValidationStatus = (status: unknown): boolean => {
   if (!status || typeof status !== 'object') {
     return false;
@@ -115,14 +113,14 @@ function WritingStep({
   saveAllToContext,
   completeEditor,
   addLocalParagraph,
-  deleteLocalParagraph: _deleteLocalParagraph, // 언더스코어로 미사용 변수 표시
+  deleteLocalParagraph: _deleteLocalParagraph,
   updateLocalParagraphContent,
   toggleParagraphSelection,
   addToLocalContainer,
   moveLocalParagraphInContainer,
   activateEditor,
   togglePreview,
-  setInternalState: _setInternalState, // 언더스코어로 미사용 변수 표시
+  setInternalState: _setInternalState,
   setTargetContainerId,
   getLocalUnassignedParagraphs,
   getLocalParagraphsByContainer,
@@ -133,8 +131,7 @@ function WritingStep({
     string | null
   >(null);
 
-  // 🔧 올바른 속성명으로 브릿지 UI 훅 연결
-  const { validationStatus: rawValidationStatus } = useBridgeUI();
+  const { validationStatus: rawValidationStatus } = useBridgeUIComponents();
 
   const {
     isOpen: isErrorModalOpen,
@@ -142,7 +139,6 @@ function WritingStep({
     closeModal: closeErrorModal,
   } = useErrorStatusModal();
 
-  // 🔧 안전한 검증 상태 처리 - fallback과 타입 가드 적용
   const currentValidationStatus = useMemo(() => {
     console.log('🔍 [WRITING_STEP] 검증 상태 안전성 확인:', {
       rawStatus: rawValidationStatus,
@@ -157,14 +153,12 @@ function WritingStep({
     return rawValidationStatus;
   }, [rawValidationStatus]);
 
-  // 🔧 브리지 상태에서 필요한 값만 추출 (사용되지 않는 변수 제거)
   const {
     validationErrors = [],
     validationWarnings = [],
     isReadyForTransfer = false,
   } = currentValidationStatus || createDefaultValidationStatus();
 
-  // 디버깅용 콘솔 로그 추가
   console.log(
     '🔍 [WRITING_STEP] currentValidationStatus:',
     currentValidationStatus
@@ -173,7 +167,6 @@ function WritingStep({
   console.log('⚠️ [WRITING_STEP] validationWarnings:', validationWarnings);
   console.log('✅ [WRITING_STEP] isReadyForTransfer:', isReadyForTransfer);
 
-  // 🔧 MarkdownCompleteButton용 에러 상태 계산 (메모이제이션으로 최적화)
   const hasErrorsForCompleteButton = useMemo(() => {
     const errorCount = Array.isArray(validationErrors)
       ? validationErrors.length
@@ -186,13 +179,11 @@ function WritingStep({
     return errorCount > 0 || notReady;
   }, [validationErrors, isReadyForTransfer]);
 
-  // 에러 상세 정보 표시 핸들러
   const handleShowErrorDetails = useCallback(() => {
     console.log('🔍 [WRITING_STEP] 에러 상세 정보 모달 열기');
     openErrorModal();
   }, [openErrorModal]);
 
-  // 화면 크기 감지 효과
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -210,7 +201,6 @@ function WritingStep({
     };
   }, [isMobile]);
 
-  // 미할당 문단 통계 계산
   const unassignedParagraphsForStats = useMemo(() => {
     try {
       const unassigned = getLocalUnassignedParagraphs();
@@ -226,7 +216,6 @@ function WritingStep({
     }
   }, [getLocalUnassignedParagraphs, localParagraphs.length]);
 
-  // 정렬된 컨테이너 목록 계산
   const sortedContainers = useMemo(() => {
     try {
       const safeContainers = Array.isArray(localContainers)
@@ -244,7 +233,6 @@ function WritingStep({
     }
   }, [localContainers]);
 
-  // 문단 내용 업데이트 핸들러 (타입 가드와 에러 처리 포함)
   const handleUpdateParagraphContent = useCallback(
     (paragraphId: string, content: string) => {
       if (!paragraphId || typeof paragraphId !== 'string') {
@@ -276,7 +264,6 @@ function WritingStep({
     [updateLocalParagraphContent]
   );
 
-  // 문단 선택 토글 핸들러 (함수 존재 여부 체크 포함)
   const handleToggleParagraphSelection = useCallback(
     (paragraphId: string) => {
       if (
@@ -298,7 +285,6 @@ function WritingStep({
     [toggleParagraphSelection]
   );
 
-  // 문단 편집 모드 활성화 핸들러
   const handleActivateEditModeForParagraph = useCallback(
     (paragraphId: string) => {
       console.log('✏️ [WRITING_STEP] 문단 편집 모드 활성화:', paragraphId);
@@ -308,14 +294,12 @@ function WritingStep({
     [activateEditor]
   );
 
-  // 편집 모드 비활성화 핸들러
   const handleDeactivateEditMode = useCallback(() => {
     console.log('🔒 [WRITING_STEP] 편집 모드 비활성화');
     setCurrentEditingParagraphId(null);
     activateEditor('');
   }, [activateEditor]);
 
-  // 문단 에디터 props 메모이제이션
   const paragraphEditorProps = useMemo(
     () => ({
       isMobile,
@@ -347,7 +331,6 @@ function WritingStep({
     ]
   );
 
-  // 컨테이너 매니저 props 메모이제이션
   const containerManagerProps: ExtendedContainerManagerProps = useMemo(
     () => ({
       isMobile,
@@ -367,7 +350,6 @@ function WritingStep({
     ]
   );
 
-  // 미리보기 패널 props 메모이제이션
   const previewPanelProps: PreviewPanelProps = useMemo(
     () => ({
       internalState,
@@ -387,7 +369,6 @@ function WritingStep({
     ]
   );
 
-  // 구조 관리 슬라이드 메모이제이션
   const preparedStructureSlide = useMemo(
     () => (
       <StructureManagementSlide containerManagerProps={containerManagerProps} />
@@ -395,13 +376,11 @@ function WritingStep({
     [containerManagerProps]
   );
 
-  // 미리보기 슬라이드 메모이제이션
   const preparedPreviewSlide = useMemo(
     () => <FinalPreviewSlide previewPanelProps={previewPanelProps} />,
     [previewPanelProps]
   );
 
-  // 전체 문단 개수 계산
   const totalParagraphCount = useMemo(() => {
     const count = Array.isArray(localParagraphs) ? localParagraphs.length : 0;
     console.log('📊 [WRITING_STEP] 전체 문단 개수:', count);
@@ -410,7 +389,6 @@ function WritingStep({
 
   return (
     <div className="w-full h-full">
-      {/* 데스크톱 레이아웃 */}
       <div className="hidden h-full md:flex md:flex-col">
         <QuickStatusBar
           position="top"
@@ -424,7 +402,6 @@ function WritingStep({
           className="border-b border-gray-200 backdrop-blur-sm"
         />
 
-        {/* 🔧 StepControls props 수정 - 브리지 관련 props 제거 */}
         <StepControls
           sortedContainers={sortedContainers}
           goToStructureStep={goToStructureStep}
@@ -443,7 +420,6 @@ function WritingStep({
         </div>
       </div>
 
-      {/* 모바일 레이아웃 */}
       <div className="flex flex-col h-full md:hidden">
         <div className="border-b border-gray-200 h-1/2">
           <EditorSidebarContainer className="h-full">
@@ -453,7 +429,6 @@ function WritingStep({
         </div>
 
         <div className="flex flex-col flex-1">
-          {/* 🔧 StepControls props 수정 - 브리지 관련 props 제거 */}
           <StepControls
             sortedContainers={sortedContainers}
             goToStructureStep={goToStructureStep}
@@ -474,7 +449,6 @@ function WritingStep({
               }}
             />
 
-            {/* 🔧 MarkdownCompleteButton에 브리지 상태 기반 비활성화 적용 */}
             <MarkdownCompleteButton
               buttonText="마크다운 완성하기"
               size="medium"
@@ -514,7 +488,6 @@ function WritingStep({
         </div>
       </div>
 
-      {/* 토스트 및 모달 */}
       <MarkdownResultToast
         position={isMobile ? 'top-center' : 'top-right'}
         defaultDuration={5000}
@@ -540,7 +513,6 @@ function WritingStep({
         className="z-50"
       />
 
-      {/* Tiptap 에디터 스타일 */}
       <style
         dangerouslySetInnerHTML={{
           __html: `

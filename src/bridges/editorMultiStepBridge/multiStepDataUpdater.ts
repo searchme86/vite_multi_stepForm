@@ -1,7 +1,7 @@
-// bridges/editorMultiStepBridge/multiStepStateUpdater.ts
+// bridges/editorMultiStepBridge/multiStepDataUpdater.ts
 
 import { useMultiStepFormStore } from '../../components/multiStepForm/store/multiStepForm/multiStepFormStore';
-import { EditorToMultiStepDataTransformationResult } from './bridgeTypes';
+import { EditorToMultiStepDataTransformationResult } from './bridgeDataTypes';
 import { FormValues } from '../../components/multiStepForm/types/formTypes';
 
 export const createMultiStepStateUpdater = () => {
@@ -190,14 +190,12 @@ export const createMultiStepStateUpdater = () => {
     const startTime = performance.now();
 
     try {
-      // 1. 에디터 콘텐츠 업데이트
       const editorUpdateSuccess = await updateEditorContent(result);
       if (!editorUpdateSuccess) {
         console.error('❌ [UPDATER] 에디터 콘텐츠 업데이트 실패');
         return false;
       }
 
-      // 2. 폼 필드 업데이트
       const { transformedContent } = result;
       const formUpdateSuccess = await updateFormField(
         'editorCompletedContent',

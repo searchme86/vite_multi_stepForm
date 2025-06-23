@@ -11,17 +11,11 @@ import {
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { MarkdownStatusCard } from './MarkdownStatusCard';
-import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeTypes';
+import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 
-// 모달 프로퍼티 인터페이스
 interface ErrorStatusModalProps {
-  // 모달 열림/닫힘 상태
   readonly isOpen: boolean;
-
-  // 모달 닫기 핸들러
   readonly onClose: () => void;
-
-  // 모달 크기 설정 (xs, sm, md, lg, xl, 2xl, 3xl, 4xl, 5xl, full)
   readonly size?:
     | 'xs'
     | 'sm'
@@ -33,17 +27,9 @@ interface ErrorStatusModalProps {
     | '4xl'
     | '5xl'
     | 'full';
-
-  // 사용자 정의 브릿지 설정
   readonly bridgeConfig?: Partial<BridgeSystemConfiguration>;
-
-  // 추가적인 CSS 클래스명
   readonly className?: string;
-
-  // 모달 제목 커스터마이징
   readonly title?: string;
-
-  // 상태 카드 설정 (MarkdownStatusCard props 전달)
   readonly statusCardProps?: {
     size?: 'compact' | 'standard' | 'detailed';
     variant?: 'default' | 'bordered' | 'elevated';
@@ -54,20 +40,6 @@ interface ErrorStatusModalProps {
   };
 }
 
-/**
- * 브릿지 오류 상태 모달 컴포넌트
- * MarkdownStatusCard 내용을 모달 형태로 표시하여 사용자가 상세한 오류 정보를 확인할 수 있도록 함
- *
- * 주요 기능:
- * 1. 브릿지 오류 및 검증 상태 상세 표시
- * 2. 실시간 업데이트되는 에디터 통계 정보
- * 3. 접근성 지원 (키보드 네비게이션, ARIA 속성)
- * 4. 반응형 디자인 (모바일/데스크톱 최적화)
- * 5. 사용자 정의 가능한 크기 및 내용
- *
- * @param props - 모달 설정 옵션들
- * @returns JSX 엘리먼트
- */
 export function ErrorStatusModal({
   isOpen,
   onClose,
@@ -85,18 +57,16 @@ export function ErrorStatusModal({
     timestamp: new Date().toISOString(),
   });
 
-  // 기본 상태 카드 설정 (모달용으로 최적화)
   const defaultStatusCardProps = {
-    size: 'detailed' as const, // 모달에서는 상세 정보 표시
+    size: 'detailed' as const,
     variant: 'default' as const,
-    hideTransferStatus: false, // 전송 상태 표시
-    hideValidationDetails: false, // 검증 세부사항 표시
-    hideStatistics: false, // 통계 정보 표시
-    hideErrorsWarnings: false, // 오류/경고 표시 (가장 중요!)
-    ...statusCardProps, // 사용자 정의 설정으로 재정의
+    hideTransferStatus: false,
+    hideValidationDetails: false,
+    hideStatistics: false,
+    hideErrorsWarnings: false,
+    ...statusCardProps,
   };
 
-  // 모달 닫기 핸들러
   const handleModalClose = (): void => {
     console.log('🚨 [ERROR_STATUS_MODAL] 모달 닫기 요청');
     if (onClose && typeof onClose === 'function') {
@@ -104,7 +74,6 @@ export function ErrorStatusModal({
     }
   };
 
-  // 모달 크기에 따른 추가 스타일
   const getModalSizeClasses = (): string => {
     const sizeClassMap = {
       xs: 'max-w-xs',
@@ -131,24 +100,21 @@ export function ErrorStatusModal({
     <Modal
       isOpen={isOpen}
       onClose={handleModalClose}
-      backdrop="blur" // 배경 블러 효과
-      scrollBehavior="inside" // 모달 내부 스크롤
+      backdrop="blur"
+      scrollBehavior="inside"
       size={size}
       placement="center"
       className={`${getModalSizeClasses()} ${className}`.trim()}
-      closeButton={true} // X 버튼 표시
-      isDismissable={true} // 배경 클릭으로 닫기 가능
-      isKeyboardDismissDisabled={false} // ESC 키로 닫기 가능
+      closeButton={true}
+      isDismissable={true}
+      isKeyboardDismissDisabled={false}
       hideCloseButton={false}
-      // 접근성 속성
       role="dialog"
       aria-labelledby="error-status-modal-title"
       aria-describedby="error-status-modal-description"
     >
       <ModalContent>
-        {/* 모달 헤더 */}
         <ModalHeader className="flex items-center gap-3 pb-3 border-b border-gray-200">
-          {/* 오류 아이콘 */}
           <div className="flex items-center justify-center w-8 h-8 bg-red-100 rounded-full">
             <Icon
               icon="lucide:alert-circle"
@@ -157,7 +123,6 @@ export function ErrorStatusModal({
             />
           </div>
 
-          {/* 모달 제목 */}
           <div className="flex-1">
             <h2
               id="error-status-modal-title"
@@ -174,11 +139,8 @@ export function ErrorStatusModal({
           </div>
         </ModalHeader>
 
-        {/* 모달 본문 */}
         <ModalBody className="py-6">
-          {/* 상태 카드 컨테이너 */}
           <div className="space-y-4">
-            {/* 안내 메시지 */}
             <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
               <div className="flex items-start gap-3">
                 <Icon
@@ -199,7 +161,6 @@ export function ErrorStatusModal({
               </div>
             </div>
 
-            {/* 실제 상태 카드 */}
             <div className="overflow-hidden border border-gray-200 rounded-lg">
               <MarkdownStatusCard
                 {...defaultStatusCardProps}
@@ -209,17 +170,14 @@ export function ErrorStatusModal({
                   console.log(
                     '🚨 [ERROR_STATUS_MODAL] 상태 카드 클릭 (모달 내부)'
                   );
-                  // 모달 내부에서는 클릭 이벤트를 별도로 처리하지 않음
                 }}
               />
             </div>
           </div>
         </ModalBody>
 
-        {/* 모달 푸터 */}
         <ModalFooter className="pt-3 border-t border-gray-200">
           <div className="flex items-center justify-between w-full">
-            {/* 도움말 링크 (왼쪽) */}
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Icon
                 icon="lucide:help-circle"
@@ -229,9 +187,7 @@ export function ErrorStatusModal({
               <span>문제가 지속되면 브라우저를 새로고침해보세요</span>
             </div>
 
-            {/* 액션 버튼들 (오른쪽) */}
             <div className="flex gap-2">
-              {/* 새로고침 버튼 */}
               <Button
                 type="button"
                 color="default"
@@ -240,7 +196,6 @@ export function ErrorStatusModal({
                 startContent={<Icon icon="lucide:refresh-cw" />}
                 onPress={() => {
                   console.log('🚨 [ERROR_STATUS_MODAL] 새로고침 버튼 클릭');
-                  // 페이지 새로고침 또는 상태 새로고침 로직
                   window.location.reload();
                 }}
                 aria-label="페이지 새로고침"
@@ -248,7 +203,6 @@ export function ErrorStatusModal({
                 새로고침
               </Button>
 
-              {/* 닫기 버튼 */}
               <Button
                 type="button"
                 color="primary"
@@ -268,10 +222,6 @@ export function ErrorStatusModal({
   );
 }
 
-/**
- * 편의 훅: 오류 상태 모달 관리
- * 모달 열기/닫기 상태를 쉽게 관리할 수 있는 훅
- */
 export function useErrorStatusModal() {
   const [isOpen, setIsOpen] = React.useState<boolean>(false);
 
