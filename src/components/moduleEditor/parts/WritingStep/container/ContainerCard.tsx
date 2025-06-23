@@ -97,20 +97,51 @@ function ContainerCard({
             key={paragraph.id}
             className="p-3 transition-colors bg-white border border-gray-200 rounded hover:border-blue-300"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <span className="text-sm text-gray-700 line-clamp-2">
+            <div className="relative flex flex-col">
+              <span className="flex items-center gap-2 mt-1 text-xs text-gray-400">
+                {new Date(paragraph.updatedAt).toLocaleTimeString()}
+              </span>
+              <div className="flex items-center justify-between mt-[20px] min-h-[30px]">
+                <p className="text-sm w-[250px] max-w-[300px] text-gray-700 line-clamp-2">
                   {(paragraph.content || '').slice(0, 80) || '내용 없음'}
                   {(paragraph.content || '').length > 80 && '...'}
-                </span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-400">
-                    {new Date(paragraph.updatedAt).toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
+                </p>
+                <div className="flex flex-col ">
+                  <ContainerSelector
+                    currentContainerId={container.id}
+                    availableContainers={sortedContainers}
+                    onContainerMove={(targetContainerId) =>
+                      handleContainerMove(paragraph.id, targetContainerId)
+                    }
+                    className="mr-1"
+                  />
 
-              <div className="flex gap-1 ml-3">
+                  <div className="flex gap-1 ml-3">
+                    <Button
+                      type="button"
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      onPress={() => handleMoveUp(paragraph.id)}
+                      isDisabled={index === 0}
+                      aria-label="단락을 위로 이동"
+                    >
+                      <Icon icon="lucide:chevron-up" />
+                    </Button>
+                    <Button
+                      type="button"
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      onPress={() => handleMoveDown(paragraph.id)}
+                      isDisabled={index === containerParagraphs.length - 1}
+                      aria-label="단락을 아래로 이동"
+                    >
+                      <Icon icon="lucide:chevron-down" />
+                    </Button>
+                  </div>
+                </div>
+
                 <Button
                   type="button"
                   size="sm"
@@ -119,40 +150,9 @@ function ContainerCard({
                   onPress={() => handleEditParagraph(paragraph)}
                   startContent={<Icon icon="lucide:edit" />}
                   aria-label="Tiptap 에디터에서 편집"
+                  className="absolute top-0 right-0"
                 >
                   편집
-                </Button>
-
-                <ContainerSelector
-                  currentContainerId={container.id}
-                  availableContainers={sortedContainers}
-                  onContainerMove={(targetContainerId) =>
-                    handleContainerMove(paragraph.id, targetContainerId)
-                  }
-                  className="mr-1"
-                />
-
-                <Button
-                  type="button"
-                  isIconOnly
-                  size="sm"
-                  variant="light"
-                  onPress={() => handleMoveUp(paragraph.id)}
-                  isDisabled={index === 0}
-                  aria-label="단락을 위로 이동"
-                >
-                  <Icon icon="lucide:chevron-up" />
-                </Button>
-                <Button
-                  type="button"
-                  isIconOnly
-                  size="sm"
-                  variant="light"
-                  onPress={() => handleMoveDown(paragraph.id)}
-                  isDisabled={index === containerParagraphs.length - 1}
-                  aria-label="단락을 아래로 이동"
-                >
-                  <Icon icon="lucide:chevron-down" />
                 </Button>
               </div>
             </div>
