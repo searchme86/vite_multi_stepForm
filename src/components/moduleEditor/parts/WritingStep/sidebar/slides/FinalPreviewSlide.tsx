@@ -112,7 +112,7 @@ export function FinalPreviewSlide({
       </div>
 
       {/* 📄 콘텐츠 섹션 */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-scroll">
         {/*
           👁️ 기존 PreviewPanel 컴포넌트 재사용
           - 타입 안전한 props 전달
