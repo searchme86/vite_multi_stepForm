@@ -54,6 +54,38 @@ interface QuickStatusBarProps {
   readonly className?: string;
 }
 
+// 기본 검증 상태 객체 - 안전한 fallback 제공
+const createDefaultValidationStatus = () => ({
+  containerCount: 0,
+  paragraphCount: 0,
+  assignedParagraphCount: 0,
+  unassignedParagraphCount: 0,
+  totalContentLength: 0,
+  validationErrors: [],
+  validationWarnings: [],
+  isReadyForTransfer: false,
+});
+
+// 검증 상태 타입 가드 함수 - 런타임 안전성 보장
+const isValidValidationStatus = (status: unknown): boolean => {
+  if (!status || typeof status !== 'object') {
+    return false;
+  }
+
+  const requiredProperties = [
+    'containerCount',
+    'paragraphCount',
+    'assignedParagraphCount',
+    'unassignedParagraphCount',
+    'totalContentLength',
+    'validationErrors',
+    'validationWarnings',
+    'isReadyForTransfer',
+  ];
+
+  return requiredProperties.every((prop) => prop in status);
+};
+
 /**
  * 빠른 상태 확인 바 컴포넌트
  * 브릿지 전송 상태를 간결하게 표시하고 빠른 액션을 제공하는 고정 UI
@@ -95,11 +127,24 @@ export function QuickStatusBar({
   const {
     canTransfer: isTransferPossible,
     isTransferring: isCurrentlyTransferring,
-    validationStatus: currentValidationStatus,
-    transferErrors: accumulatedTransferErrors,
-    transferWarnings: accumulatedTransferWarnings,
+    validationStatus: rawValidationStatus,
     executeManualTransfer: performManualTransfer,
   } = useBridgeUI(bridgeConfig);
+
+  // 🚨 안전한 검증 상태 처리 - fallback과 타입 가드 적용
+  const safeValidationStatus = useMemo(() => {
+    console.log('🔍 [QUICK_STATUS] 검증 상태 안전성 확인:', {
+      rawStatus: rawValidationStatus,
+      isValid: isValidValidationStatus(rawValidationStatus),
+    });
+
+    if (!isValidValidationStatus(rawValidationStatus)) {
+      console.warn('⚠️ [QUICK_STATUS] 유효하지 않은 검증 상태, 기본값 사용');
+      return createDefaultValidationStatus();
+    }
+
+    return rawValidationStatus;
+  }, [rawValidationStatus]);
 
   // 상태바 접기/펼치기 상태 관리
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -107,17 +152,27 @@ export function QuickStatusBar({
   // 자동 숨김 상태 관리
   const [isAutoHidden, setIsAutoHidden] = useState<boolean>(false);
 
-  // 검증 상태에서 세부 정보 추출
+  // 🔍 안전한 구조분해할당 - fallback 객체와 함께 사용
   const {
+    containerCount = 0,
+    paragraphCount = 0,
+    assignedParagraphCount = 0,
+    unassignedParagraphCount = 0,
+    validationErrors = [],
+    validationWarnings = [],
+    isReadyForTransfer = false,
+  } = safeValidationStatus || createDefaultValidationStatus();
+
+  // 🔍 디버깅을 위한 상태 로깅
+  console.log('📊 [QUICK_STATUS] 현재 검증 상태:', {
     containerCount,
     paragraphCount,
     assignedParagraphCount,
     unassignedParagraphCount,
-    totalContentLength,
-    validationErrors,
-    validationWarnings,
+    validationErrorCount: validationErrors.length,
+    validationWarningCount: validationWarnings.length,
     isReadyForTransfer,
-  } = currentValidationStatus;
+  });
 
   // 전체 상태 요약 계산
   const statusSummary = useMemo(() => {
@@ -191,10 +246,21 @@ export function QuickStatusBar({
     validationWarnings.length,
   ]);
 
-  // 진행률 계산 (할당된 문단 비율)
+  // 진행률 계산 (할당된 문단 비율) - 안전한 계산
   const progressPercentage = useMemo(() => {
-    if (paragraphCount === 0) return 0;
-    return Math.round((assignedParagraphCount / paragraphCount) * 100);
+    if (paragraphCount === 0) {
+      console.log('📊 [QUICK_STATUS] 문단 수가 0, 진행률 0%');
+      return 0;
+    }
+    const percentage = Math.round(
+      (assignedParagraphCount / paragraphCount) * 100
+    );
+    console.log('📊 [QUICK_STATUS] 진행률 계산:', {
+      assigned: assignedParagraphCount,
+      total: paragraphCount,
+      percentage: `${percentage}%`,
+    });
+    return percentage;
   }, [assignedParagraphCount, paragraphCount]);
 
   // 빠른 전송 실행 핸들러

@@ -7,19 +7,13 @@ import {
   BridgeOperationExecutionResult,
   BridgeOperationErrorDetails,
 } from '../editorMultiStepBridge/bridgeTypes';
-
 import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateExtractor';
+import { createBridgeDataValidationHandler } from '../editorMultiStepBridge/bridgeValidator';
+import { VALIDATION_CRITERIA } from '../editorMultiStepBridge/bridgeConfig';
+import { ParagraphBlock } from '../../store/shared/commonTypes';
 
-interface BridgeUIState {
-  readonly canTransfer: boolean;
-  readonly isTransferring: boolean;
-  readonly lastTransferResult: BridgeOperationExecutionResult | null;
-  readonly transferErrors: BridgeOperationErrorDetails[];
-  readonly transferWarnings: string[];
-  readonly transferAttemptCount: number;
-}
-
-interface EditorValidationStatus {
+// 검증 상태 인터페이스 - 컴포넌트와 일치하도록 수정
+interface ValidationStatus {
   readonly containerCount: number;
   readonly paragraphCount: number;
   readonly assignedParagraphCount: number;
@@ -30,252 +24,164 @@ interface EditorValidationStatus {
   readonly isReadyForTransfer: boolean;
 }
 
-interface BridgeUIActions {
-  executeManualTransfer: () => Promise<void>;
-  checkCurrentTransferStatus: () => boolean;
-  resetAllBridgeState: () => void;
-  refreshValidationStatus: () => void;
+// 브릿지 UI 상태 인터페이스
+interface BridgeUIState {
+  readonly canTransfer: boolean;
+  readonly isTransferring: boolean;
+  readonly lastTransferResult: BridgeOperationExecutionResult | null;
+  readonly transferErrors: BridgeOperationErrorDetails[];
+  readonly transferWarnings: string[];
+  readonly transferAttemptCount: number;
 }
 
+// 브릿지 UI 액션 인터페이스 - 컴포넌트가 기대하는 메소드명으로 수정
+interface BridgeUIActions {
+  executeManualTransfer: () => Promise<void>; // executeTransfer → executeManualTransfer
+  checkCanTransfer: () => boolean;
+  resetBridgeState: () => void; // resetState → resetBridgeState
+  refreshValidationStatus: () => void; // refreshValidation → refreshValidationStatus
+}
+
+// 최종 반환 인터페이스 - 컴포넌트가 기대하는 속성명으로 수정
 interface BridgeUIHookReturn extends BridgeUIState, BridgeUIActions {
-  readonly bridgeConfiguration: BridgeSystemConfiguration;
-  readonly validationStatus: EditorValidationStatus;
+  readonly bridgeConfiguration: BridgeSystemConfiguration; // config → bridgeConfiguration
+  readonly validationStatus: ValidationStatus; // validation → validationStatus
 }
 
 export const useBridgeUI = (
-  customBridgeConfig?: Partial<BridgeSystemConfiguration>
+  customConfig?: Partial<BridgeSystemConfiguration>
 ): BridgeUIHookReturn => {
-  const isInitializedRef = useRef(false);
-  const lastValidationTimeRef = useRef<number>(0);
-  const validationCacheRef = useRef<EditorValidationStatus | null>(null);
-  const canTransferCacheRef = useRef<boolean>(false);
-  const lastCanTransferCheckRef = useRef<number>(0);
+  const isInitialized = useRef(false);
+  const lastValidationTime = useRef<number>(0);
+  const validationCache = useRef<ValidationStatus | null>(null);
+  const validator = useRef(createBridgeDataValidationHandler());
 
-  const [validationRefreshTrigger, setValidationRefreshTrigger] =
-    useState<number>(0);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const bridgeHook = useEditorMultiStepBridge(customConfig);
 
-  const bridgeHook = useEditorMultiStepBridge(customBridgeConfig);
+  const getExtractor = useCallback(() => createEditorStateExtractor(), []);
 
-  const getEditorExtractor = useCallback(() => {
-    return createEditorStateExtractor();
-  }, []);
-
-  const executeTransferWithUIFeedback = useCallback(async (): Promise<void> => {
+  // 🔧 컴포넌트가 기대하는 메소드명으로 변경
+  const executeManualTransfer = useCallback(async (): Promise<void> => {
     if (bridgeHook.isTransferInProgress) {
+      console.log('🔄 [BRIDGE_UI] 전송 진행 중, 요청 무시');
       return;
     }
 
-    const transferStartTime = performance.now();
-
+    console.log('🚀 [BRIDGE_UI] 전송 시작');
     try {
       await bridgeHook.executeManualTransfer();
-
-      const transferEndTime = performance.now();
-      const transferDuration = transferEndTime - transferStartTime;
-
-      setValidationRefreshTrigger((prev) => {
-        if (prev > 50) {
-          return 0;
-        }
-        return prev + 1;
-      });
-    } catch (transferExecutionError) {
-      console.error(
-        '❌ [BRIDGE_UI] 전송 실행 중 오류:',
-        transferExecutionError
-      );
+      setRefreshTrigger((previousValue) => (previousValue + 1) % 100);
+      console.log('✅ [BRIDGE_UI] 전송 완료');
+    } catch (error) {
+      console.error('❌ [BRIDGE_UI] 전송 실패:', error);
     }
   }, [bridgeHook.isTransferInProgress, bridgeHook.executeManualTransfer]);
 
-  const checkCurrentTransferCapability = useCallback((): boolean => {
-    const currentTime = Date.now();
-    const timeSinceLastCheck = currentTime - lastCanTransferCheckRef.current;
-
-    if (timeSinceLastCheck < 500) {
-      return canTransferCacheRef.current;
-    }
-
-    if (bridgeHook.isTransferInProgress) {
-      canTransferCacheRef.current = false;
-      lastCanTransferCheckRef.current = currentTime;
-      return false;
-    }
-
-    try {
-      const basicTransferCapability = bridgeHook.checkCanTransfer();
-      canTransferCacheRef.current = basicTransferCapability;
-      lastCanTransferCheckRef.current = currentTime;
-      return basicTransferCapability;
-    } catch (error) {
-      canTransferCacheRef.current = false;
-      lastCanTransferCheckRef.current = currentTime;
-      return false;
-    }
-  }, [bridgeHook.isTransferInProgress, bridgeHook.checkCanTransfer]);
-
-  const resetAllBridgeAndUIState = useCallback((): void => {
+  // 🔧 컴포넌트가 기대하는 메소드명으로 변경
+  const resetBridgeState = useCallback((): void => {
+    console.log('🔄 [BRIDGE_UI] 상태 초기화');
     try {
       bridgeHook.resetBridgeState();
-      setValidationRefreshTrigger(0);
-      lastValidationTimeRef.current = 0;
-      isInitializedRef.current = false;
-      validationCacheRef.current = null;
-      canTransferCacheRef.current = false;
-      lastCanTransferCheckRef.current = 0;
+      setRefreshTrigger(0);
+      lastValidationTime.current = 0;
+      isInitialized.current = false;
+      validationCache.current = null;
+      validator.current = createBridgeDataValidationHandler();
     } catch (error) {
-      console.error('❌ [BRIDGE_UI] 상태 초기화 중 오류:', error);
+      console.error('❌ [BRIDGE_UI] 초기화 실패:', error);
     }
   }, [bridgeHook.resetBridgeState]);
 
-  const refreshCurrentValidationStatus = useCallback((): void => {
+  // 🔧 컴포넌트가 기대하는 메소드명으로 변경
+  const refreshValidationStatus = useCallback((): void => {
     const currentTime = Date.now();
-    const timeSinceLastValidation = currentTime - lastValidationTimeRef.current;
+    const timeSinceLastValidation = currentTime - lastValidationTime.current;
 
-    if (timeSinceLastValidation < 300) {
+    if (timeSinceLastValidation < VALIDATION_CRITERIA.throttleDelay) {
       return;
     }
 
-    lastValidationTimeRef.current = currentTime;
-    setValidationRefreshTrigger((prev) => {
-      if (prev > 50) {
-        return 0;
-      }
-      return prev + 1;
-    });
+    console.log('🔄 [BRIDGE_UI] 검증 새로고침');
+    lastValidationTime.current = currentTime;
+    setRefreshTrigger((previousValue) => (previousValue + 1) % 100);
   }, []);
 
-  const calculatedValidationStatus = useMemo<EditorValidationStatus>(() => {
-    const calculationStartTime = performance.now();
+  // 🔧 컴포넌트가 기대하는 인터페이스로 검증 상태 계산
+  const validationStatus = useMemo<ValidationStatus>(() => {
+    console.log('🔍 [BRIDGE_UI] 검증 상태 계산');
 
     try {
-      const callCount = validationRefreshTrigger;
-
-      if (callCount > 20 && validationCacheRef.current) {
-        return validationCacheRef.current;
-      }
-
-      let currentSnapshot = null;
+      // 에디터 상태 추출
+      let snapshot = null;
       try {
-        const extractor = getEditorExtractor();
-        currentSnapshot = extractor.getEditorStateWithValidation();
-      } catch (extractorError) {
-        console.error('❌ [BRIDGE_UI] 추출기 생성 실패:', extractorError);
+        const extractor = getExtractor();
+        snapshot = extractor.getEditorStateWithValidation();
+      } catch (error) {
+        console.error('❌ [BRIDGE_UI] 상태 추출 실패:', error);
         return {
           containerCount: 0,
           paragraphCount: 0,
           assignedParagraphCount: 0,
           unassignedParagraphCount: 0,
           totalContentLength: 0,
-          validationErrors: ['추출기 생성 실패'],
+          validationErrors: ['상태 추출 실패'],
           validationWarnings: [],
           isReadyForTransfer: false,
         };
       }
 
-      if (!currentSnapshot) {
-        const fallbackStatus = {
+      if (!snapshot) {
+        const fallback = {
           containerCount: 0,
           paragraphCount: 0,
           assignedParagraphCount: 0,
           unassignedParagraphCount: 0,
           totalContentLength: 0,
-          validationErrors: [],
+          validationErrors: ['데이터 없음'],
           validationWarnings: [],
           isReadyForTransfer: false,
         };
-        validationCacheRef.current = fallbackStatus;
-        return fallbackStatus;
+        validationCache.current = fallback;
+        return fallback;
       }
 
-      const {
-        editorContainers: currentContainers = [],
-        editorParagraphs: currentParagraphs = [],
-        editorCompletedContent: currentContent = '',
-      } = currentSnapshot;
+      const { editorContainers = [], editorParagraphs = [] } = snapshot;
 
-      let isCurrentlyTransferable = false;
-      if (callCount < 10) {
-        try {
-          isCurrentlyTransferable = checkCurrentTransferCapability();
-        } catch (transferCheckError) {
-          isCurrentlyTransferable = false;
-        }
-      }
+      // 기본 메트릭 계산
+      const containerCount = editorContainers.length;
+      const paragraphCount = editorParagraphs.length;
 
-      const containerCount = currentContainers.length;
-      const paragraphCount = currentParagraphs.length;
-
-      const assignedParagraphs = currentParagraphs.filter(
-        (paragraph) =>
-          paragraph.containerId !== null && paragraph.containerId !== undefined
+      // 할당된 문단 필터링 - 타입 명시적 지정
+      const assignedParagraphs = editorParagraphs.filter(
+        (paragraph: ParagraphBlock) => paragraph.containerId !== null
       );
       const assignedParagraphCount = assignedParagraphs.length;
+      const unassignedParagraphCount = paragraphCount - assignedParagraphCount;
 
-      const unassignedParagraphs = currentParagraphs.filter(
-        (paragraph) =>
-          paragraph.containerId === null || paragraph.containerId === undefined
-      );
-      const unassignedParagraphCount = unassignedParagraphs.length;
-
-      const totalContentLength = currentParagraphs.reduce(
-        (totalLength, paragraph) => {
-          const contentLength = paragraph?.content?.length || 0;
-          return totalLength + contentLength;
-        },
+      // 콘텐츠 길이 계산 - 타입 명시적 지정
+      const totalContentLength = editorParagraphs.reduce(
+        (totalLength: number, paragraph: ParagraphBlock) =>
+          totalLength + (paragraph?.content?.length || 0),
         0
       );
 
-      const validationErrors: string[] = [];
+      // 브릿지 검증기 사용 (중복 로직 제거)
+      const bridgeValidation = validator.current.validateForTransfer(snapshot);
+      const { validationErrors, validationWarnings, isValidForTransfer } =
+        bridgeValidation;
 
-      if (containerCount === 0) {
-        validationErrors.push('컨테이너가 없습니다');
+      // 브릿지 전송 가능 여부 체크
+      let canTransfer = false;
+      try {
+        canTransfer = bridgeHook.checkCanTransfer();
+      } catch (error) {
+        console.warn('⚠️ [BRIDGE_UI] 전송 체크 실패:', error);
       }
 
-      if (paragraphCount === 0) {
-        validationErrors.push('문단이 없습니다');
-      }
+      const isReadyForTransfer = isValidForTransfer && canTransfer;
 
-      if (totalContentLength < 10) {
-        validationErrors.push('콘텐츠가 너무 짧습니다 (최소 10자 필요)');
-      }
-
-      const validationWarnings: string[] = [];
-
-      if (containerCount < 2) {
-        validationWarnings.push('컨테이너가 2개 미만입니다 (권장: 2개 이상)');
-      }
-
-      if (paragraphCount < 3) {
-        validationWarnings.push('문단이 3개 미만입니다 (권장: 3개 이상)');
-      }
-
-      if (unassignedParagraphCount > 0) {
-        validationWarnings.push(
-          `미할당 문단이 ${unassignedParagraphCount}개 있습니다`
-        );
-      }
-
-      if (totalContentLength < 100) {
-        validationWarnings.push('콘텐츠가 100자 미만입니다 (권장: 100자 이상)');
-      }
-
-      const emptyContainers = currentContainers.filter((container) => {
-        const containerParagraphs = currentParagraphs.filter(
-          (paragraph) => paragraph.containerId === container.id
-        );
-        return containerParagraphs.length === 0;
-      });
-
-      if (emptyContainers.length > 0) {
-        validationWarnings.push(
-          `빈 컨테이너가 ${emptyContainers.length}개 있습니다`
-        );
-      }
-
-      const isReadyForTransfer =
-        isCurrentlyTransferable && validationErrors.length === 0;
-
-      const calculatedValidationData: EditorValidationStatus = {
+      const result: ValidationStatus = {
         containerCount,
         paragraphCount,
         assignedParagraphCount,
@@ -286,67 +192,67 @@ export const useBridgeUI = (
         isReadyForTransfer,
       };
 
-      validationCacheRef.current = calculatedValidationData;
-      return calculatedValidationData;
-    } catch (validationCalculationError) {
-      console.error(
-        '❌ [BRIDGE_UI] 검증 상태 계산 중 오류:',
-        validationCalculationError
-      );
+      console.log('✅ [BRIDGE_UI] 검증 완료:', {
+        isReadyForTransfer,
+        errors: validationErrors.length,
+        warnings: validationWarnings.length,
+      });
 
-      const errorStatus = {
+      validationCache.current = result;
+      return result;
+    } catch (error) {
+      console.error('❌ [BRIDGE_UI] 검증 계산 실패:', error);
+
+      const errorResult = {
         containerCount: 0,
         paragraphCount: 0,
         assignedParagraphCount: 0,
         unassignedParagraphCount: 0,
         totalContentLength: 0,
-        validationErrors: ['검증 상태 계산 중 오류가 발생했습니다'],
+        validationErrors: ['검증 계산 실패'],
         validationWarnings: [],
         isReadyForTransfer: false,
       };
-      validationCacheRef.current = errorStatus;
-      return errorStatus;
+      validationCache.current = errorResult;
+      return errorResult;
     }
-  }, [
-    validationRefreshTrigger,
-    getEditorExtractor,
-    checkCurrentTransferCapability,
-  ]);
+  }, [refreshTrigger, getExtractor, bridgeHook.checkCanTransfer]);
 
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      setValidationRefreshTrigger(0);
-      lastValidationTimeRef.current = 0;
-      validationCacheRef.current = null;
-      canTransferCacheRef.current = false;
-      lastCanTransferCheckRef.current = 0;
+    if (!isInitialized.current) {
+      console.log('🔧 [BRIDGE_UI] 초기화');
+      setRefreshTrigger(0);
+      lastValidationTime.current = 0;
+      validationCache.current = null;
+      validator.current = createBridgeDataValidationHandler();
 
       try {
-        if (bridgeHook.resetBridgeState) {
-          bridgeHook.resetBridgeState();
-        }
+        bridgeHook.resetBridgeState?.();
       } catch (error) {
-        console.error('❌ [BRIDGE_UI] 기본 브릿지 초기화 중 오류:', error);
+        console.error('❌ [BRIDGE_UI] 초기화 중 오류:', error);
       }
 
-      isInitializedRef.current = true;
+      isInitialized.current = true;
+      console.log('✅ [BRIDGE_UI] 초기화 완료');
     }
   }, [bridgeHook.resetBridgeState]);
 
-  const bridgeUIReturn: BridgeUIHookReturn = {
-    canTransfer: checkCurrentTransferCapability(),
+  // 🔧 컴포넌트가 기대하는 속성명으로 반환
+  return {
+    // 상태
+    canTransfer: validationStatus.isReadyForTransfer,
     isTransferring: bridgeHook.isTransferInProgress,
     lastTransferResult: bridgeHook.lastTransferResult,
-    transferErrors: bridgeHook.transferErrorDetails,
-    transferWarnings: bridgeHook.transferWarningMessages,
+    transferErrors: bridgeHook.transferErrors,
+    transferWarnings: bridgeHook.transferWarnings,
     transferAttemptCount: bridgeHook.transferCount,
-    bridgeConfiguration: bridgeHook.bridgeConfiguration,
-    validationStatus: calculatedValidationStatus,
-    executeManualTransfer: executeTransferWithUIFeedback,
-    checkCurrentTransferStatus: checkCurrentTransferCapability,
-    resetAllBridgeState: resetAllBridgeAndUIState,
-    refreshValidationStatus: refreshCurrentValidationStatus,
-  };
+    bridgeConfiguration: bridgeHook.bridgeConfiguration, // config → bridgeConfiguration
+    validationStatus, // validation → validationStatus
 
-  return bridgeUIReturn;
+    // 액션 - 컴포넌트가 기대하는 메소드명으로 제공
+    executeManualTransfer, // executeTransfer → executeManualTransfer
+    checkCanTransfer: () => validationStatus.isReadyForTransfer,
+    resetBridgeState, // resetState → resetBridgeState
+    refreshValidationStatus, // refreshValidation → refreshValidationStatus
+  };
 };

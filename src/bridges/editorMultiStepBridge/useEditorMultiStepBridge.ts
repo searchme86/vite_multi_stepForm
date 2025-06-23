@@ -7,12 +7,13 @@ import {
   BridgeOperationErrorDetails,
 } from './bridgeTypes';
 import { createEditorMultiStepBridgeOrchestrator } from './bridgeOrchestrator';
+import { VALIDATION_CRITERIA } from './bridgeConfig';
 
 interface BridgeHookState {
   isTransferInProgress: boolean;
   lastTransferResult: BridgeOperationExecutionResult | null;
-  transferErrorDetails: BridgeOperationErrorDetails[];
-  transferWarningMessages: string[];
+  transferErrors: BridgeOperationErrorDetails[];
+  transferWarnings: string[];
   transferCount: number;
 }
 
@@ -29,219 +30,201 @@ interface BridgeHookReturn extends BridgeHookState, BridgeHookActions {
 }
 
 export const useEditorMultiStepBridge = (
-  customBridgeConfiguration?: Partial<BridgeSystemConfiguration>
+  customConfig?: Partial<BridgeSystemConfiguration>
 ): BridgeHookReturn => {
-  const bridgeOrchestratorInstanceRef = useRef(
-    createEditorMultiStepBridgeOrchestrator(customBridgeConfiguration)
+  const orchestrator = useRef(
+    createEditorMultiStepBridgeOrchestrator(customConfig)
   );
+  const isInitialized = useRef(false);
+  const lastTransferCheck = useRef<number>(0);
+  const transferCheckCache = useRef<boolean>(false);
+  const lastLogTime = useRef<number>(0);
 
-  const isInitializedRef = useRef(false);
-  const lastTransferCheckRef = useRef<number>(0);
-  const transferCheckCacheRef = useRef<boolean>(false);
-  const lastLogTimeRef = useRef<number>(0);
-
-  const [bridgeHookInternalState, setBridgeHookInternalState] =
-    useState<BridgeHookState>({
-      isTransferInProgress: false,
-      lastTransferResult: null,
-      transferErrorDetails: [],
-      transferWarningMessages: [],
-      transferCount: 0,
-    });
+  const [state, setState] = useState<BridgeHookState>({
+    isTransferInProgress: false,
+    lastTransferResult: null,
+    transferErrors: [],
+    transferWarnings: [],
+    transferCount: 0,
+  });
 
   const [isAutoTransferActive, setIsAutoTransferActive] =
     useState<boolean>(false);
 
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      setBridgeHookInternalState({
+    if (!isInitialized.current) {
+      setState({
         isTransferInProgress: false,
         lastTransferResult: null,
-        transferErrorDetails: [],
-        transferWarningMessages: [],
+        transferErrors: [],
+        transferWarnings: [],
         transferCount: 0,
       });
 
       setIsAutoTransferActive(false);
 
       try {
-        bridgeOrchestratorInstanceRef.current =
-          createEditorMultiStepBridgeOrchestrator(customBridgeConfiguration);
+        orchestrator.current =
+          createEditorMultiStepBridgeOrchestrator(customConfig);
       } catch (error) {
-        console.error(
-          '❌ [BRIDGE_HOOK] 브릿지 오케스트레이터 재생성 중 오류:',
-          error
-        );
+        console.error('❌ [BRIDGE_HOOK] 오케스트레이터 생성 실패:', error);
       }
 
-      isInitializedRef.current = true;
+      isInitialized.current = true;
     }
-  }, [customBridgeConfiguration]);
+  }, [customConfig]);
 
   const {
-    isTransferInProgress: currentTransferInProgress,
-    lastTransferResult: mostRecentTransferResult,
-    transferErrorDetails: accumulatedTransferErrors,
-    transferWarningMessages: accumulatedTransferWarnings,
-    transferCount: totalTransferAttempts,
-  } = bridgeHookInternalState;
+    executeBridgeTransfer,
+    checkTransferPreconditions,
+    getConfiguration,
+  } = orchestrator.current;
 
-  const {
-    executeBridgeTransfer: performBridgeDataTransfer,
-    checkTransferPreconditions: validateTransferPreconditions,
-    getConfiguration: retrieveBridgeConfiguration,
-  } = bridgeOrchestratorInstanceRef.current;
+  const currentConfig = getConfiguration();
 
-  const currentBridgeConfiguration = retrieveBridgeConfiguration();
-
-  const optimizedPreconditionsCheck = useMemo(() => {
+  // 사전 조건 체크 - 복잡한 로직 단순화
+  const preconditionsCheck = useMemo(() => {
     try {
-      if (currentTransferInProgress) {
-        return {
-          isValid: false,
-          reason: 'TRANSFER_IN_PROGRESS',
-          shouldLog: false,
-        };
+      if (state.isTransferInProgress) {
+        return { isValid: false, reason: 'TRANSFER_IN_PROGRESS' };
       }
 
-      const preconditionsValid = validateTransferPreconditions();
+      const isValid = checkTransferPreconditions();
       return {
-        isValid: preconditionsValid,
-        reason: preconditionsValid ? 'VALID' : 'INVALID_CONDITIONS',
-        shouldLog: !preconditionsValid,
+        isValid,
+        reason: isValid ? 'VALID' : 'INVALID_CONDITIONS',
       };
     } catch (error) {
-      return {
-        isValid: false,
-        reason: 'VALIDATION_ERROR',
-        shouldLog: true,
-        error,
-      };
+      return { isValid: false, reason: 'VALIDATION_ERROR', error };
     }
-  }, [currentTransferInProgress, validateTransferPreconditions]);
+  }, [state.isTransferInProgress, checkTransferPreconditions]);
 
   const logWithThrottle = useCallback((message: string, data?: any) => {
     const now = Date.now();
-    if (now - lastLogTimeRef.current > 5000) {
+    if (now - lastLogTime.current > 5000) {
       console.warn(message, data);
-      lastLogTimeRef.current = now;
+      lastLogTime.current = now;
     }
   }, []);
 
-  const executeSingleBridgeTransferOperation =
-    useCallback(async (): Promise<void> => {
-      if (currentTransferInProgress) {
-        return;
-      }
+  const executeTransfer = useCallback(async (): Promise<void> => {
+    if (state.isTransferInProgress) {
+      console.log('🔄 [BRIDGE_HOOK] 이미 전송 중');
+      return;
+    }
 
-      setBridgeHookInternalState((previousHookState) => ({
-        ...previousHookState,
-        isTransferInProgress: true,
-        transferErrorDetails: [],
-        transferWarningMessages: [],
+    console.log('🚀 [BRIDGE_HOOK] 전송 시작');
+    setState((prev) => ({
+      ...prev,
+      isTransferInProgress: true,
+      transferErrors: [],
+      transferWarnings: [],
+    }));
+
+    try {
+      const result = await executeBridgeTransfer();
+      const {
+        operationSuccess,
+        operationErrors = [],
+        operationWarnings = [],
+      } = result;
+
+      setState((prev) => ({
+        ...prev,
+        isTransferInProgress: false,
+        lastTransferResult: result,
+        transferErrors: operationErrors,
+        transferWarnings: operationWarnings,
+        transferCount: prev.transferCount + 1,
       }));
 
-      try {
-        const bridgeTransferExecutionResult = await performBridgeDataTransfer();
+      transferCheckCache.current = operationSuccess;
+      lastTransferCheck.current = Date.now();
 
-        const {
-          operationSuccess: wasTransferOperationSuccessful,
-          operationErrors: transferOperationErrors = [],
-          operationWarnings: transferOperationWarnings = [],
-        } = bridgeTransferExecutionResult;
+      console.log(
+        operationSuccess
+          ? '✅ [BRIDGE_HOOK] 전송 성공'
+          : '❌ [BRIDGE_HOOK] 전송 실패'
+      );
+    } catch (error) {
+      console.error('❌ [BRIDGE_HOOK] 전송 중 예외:', error);
 
-        setBridgeHookInternalState((previousHookState) => ({
-          ...previousHookState,
-          isTransferInProgress: false,
-          lastTransferResult: bridgeTransferExecutionResult,
-          transferErrorDetails: transferOperationErrors,
-          transferWarningMessages: transferOperationWarnings,
-          transferCount: previousHookState.transferCount + 1,
-        }));
+      const errorDetail: BridgeOperationErrorDetails = {
+        errorCode: `HOOK_ERROR_${Date.now()}`,
+        errorMessage:
+          error instanceof Error ? error.message : '알 수 없는 오류',
+        errorTimestamp: new Date(),
+        errorContext: { hookError: true },
+        isRecoverable: false,
+      };
 
-        transferCheckCacheRef.current = wasTransferOperationSuccessful;
-        lastTransferCheckRef.current = Date.now();
-      } catch (unexpectedTransferError) {
-        console.error(
-          '💥 [BRIDGE_HOOK] 예상치 못한 브릿지 전송 오류:',
-          unexpectedTransferError
-        );
+      setState((prev) => ({
+        ...prev,
+        isTransferInProgress: false,
+        transferErrors: [errorDetail],
+        transferCount: prev.transferCount + 1,
+      }));
 
-        setBridgeHookInternalState((previousHookState) => ({
-          ...previousHookState,
-          isTransferInProgress: false,
-          transferErrorDetails: [
-            {
-              errorCode: `HOOK_ERROR_${Date.now()}`,
-              errorMessage:
-                unexpectedTransferError instanceof Error
-                  ? unexpectedTransferError.message
-                  : '알 수 없는 브릿지 훅 오류',
-              errorTimestamp: new Date(),
-              errorContext: { hookError: true },
-              isRecoverable: false,
-            },
-          ],
-          transferCount: previousHookState.transferCount + 1,
-        }));
+      transferCheckCache.current = false;
+      lastTransferCheck.current = Date.now();
+    }
+  }, [state.isTransferInProgress, executeBridgeTransfer]);
 
-        transferCheckCacheRef.current = false;
-        lastTransferCheckRef.current = Date.now();
-      }
-    }, [currentTransferInProgress, performBridgeDataTransfer]);
-
-  const validateCurrentTransferPreconditions = useCallback((): boolean => {
+  const checkCanTransfer = useCallback((): boolean => {
     const currentTime = Date.now();
-    const timeSinceLastCheck = currentTime - lastTransferCheckRef.current;
+    const timeSinceLastCheck = currentTime - lastTransferCheck.current;
 
-    if (timeSinceLastCheck < 1000) {
-      return transferCheckCacheRef.current;
+    // 캐시 사용 (성능 최적화)
+    if (timeSinceLastCheck < VALIDATION_CRITERIA.cacheDuration) {
+      return transferCheckCache.current;
     }
 
     if (
-      !optimizedPreconditionsCheck.isValid &&
-      optimizedPreconditionsCheck.shouldLog
+      !preconditionsCheck.isValid &&
+      preconditionsCheck.reason !== 'TRANSFER_IN_PROGRESS'
     ) {
       logWithThrottle(
-        `⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패: ${optimizedPreconditionsCheck.reason}`
+        `⚠️ [BRIDGE_HOOK] 사전 조건 실패: ${preconditionsCheck.reason}`
       );
     }
 
-    transferCheckCacheRef.current = optimizedPreconditionsCheck.isValid;
-    lastTransferCheckRef.current = currentTime;
-    return optimizedPreconditionsCheck.isValid;
-  }, [optimizedPreconditionsCheck, logWithThrottle]);
+    transferCheckCache.current = preconditionsCheck.isValid;
+    lastTransferCheck.current = currentTime;
+    return preconditionsCheck.isValid;
+  }, [preconditionsCheck, logWithThrottle]);
 
-  const resetAllBridgeHookState = useCallback((): void => {
-    setBridgeHookInternalState({
+  const resetState = useCallback((): void => {
+    console.log('🔄 [BRIDGE_HOOK] 상태 초기화');
+    setState({
       isTransferInProgress: false,
       lastTransferResult: null,
-      transferErrorDetails: [],
-      transferWarningMessages: [],
+      transferErrors: [],
+      transferWarnings: [],
       transferCount: 0,
     });
 
     setIsAutoTransferActive(false);
-    transferCheckCacheRef.current = false;
-    lastTransferCheckRef.current = 0;
-    lastLogTimeRef.current = 0;
+    transferCheckCache.current = false;
+    lastTransferCheck.current = 0;
+    lastLogTime.current = 0;
   }, []);
 
-  const toggleAutoTransferState = useCallback((): void => {
-    setIsAutoTransferActive((previous) => !previous);
-  }, []);
+  const toggleAutoTransfer = useCallback((): void => {
+    setIsAutoTransferActive((prev) => !prev);
+    console.log('🔄 [BRIDGE_HOOK] 자동 전송 토글:', !isAutoTransferActive);
+  }, [isAutoTransferActive]);
 
   return {
-    isTransferInProgress: currentTransferInProgress,
-    lastTransferResult: mostRecentTransferResult,
-    transferErrorDetails: accumulatedTransferErrors,
-    transferWarningMessages: accumulatedTransferWarnings,
-    transferCount: totalTransferAttempts,
-    executeManualTransfer: executeSingleBridgeTransferOperation,
-    checkCanTransfer: validateCurrentTransferPreconditions,
-    resetBridgeState: resetAllBridgeHookState,
-    bridgeConfiguration: currentBridgeConfiguration,
+    isTransferInProgress: state.isTransferInProgress,
+    lastTransferResult: state.lastTransferResult,
+    transferErrors: state.transferErrors,
+    transferWarnings: state.transferWarnings,
+    transferCount: state.transferCount,
+    executeManualTransfer: executeTransfer,
+    checkCanTransfer,
+    resetBridgeState: resetState,
+    bridgeConfiguration: currentConfig,
     isAutoTransferActive,
-    toggleAutoTransfer: toggleAutoTransferState,
+    toggleAutoTransfer,
   };
 };

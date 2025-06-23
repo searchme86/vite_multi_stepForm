@@ -31,6 +31,60 @@ interface MarkdownStatusCardProps {
   readonly onClick?: () => void;
 }
 
+// 기본 검증 상태 객체 - 안전한 fallback 제공
+const createDefaultValidationStatus = () => ({
+  containerCount: 0,
+  paragraphCount: 0,
+  assignedParagraphCount: 0,
+  unassignedParagraphCount: 0,
+  totalContentLength: 0,
+  validationErrors: [],
+  validationWarnings: [],
+  isReadyForTransfer: false,
+});
+
+// 기본 브릿지 설정 객체 - 안전한 fallback 제공
+const createDefaultBridgeConfiguration = () => ({
+  enableValidation: false,
+  enableErrorRecovery: false,
+  debugMode: false,
+});
+
+// 검증 상태 타입 가드 함수 - 런타임 안전성 보장
+const isValidValidationStatus = (status: unknown): boolean => {
+  if (!status || typeof status !== 'object') {
+    return false;
+  }
+
+  const requiredProperties = [
+    'containerCount',
+    'paragraphCount',
+    'assignedParagraphCount',
+    'unassignedParagraphCount',
+    'totalContentLength',
+    'validationErrors',
+    'validationWarnings',
+    'isReadyForTransfer',
+  ];
+
+  return requiredProperties.every((prop) => prop in status);
+};
+
+// 브릿지 설정 타입 가드 함수
+const isValidBridgeConfiguration = (config: unknown): boolean => {
+  if (!config || typeof config !== 'object') {
+    return false;
+  }
+
+  const optionalProperties = [
+    'enableValidation',
+    'enableErrorRecovery',
+    'debugMode',
+  ];
+
+  return optionalProperties.some((prop) => prop in config);
+};
+
 /**
  * 마크다운 상태 카드 컴포넌트
  * 브릿지 전송 상태, 에디터 검증 결과, 통계 정보를 시각적으로 표시
@@ -63,25 +117,72 @@ export function MarkdownStatusCard({
   const {
     canTransfer: isTransferPossible,
     isTransferring: isCurrentlyTransferring,
-    validationStatus: currentValidationStatus,
-    transferErrors: accumulatedTransferErrors,
-    transferWarnings: accumulatedTransferWarnings,
+    validationStatus: rawValidationStatus,
     lastTransferResult: mostRecentTransferResult,
     transferAttemptCount: totalTransferAttempts,
-    bridgeConfiguration: activeBridgeConfiguration,
+    bridgeConfiguration: rawBridgeConfiguration,
   } = useBridgeUI(bridgeConfig);
 
-  // 검증 상태에서 세부 정보 추출
+  // 🚨 안전한 검증 상태 처리 - fallback과 타입 가드 적용
+  const safeValidationStatus = useMemo(() => {
+    console.log('🔍 [STATUS_CARD] 검증 상태 안전성 확인:', {
+      rawStatus: rawValidationStatus,
+      isValid: isValidValidationStatus(rawValidationStatus),
+    });
+
+    if (!isValidValidationStatus(rawValidationStatus)) {
+      console.warn('⚠️ [STATUS_CARD] 유효하지 않은 검증 상태, 기본값 사용');
+      return createDefaultValidationStatus();
+    }
+
+    return rawValidationStatus;
+  }, [rawValidationStatus]);
+
+  // 🚨 안전한 브릿지 설정 처리 - fallback과 타입 가드 적용
+  const safeBridgeConfiguration = useMemo(() => {
+    console.log('🔍 [STATUS_CARD] 브릿지 설정 안전성 확인:', {
+      rawConfig: rawBridgeConfiguration,
+      isValid: isValidBridgeConfiguration(rawBridgeConfiguration),
+    });
+
+    if (!isValidBridgeConfiguration(rawBridgeConfiguration)) {
+      console.warn('⚠️ [STATUS_CARD] 유효하지 않은 브릿지 설정, 기본값 사용');
+      return createDefaultBridgeConfiguration();
+    }
+
+    return rawBridgeConfiguration;
+  }, [rawBridgeConfiguration]);
+
+  // 🔍 안전한 구조분해할당 - fallback 객체와 함께 사용
   const {
+    containerCount = 0,
+    paragraphCount = 0,
+    assignedParagraphCount = 0,
+    unassignedParagraphCount = 0,
+    totalContentLength = 0,
+    validationErrors = [],
+    validationWarnings = [],
+    isReadyForTransfer = false,
+  } = safeValidationStatus || createDefaultValidationStatus();
+
+  // 브릿지 설정 안전한 구조분해할당
+  const {
+    enableValidation = false,
+    enableErrorRecovery = false,
+    debugMode = false,
+  } = safeBridgeConfiguration || createDefaultBridgeConfiguration();
+
+  // 🔍 디버깅을 위한 상태 로깅
+  console.log('📊 [STATUS_CARD] 현재 검증 상태:', {
     containerCount,
     paragraphCount,
     assignedParagraphCount,
     unassignedParagraphCount,
-    totalContentLength,
-    validationErrors,
-    validationWarnings,
+    validationErrorCount: validationErrors.length,
+    validationWarningCount: validationWarnings.length,
     isReadyForTransfer,
-  } = currentValidationStatus;
+    bridgeConfig: { enableValidation, enableErrorRecovery, debugMode },
+  });
 
   // 전체 전송 상태 계산 (UI 표시용)
   const overallTransferStatus = useMemo(() => {
@@ -491,9 +592,7 @@ export function MarkdownStatusCard({
               <div className="flex items-center space-x-2">
                 <div
                   className={`w-3 h-3 rounded-full ${
-                    activeBridgeConfiguration.enableValidation
-                      ? 'bg-blue-500'
-                      : 'bg-gray-400'
+                    enableValidation ? 'bg-blue-500' : 'bg-gray-400'
                   }`}
                 />
                 <span className="text-sm font-medium">검증 활성화</span>
@@ -504,9 +603,7 @@ export function MarkdownStatusCard({
               <div className="flex items-center space-x-2">
                 <div
                   className={`w-3 h-3 rounded-full ${
-                    activeBridgeConfiguration.enableErrorRecovery
-                      ? 'bg-green-500'
-                      : 'bg-gray-400'
+                    enableErrorRecovery ? 'bg-green-500' : 'bg-gray-400'
                   }`}
                 />
                 <span className="text-sm font-medium">오류 복구</span>
@@ -514,9 +611,7 @@ export function MarkdownStatusCard({
               <div className="flex items-center space-x-2">
                 <div
                   className={`w-3 h-3 rounded-full ${
-                    activeBridgeConfiguration.debugMode
-                      ? 'bg-yellow-500'
-                      : 'bg-gray-400'
+                    debugMode ? 'bg-yellow-500' : 'bg-gray-400'
                   }`}
                 />
                 <span className="text-sm font-medium">디버그 모드</span>
@@ -552,7 +647,7 @@ export function MarkdownStatusCard({
                   </h4>
                 </div>
                 <ul className="space-y-1">
-                  {validationErrors.map((error, index) => (
+                  {validationErrors.map((error: string, index: number) => (
                     <li
                       key={index}
                       className="flex items-start space-x-2 text-sm text-red-600"
@@ -589,7 +684,7 @@ export function MarkdownStatusCard({
                 <ul className="space-y-1">
                   {validationWarnings
                     .slice(0, size === 'detailed' ? 10 : 3)
-                    .map((warning, index) => (
+                    .map((warning: string, index: number) => (
                       <li
                         key={index}
                         className="flex items-start space-x-2 text-sm text-yellow-600"

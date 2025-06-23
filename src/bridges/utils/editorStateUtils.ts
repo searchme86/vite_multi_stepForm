@@ -2,6 +2,7 @@ import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 
 export const validateEditorContainers = (containers: Container[]): boolean => {
   console.log('🔍 [EDITOR_UTILS] 에디터 컨테이너 검증 시작');
+  console.log('containers<----', containers);
 
   if (!Array.isArray(containers)) {
     console.error('❌ [EDITOR_UTILS] 컨테이너가 배열이 아님');

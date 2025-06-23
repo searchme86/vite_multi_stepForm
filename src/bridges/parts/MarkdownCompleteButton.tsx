@@ -41,6 +41,38 @@ interface MarkdownCompleteButtonProps {
   readonly showDetailedStatus?: boolean;
 }
 
+// 기본 검증 상태 객체 - 안전한 fallback 제공
+const createDefaultValidationStatus = () => ({
+  containerCount: 0,
+  paragraphCount: 0,
+  assignedParagraphCount: 0,
+  unassignedParagraphCount: 0,
+  totalContentLength: 0,
+  validationErrors: [],
+  validationWarnings: [],
+  isReadyForTransfer: false,
+});
+
+// 검증 상태 타입 가드 함수 - 런타임 안전성 보장
+const isValidValidationStatus = (status: unknown): boolean => {
+  if (!status || typeof status !== 'object') {
+    return false;
+  }
+
+  const requiredProperties = [
+    'containerCount',
+    'paragraphCount',
+    'assignedParagraphCount',
+    'unassignedParagraphCount',
+    'totalContentLength',
+    'validationErrors',
+    'validationWarnings',
+    'isReadyForTransfer',
+  ];
+
+  return requiredProperties.every((prop) => prop in status);
+};
+
 /**
  * 마크다운 완성 버튼 컴포넌트
  * 에디터 작업을 완료하고 멀티스텝 폼으로 데이터를 전송하는 기능을 제공
@@ -74,10 +106,25 @@ export function MarkdownCompleteButton({
   const {
     canTransfer: isTransferAvailable, // 현재 전송 가능 여부
     isTransferring: isTransferInProgress, // 전송 진행 중 여부
-    validationStatus: currentValidationStatus, // 에디터 데이터 검증 상태
+    validationStatus: rawValidationStatus, // 에디터 데이터 검증 상태
     executeManualTransfer: performBridgeTransfer, // 실제 전송 실행 함수
     refreshValidationStatus: updateValidationStatus, // 검증 상태 새로고침
   } = useBridgeUI(bridgeConfig);
+
+  // 🚨 안전한 검증 상태 처리 - fallback과 타입 가드 적용
+  const safeValidationStatus = React.useMemo(() => {
+    console.log('🔍 [MARKDOWN_BUTTON] 검증 상태 안전성 확인:', {
+      rawStatus: rawValidationStatus,
+      isValid: isValidValidationStatus(rawValidationStatus),
+    });
+
+    if (!isValidValidationStatus(rawValidationStatus)) {
+      console.warn('⚠️ [MARKDOWN_BUTTON] 유효하지 않은 검증 상태, 기본값 사용');
+      return createDefaultValidationStatus();
+    }
+
+    return rawValidationStatus;
+  }, [rawValidationStatus]);
 
   // 버튼 클릭 처리 중 상태 (추가적인 UI 피드백용)
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -87,17 +134,28 @@ export function MarkdownCompleteButton({
     'success' | 'error' | null
   >(null);
 
-  // 검증 상태에서 주요 정보 추출
+  // 🔍 안전한 구조분해할당 - fallback 객체와 함께 사용
   const {
+    containerCount = 0,
+    paragraphCount = 0,
+    assignedParagraphCount = 0,
+    unassignedParagraphCount = 0,
+    totalContentLength = 0,
+    validationErrors = [],
+    validationWarnings = [],
+    isReadyForTransfer = false,
+  } = safeValidationStatus || createDefaultValidationStatus();
+
+  // 🔍 디버깅을 위한 상태 로깅
+  console.log('📊 [MARKDOWN_BUTTON] 현재 검증 상태:', {
     containerCount,
     paragraphCount,
     assignedParagraphCount,
     unassignedParagraphCount,
-    totalContentLength,
-    validationErrors,
-    validationWarnings,
+    validationErrorCount: validationErrors.length,
+    validationWarningCount: validationWarnings.length,
     isReadyForTransfer,
-  } = currentValidationStatus;
+  });
 
   // 최종 버튼 활성화 상태 계산
   // 모든 조건이 충족되어야 버튼이 활성화됨
@@ -220,7 +278,7 @@ export function MarkdownCompleteButton({
     try {
       console.log(
         '🔍 [MARKDOWN_BUTTON] 완성 전 검증 상태:',
-        currentValidationStatus
+        safeValidationStatus
       );
 
       // 검증 상태 새로고침 (최신 에디터 상태 반영)
@@ -286,7 +344,7 @@ export function MarkdownCompleteButton({
     }
   }, [
     isFinallyEnabled,
-    currentValidationStatus,
+    safeValidationStatus,
     updateValidationStatus,
     onBeforeComplete,
     performBridgeTransfer,
@@ -482,24 +540,24 @@ export function MarkdownCompleteButton({
             </span>
           </div>
 
-          {/* 검증 오류 표시 (있는 경우) */}
+          {/* 검증 오류 표시 (있는 경우) - 🔧 타입 명시 추가 */}
           {validationErrors.length > 0 && (
             <div className="text-red-600">
               <strong>오류:</strong>
               <ul className="ml-2 list-disc list-inside">
-                {validationErrors.map((error, index) => (
+                {validationErrors.map((error: string, index: number) => (
                   <li key={index}>{error}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* 검증 경고 표시 (있는 경우) */}
+          {/* 검증 경고 표시 (있는 경우) - 🔧 타입 명시 추가 */}
           {validationWarnings.length > 0 && (
             <div className="text-orange-600">
               <strong>경고:</strong>
               <ul className="ml-2 list-disc list-inside">
-                {validationWarnings.map((warning, index) => (
+                {validationWarnings.map((warning: string, index: number) => (
                   <li key={index}>{warning}</li>
                 ))}
               </ul>

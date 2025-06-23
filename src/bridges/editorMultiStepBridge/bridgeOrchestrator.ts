@@ -3,9 +3,7 @@
 import {
   BridgeSystemConfiguration,
   BridgeOperationExecutionResult,
-  EditorStateSnapshotForBridge,
   EditorToMultiStepDataTransformationResult,
-  BridgeDataValidationResult,
   BridgeOperationErrorDetails,
 } from './bridgeTypes';
 import { createBridgeErrorManagementHandler } from './bridgeErrorHandler';
@@ -13,319 +11,217 @@ import { createBridgeDataValidationHandler } from './bridgeValidator';
 import { createEditorToMultiStepDataTransformer } from './dataTransformer';
 import { createEditorStateExtractor } from './editorStateExtractor';
 import { createMultiStepStateUpdater } from './multiStepStateUpdater';
+import { VALIDATION_CRITERIA } from './bridgeConfig';
 
 export const createEditorMultiStepBridgeOrchestrator = (
-  customBridgeConfiguration?: Partial<BridgeSystemConfiguration>
+  customConfig?: Partial<BridgeSystemConfiguration>
 ) => {
-  const defaultBridgeSystemConfiguration: BridgeSystemConfiguration = {
+  const defaultConfig: BridgeSystemConfiguration = {
     enableValidation: true,
     enableErrorRecovery: true,
     validationMode: 'strict',
     debugMode: false,
   };
 
-  const {
-    enableValidation = true,
-    enableErrorRecovery = true,
-    validationMode = 'strict',
-    debugMode = false,
-  } = { ...defaultBridgeSystemConfiguration, ...customBridgeConfiguration };
+  const config = { ...defaultConfig, ...customConfig };
 
-  const finalBridgeConfiguration: BridgeSystemConfiguration = {
-    enableValidation,
-    enableErrorRecovery,
-    validationMode,
-    debugMode,
-  };
+  // 핸들러들 생성
+  const errorHandler = createBridgeErrorManagementHandler();
+  const validator = createBridgeDataValidationHandler();
+  const transformer = createEditorToMultiStepDataTransformer();
+  const extractor = createEditorStateExtractor();
+  const updater = createMultiStepStateUpdater();
 
-  const bridgeErrorManagementHandler = createBridgeErrorManagementHandler();
-  const bridgeDataValidationHandler = createBridgeDataValidationHandler();
-  const editorToMultiStepDataTransformer =
-    createEditorToMultiStepDataTransformer();
-  const editorStateExtractorHandler = createEditorStateExtractor();
-  const multiStepStateUpdaterHandler = createMultiStepStateUpdater();
-
-  const {
-    createBridgeErrorDetails: createStandardizedBridgeErrorDetails,
-    logErrorDetails: logStructuredErrorDetails,
-    createRecoveryStrategy: formulateErrorRecoveryStrategy,
-  } = bridgeErrorManagementHandler;
-
-  const {
-    validateEditorStateForTransfer: performComprehensiveEditorStateValidation,
-  } = bridgeDataValidationHandler;
-
-  const {
-    transformEditorStateToMultiStep:
-      performCompleteEditorToMultiStepTransformation,
-  } = editorToMultiStepDataTransformer;
-
-  const { getEditorStateWithValidation: getValidatedEditorStateSnapshot } =
-    editorStateExtractorHandler;
-
-  const { performCompleteStateUpdate: executeCompleteMultiStepStateUpdate } =
-    multiStepStateUpdaterHandler;
-
+  // 사전 조건 캐시
   let preconditionCache = {
     result: false,
     timestamp: 0,
-    cacheTimeout: 1000,
   };
 
-  const executeBridgeDataTransferOperation =
+  const executeBridgeTransfer =
     async (): Promise<BridgeOperationExecutionResult> => {
-      const operationStartTimestamp = performance.now();
-      const operationErrorsList: BridgeOperationErrorDetails[] = [];
-      const operationWarningsList: string[] = [];
-      let transferredDataResult: EditorToMultiStepDataTransformationResult | null =
+      const startTime = performance.now();
+      const errors: BridgeOperationErrorDetails[] = [];
+      const warnings: string[] = [];
+      let transferredData: EditorToMultiStepDataTransformationResult | null =
         null;
 
       try {
-        const extractedEditorStateSnapshot = getValidatedEditorStateSnapshot();
+        console.log('🚀 [ORCHESTRATOR] 브릿지 전송 시작');
 
-        if (!extractedEditorStateSnapshot) {
-          const extractionErrorDetails = createStandardizedBridgeErrorDetails(
+        // 1. 에디터 상태 추출
+        const editorState = extractor.getEditorStateWithValidation();
+        if (!editorState) {
+          const error = errorHandler.createBridgeErrorDetails(
             new Error('에디터 상태 추출 실패'),
             'EXTRACTION'
           );
-          logStructuredErrorDetails(extractionErrorDetails);
-          operationErrorsList.push(extractionErrorDetails);
-
-          const operationEndTimestamp = performance.now();
-          const totalOperationDuration =
-            operationEndTimestamp - operationStartTimestamp;
+          errors.push(error);
 
           return {
             operationSuccess: false,
-            operationErrors: operationErrorsList,
-            operationWarnings: operationWarningsList,
+            operationErrors: errors,
+            operationWarnings: warnings,
             transferredData: null,
-            operationDuration: totalOperationDuration,
+            operationDuration: performance.now() - startTime,
           };
         }
 
-        if (enableValidation) {
-          const validationResultData =
-            performComprehensiveEditorStateValidation(
-              extractedEditorStateSnapshot
-            );
+        // 2. 검증 (설정에 따라)
+        if (config.enableValidation) {
+          const validationResult = validator.validateForTransfer(editorState);
 
-          const {
-            isValidForTransfer: isDataValidForTransfer,
-            validationErrors: criticalValidationErrors,
-            validationWarnings: nonCriticalValidationWarnings,
-          } = validationResultData;
-
-          if (nonCriticalValidationWarnings.length > 0) {
-            operationWarningsList.push(...nonCriticalValidationWarnings);
+          if (validationResult.validationWarnings.length > 0) {
+            warnings.push(...validationResult.validationWarnings);
           }
 
-          if (!isDataValidForTransfer) {
-            for (const singleValidationError of criticalValidationErrors) {
-              const validationErrorDetails =
-                createStandardizedBridgeErrorDetails(
-                  new Error(singleValidationError),
-                  'VALIDATION'
-                );
-              logStructuredErrorDetails(validationErrorDetails);
-              operationErrorsList.push(validationErrorDetails);
+          if (!validationResult.isValidForTransfer) {
+            for (const errorMessage of validationResult.validationErrors) {
+              const error = errorHandler.createBridgeErrorDetails(
+                new Error(errorMessage),
+                'VALIDATION'
+              );
+              errors.push(error);
             }
-
-            const operationEndTimestamp = performance.now();
-            const totalOperationDuration =
-              operationEndTimestamp - operationStartTimestamp;
 
             return {
               operationSuccess: false,
-              operationErrors: operationErrorsList,
-              operationWarnings: operationWarningsList,
+              operationErrors: errors,
+              operationWarnings: warnings,
               transferredData: null,
-              operationDuration: totalOperationDuration,
+              operationDuration: performance.now() - startTime,
             };
           }
         }
 
-        const transformationResultData =
-          performCompleteEditorToMultiStepTransformation(
-            extractedEditorStateSnapshot
-          );
+        // 3. 데이터 변환
+        const transformResult =
+          transformer.transformEditorStateToMultiStep(editorState);
 
-        const {
-          transformationSuccess: wasTransformationSuccessful,
-          transformationErrors: transformationErrorMessages,
-        } = transformationResultData;
-
-        if (!wasTransformationSuccessful) {
-          for (const singleTransformationError of transformationErrorMessages) {
-            const transformationErrorDetails =
-              createStandardizedBridgeErrorDetails(
-                new Error(singleTransformationError),
-                'TRANSFORMATION'
-              );
-            logStructuredErrorDetails(transformationErrorDetails);
-            operationErrorsList.push(transformationErrorDetails);
+        if (!transformResult.transformationSuccess) {
+          for (const errorMessage of transformResult.transformationErrors) {
+            const error = errorHandler.createBridgeErrorDetails(
+              new Error(errorMessage),
+              'TRANSFORMATION'
+            );
+            errors.push(error);
           }
-
-          const operationEndTimestamp = performance.now();
-          const totalOperationDuration =
-            operationEndTimestamp - operationStartTimestamp;
 
           return {
             operationSuccess: false,
-            operationErrors: operationErrorsList,
-            operationWarnings: operationWarningsList,
+            operationErrors: errors,
+            operationWarnings: warnings,
             transferredData: null,
-            operationDuration: totalOperationDuration,
+            operationDuration: performance.now() - startTime,
           };
         }
 
-        transferredDataResult = transformationResultData;
+        transferredData = transformResult;
 
-        const stateUpdateSuccessful = await executeCompleteMultiStepStateUpdate(
-          transformationResultData
+        // 4. 상태 업데이트
+        const updateSuccess = await updater.performCompleteStateUpdate(
+          transformResult
         );
 
-        if (!stateUpdateSuccessful) {
-          const updateErrorDetails = createStandardizedBridgeErrorDetails(
+        if (!updateSuccess) {
+          const error = errorHandler.createBridgeErrorDetails(
             new Error('멀티스텝 상태 업데이트 실패'),
             'UPDATE'
           );
-          logStructuredErrorDetails(updateErrorDetails);
-          operationErrorsList.push(updateErrorDetails);
-
-          const operationEndTimestamp = performance.now();
-          const totalOperationDuration =
-            operationEndTimestamp - operationStartTimestamp;
+          errors.push(error);
 
           return {
             operationSuccess: false,
-            operationErrors: operationErrorsList,
-            operationWarnings: operationWarningsList,
-            transferredData: transferredDataResult,
-            operationDuration: totalOperationDuration,
+            operationErrors: errors,
+            operationWarnings: warnings,
+            transferredData: transferredData,
+            operationDuration: performance.now() - startTime,
           };
         }
 
-        const operationEndTimestamp = performance.now();
-        const totalOperationDuration =
-          operationEndTimestamp - operationStartTimestamp;
+        console.log('✅ [ORCHESTRATOR] 브릿지 전송 성공');
 
         return {
           operationSuccess: true,
           operationErrors: [],
-          operationWarnings: operationWarningsList,
-          transferredData: transferredDataResult,
-          operationDuration: totalOperationDuration,
+          operationWarnings: warnings,
+          transferredData: transferredData,
+          operationDuration: performance.now() - startTime,
         };
-      } catch (unexpectedBridgeError) {
-        const unexpectedErrorDetails = createStandardizedBridgeErrorDetails(
-          unexpectedBridgeError,
+      } catch (error) {
+        console.error('❌ [ORCHESTRATOR] 브릿지 전송 중 예외:', error);
+
+        const errorDetail = errorHandler.createBridgeErrorDetails(
+          error,
           'GENERAL'
         );
-        logStructuredErrorDetails(unexpectedErrorDetails);
-        operationErrorsList.push(unexpectedErrorDetails);
+        errors.push(errorDetail);
 
-        if (enableErrorRecovery) {
-          const recoveryStrategies = formulateErrorRecoveryStrategy(
-            unexpectedErrorDetails
-          );
-          operationWarningsList.push(
-            `복구 전략 제안: ${recoveryStrategies.join(', ')}`
-          );
+        if (config.enableErrorRecovery) {
+          const recoverySteps =
+            errorHandler.createRecoveryStrategy(errorDetail);
+          warnings.push(`복구 제안: ${recoverySteps.join(', ')}`);
         }
-
-        const operationEndTimestamp = performance.now();
-        const totalOperationDuration =
-          operationEndTimestamp - operationStartTimestamp;
 
         return {
           operationSuccess: false,
-          operationErrors: operationErrorsList,
-          operationWarnings: operationWarningsList,
-          transferredData: transferredDataResult,
-          operationDuration: totalOperationDuration,
+          operationErrors: errors,
+          operationWarnings: warnings,
+          transferredData: transferredData,
+          operationDuration: performance.now() - startTime,
         };
       }
     };
 
-  const checkBridgeTransferPreconditions = (): boolean => {
+  const checkTransferPreconditions = (): boolean => {
     const currentTime = Date.now();
     const timeSinceLastCheck = currentTime - preconditionCache.timestamp;
 
-    if (timeSinceLastCheck < preconditionCache.cacheTimeout) {
+    // 캐시 사용
+    if (timeSinceLastCheck < VALIDATION_CRITERIA.cacheDuration) {
       return preconditionCache.result;
     }
 
     try {
-      const currentEditorStateSnapshot = getValidatedEditorStateSnapshot();
+      const editorState = extractor.getEditorStateWithValidation();
 
-      if (!currentEditorStateSnapshot) {
-        if (debugMode) {
-          console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패');
+      if (!editorState) {
+        if (config.debugMode) {
+          console.warn('⚠️ [ORCHESTRATOR] 에디터 상태 없음');
         }
-        preconditionCache = {
-          result: false,
-          timestamp: currentTime,
-          cacheTimeout: 1000,
-        };
+        preconditionCache = { result: false, timestamp: currentTime };
         return false;
       }
 
-      if (enableValidation) {
-        const preValidationResult = performComprehensiveEditorStateValidation(
-          currentEditorStateSnapshot
-        );
-        const { isValidForTransfer: preCheckValidForTransfer } =
-          preValidationResult;
+      if (config.enableValidation) {
+        const validationResult = validator.validateForTransfer(editorState);
 
-        if (!preCheckValidForTransfer) {
-          if (debugMode) {
-            console.warn('⚠️ [BRIDGE_ORCHESTRATOR] 사전 검증 실패');
+        if (!validationResult.isValidForTransfer) {
+          if (config.debugMode) {
+            console.warn('⚠️ [ORCHESTRATOR] 검증 실패');
           }
-          preconditionCache = {
-            result: false,
-            timestamp: currentTime,
-            cacheTimeout: 1000,
-          };
+          preconditionCache = { result: false, timestamp: currentTime };
           return false;
         }
       }
 
-      preconditionCache = {
-        result: true,
-        timestamp: currentTime,
-        cacheTimeout: 1000,
-      };
+      preconditionCache = { result: true, timestamp: currentTime };
       return true;
-    } catch (preconditionError) {
-      if (debugMode) {
-        console.error(
-          '❌ [BRIDGE_ORCHESTRATOR] 사전 조건 확인 중 오류:',
-          preconditionError
-        );
+    } catch (error) {
+      if (config.debugMode) {
+        console.error('❌ [ORCHESTRATOR] 사전 조건 확인 실패:', error);
       }
-      preconditionCache = {
-        result: false,
-        timestamp: currentTime,
-        cacheTimeout: 2000,
-      };
+      preconditionCache = { result: false, timestamp: currentTime };
       return false;
     }
   };
 
-  const getBridgeSystemConfiguration = (): BridgeSystemConfiguration => {
-    return finalBridgeConfiguration;
-  };
-
-  const triggerManualBridgeTransfer =
-    async (): Promise<BridgeOperationExecutionResult> => {
-      return await executeBridgeDataTransferOperation();
-    };
+  const getConfiguration = (): BridgeSystemConfiguration => config;
 
   return {
-    executeBridgeTransfer: executeBridgeDataTransferOperation,
-    checkTransferPreconditions: checkBridgeTransferPreconditions,
-    getConfiguration: getBridgeSystemConfiguration,
-    triggerManualTransfer: triggerManualBridgeTransfer,
+    executeBridgeTransfer,
+    checkTransferPreconditions,
+    getConfiguration,
+    triggerManualTransfer: executeBridgeTransfer,
   };
 };
