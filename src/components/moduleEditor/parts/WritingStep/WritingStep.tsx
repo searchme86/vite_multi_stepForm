@@ -149,9 +149,13 @@ function WritingStep({
     return config;
   }, []);
 
-  // 🔧 핵심 수정: bridgeConfiguration을 전달하여 useBridgeUIComponents 호출
-  const { validationStatus: rawValidationStatus } =
-    useBridgeUIComponents(bridgeConfiguration);
+  // 🔧 핵심 수정: 브리지 UI 컴포넌트에서 전송 함수들 추가
+  const {
+    validationStatus: rawValidationStatus,
+    executeManualTransfer, // ✅ 브리지 전송 함수 추가
+    canTransfer, // ✅ 전송 가능 여부 추가
+    isTransferring, // ✅ 전송 중 상태 추가
+  } = useBridgeUIComponents(bridgeConfiguration);
 
   const {
     isOpen: isErrorModalOpen,
@@ -201,6 +205,52 @@ function WritingStep({
     return errorCount > 0 || notReady;
   }, [validationErrors, isReadyForTransfer, bridgeConfiguration]);
 
+  // 🔧 완성 버튼 핸들러 수정 - 브리지 전송 연결
+  const handleCompleteEditor = useCallback(async () => {
+    console.log('🚀 [WRITING_STEP] 완성 버튼 클릭 - 브리지 전송 시작');
+
+    try {
+      // 1단계: 브리지 전송 가능 여부 확인
+      if (!canTransfer) {
+        console.warn('⚠️ [WRITING_STEP] 브리지 전송 불가 상태:', {
+          canTransfer,
+          isTransferring,
+          isReadyForTransfer,
+          validationErrorCount: validationErrors.length,
+        });
+        return;
+      }
+
+      // 2단계: 브리지를 통한 에디터 → 멀티스텝 전송
+      console.log('📤 [WRITING_STEP] 브리지 전송 실행');
+      await executeManualTransfer();
+
+      // 3단계: 전송 성공 후 기존 완성 로직 실행
+      console.log('✅ [WRITING_STEP] 브리지 전송 완료, 기존 완성 로직 실행');
+
+      // 기존 completeEditor 함수 호출 (UI 전환 등)
+      if (typeof completeEditor === 'function') {
+        completeEditor();
+      }
+
+      console.log('🎉 [WRITING_STEP] 에디터 완성 프로세스 전체 완료');
+    } catch (transferError) {
+      console.error('❌ [WRITING_STEP] 브리지 전송 실패:', transferError);
+
+      // 전송 실패해도 기존 로직은 실행 (fallback)
+      if (typeof completeEditor === 'function') {
+        completeEditor();
+      }
+    }
+  }, [
+    canTransfer,
+    executeManualTransfer,
+    completeEditor,
+    isTransferring,
+    isReadyForTransfer,
+    validationErrors,
+  ]);
+
   const handleShowErrorDetails = useCallback(() => {
     console.log('🔍 [WRITING_STEP] 에러 상세 정보 모달 열기');
     openErrorModal();
@@ -231,6 +281,8 @@ function WritingStep({
       bridgeConfigurationExists: !!bridgeConfiguration,
       currentValidationStatus,
       isReadyForTransfer,
+      canTransfer,
+      isTransferring,
     });
   }, [
     localContainers,
@@ -238,6 +290,8 @@ function WritingStep({
     bridgeConfiguration,
     currentValidationStatus,
     isReadyForTransfer,
+    canTransfer,
+    isTransferring,
   ]);
 
   const unassignedParagraphsForStats = useMemo(() => {
@@ -436,17 +490,17 @@ function WritingStep({
           showQuickActions={true}
           showStatistics={false}
           collapsible={true}
-          onQuickTransfer={completeEditor}
+          onQuickTransfer={handleCompleteEditor} // ✅ 수정된 핸들러 사용
           onShowDetails={() => {}}
           className="border-b border-gray-200 backdrop-blur-sm"
         />
 
-        {/* 🔧 핵심 수정: bridgeConfig prop 추가 */}
+        {/* 🔧 핵심 수정: bridgeConfig prop과 수정된 핸들러 전달 */}
         <StepControls
           sortedContainers={sortedContainers}
           goToStructureStep={goToStructureStep}
           saveAllToContext={saveAllToContext}
-          completeEditor={completeEditor}
+          completeEditor={handleCompleteEditor} // ✅ 수정된 핸들러 전달
           bridgeConfig={bridgeConfiguration}
         />
         <div className="mt-[30px]">
@@ -470,12 +524,12 @@ function WritingStep({
         </div>
 
         <div className="flex flex-col flex-1">
-          {/* 🔧 핵심 수정: 모바일에서도 bridgeConfig prop 추가 */}
+          {/* 🔧 핵심 수정: 모바일에서도 bridgeConfig prop과 수정된 핸들러 전달 */}
           <StepControls
             sortedContainers={sortedContainers}
             goToStructureStep={goToStructureStep}
             saveAllToContext={saveAllToContext}
-            completeEditor={completeEditor}
+            completeEditor={handleCompleteEditor} // ✅ 모바일에서도 수정된 핸들러 전달
             bridgeConfig={bridgeConfiguration}
           />
           <div className="mt-4 space-y-4">
@@ -497,7 +551,7 @@ function WritingStep({
               size="medium"
               variant="primary"
               fullWidth={true}
-              onCompleteSuccess={completeEditor}
+              onCompleteSuccess={handleCompleteEditor} // ✅ 수정된 핸들러 사용
               showDetailedStatus={false}
               forceDisabled={hasErrorsForCompleteButton}
               className="py-3 text-sm transition-all duration-200"
@@ -524,7 +578,7 @@ function WritingStep({
             showQuickActions={true}
             showStatistics={true}
             collapsible={false}
-            onQuickTransfer={completeEditor}
+            onQuickTransfer={handleCompleteEditor} // ✅ 수정된 핸들러 사용
             onShowDetails={() => {}}
             className="border-t border-gray-200 backdrop-blur-sm"
           />
