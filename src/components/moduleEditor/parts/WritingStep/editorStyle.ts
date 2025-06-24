@@ -1,4 +1,5 @@
-export const editorStyles = `.tiptap-wrapper .ProseMirror {
+export const editorStyles = `
+            .tiptap-wrapper .ProseMirror {
               outline: none;
               min-height: 200px;
               padding: 1rem;
@@ -105,4 +106,13 @@ export const editorStyles = `.tiptap-wrapper .ProseMirror {
               opacity: 0.5 !important;
               filter: grayscale(100%) !important;
               border: 2px dashed #ccc !important;
-            }`;
+            }
+
+            .scrollbar-hide {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+            }
+          `;

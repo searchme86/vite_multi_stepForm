@@ -21,6 +21,10 @@ import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
 import { PreviewPanelProps } from '../../../swipeableSection/types/swipeableTypes.ts';
 import type { Container } from '../../../../store/shared/commonTypes';
 
+// 🔧 BridgeSystemConfiguration import 추가
+import { BridgeSystemConfiguration } from '../../../../bridges/editorMultiStepBridge/bridgeDataTypes';
+import { editorStyles } from './editorStyle.ts';
+
 type SubStep = 'structure' | 'writing';
 
 interface EditorInternalState {
@@ -131,7 +135,23 @@ function WritingStep({
     string | null
   >(null);
 
-  const { validationStatus: rawValidationStatus } = useBridgeUIComponents();
+  // 🔧 핵심 수정: BridgeSystemConfiguration 생성
+  const bridgeConfiguration: BridgeSystemConfiguration = useMemo(() => {
+    console.log('🔧 [WRITING_STEP] Bridge 설정 생성');
+
+    const config: BridgeSystemConfiguration = {
+      enableValidation: true, // 검증 활성화
+      enableErrorRecovery: true, // 에러 복구 활성화
+      debugMode: true, // 🔍 디버그 모드 활성화 (문제 해결용)
+    };
+
+    console.log('📊 [WRITING_STEP] 생성된 Bridge 설정:', config);
+    return config;
+  }, []);
+
+  // 🔧 핵심 수정: bridgeConfiguration을 전달하여 useBridgeUIComponents 호출
+  const { validationStatus: rawValidationStatus } =
+    useBridgeUIComponents(bridgeConfiguration);
 
   const {
     isOpen: isErrorModalOpen,
@@ -143,6 +163,7 @@ function WritingStep({
     console.log('🔍 [WRITING_STEP] 검증 상태 안전성 확인:', {
       rawStatus: rawValidationStatus,
       isValid: isValidValidationStatus(rawValidationStatus),
+      bridgeConfigProvided: !!bridgeConfiguration,
     });
 
     if (!isValidValidationStatus(rawValidationStatus)) {
@@ -151,7 +172,7 @@ function WritingStep({
     }
 
     return rawValidationStatus;
-  }, [rawValidationStatus]);
+  }, [rawValidationStatus, bridgeConfiguration]);
 
   const {
     validationErrors = [],
@@ -175,9 +196,10 @@ function WritingStep({
     console.log('📊 [WRITING_STEP] 완성 버튼용 에러 상태 계산:', {
       errorCount,
       notReady,
+      bridgeConfig: !!bridgeConfiguration,
     });
     return errorCount > 0 || notReady;
-  }, [validationErrors, isReadyForTransfer]);
+  }, [validationErrors, isReadyForTransfer, bridgeConfiguration]);
 
   const handleShowErrorDetails = useCallback(() => {
     console.log('🔍 [WRITING_STEP] 에러 상세 정보 모달 열기');
@@ -200,6 +222,23 @@ function WritingStep({
       window.removeEventListener('resize', checkMobile);
     };
   }, [isMobile]);
+
+  // 🔧 브리지 연결 상태 확인용 Effect 추가
+  useEffect(() => {
+    console.log('🔄 [WRITING_STEP] Bridge 연결 상태 모니터링:', {
+      localContainersCount: localContainers?.length || 0,
+      localParagraphsCount: localParagraphs?.length || 0,
+      bridgeConfigurationExists: !!bridgeConfiguration,
+      currentValidationStatus,
+      isReadyForTransfer,
+    });
+  }, [
+    localContainers,
+    localParagraphs,
+    bridgeConfiguration,
+    currentValidationStatus,
+    isReadyForTransfer,
+  ]);
 
   const unassignedParagraphsForStats = useMemo(() => {
     try {
@@ -402,11 +441,13 @@ function WritingStep({
           className="border-b border-gray-200 backdrop-blur-sm"
         />
 
+        {/* 🔧 핵심 수정: bridgeConfig prop 추가 */}
         <StepControls
           sortedContainers={sortedContainers}
           goToStructureStep={goToStructureStep}
           saveAllToContext={saveAllToContext}
           completeEditor={completeEditor}
+          bridgeConfig={bridgeConfiguration}
         />
         <div className="mt-[30px]">
           <h2 className="text-xl font-bold text-gray-900">📝 단락 작성</h2>
@@ -429,11 +470,13 @@ function WritingStep({
         </div>
 
         <div className="flex flex-col flex-1">
+          {/* 🔧 핵심 수정: 모바일에서도 bridgeConfig prop 추가 */}
           <StepControls
             sortedContainers={sortedContainers}
             goToStructureStep={goToStructureStep}
             saveAllToContext={saveAllToContext}
             completeEditor={completeEditor}
+            bridgeConfig={bridgeConfiguration}
           />
           <div className="mt-4 space-y-4">
             <MarkdownStatusCard
@@ -515,124 +558,7 @@ function WritingStep({
 
       <style
         dangerouslySetInnerHTML={{
-          __html: `
-            .tiptap-wrapper .ProseMirror {
-              outline: none;
-              min-height: 200px;
-              padding: 1rem;
-            }
-
-            .tiptap-wrapper .ProseMirror p.is-editor-empty:first-child::before {
-              content: attr(data-placeholder);
-              float: left;
-              color: #adb5bd;
-              pointer-events: none;
-              height: 0;
-              white-space: pre-line;
-            }
-
-            .tiptap-wrapper .tiptap-image,
-            .tiptap-wrapper .ProseMirror img,
-            .tiptap-wrapper img {
-              max-width: 100% !important;
-              height: auto !important;
-              border-radius: 8px !important;
-              margin: 8px 0 !important;
-              display: block !important;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-              cursor: pointer !important;
-              transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-            }
-
-            .tiptap-wrapper .tiptap-image:hover,
-            .tiptap-wrapper .ProseMirror img:hover,
-            .tiptap-wrapper img:hover {
-              transform: scale(1.02) !important;
-              box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-            }
-
-            .tiptap-wrapper img[src=""],
-            .tiptap-wrapper img:not([src]) {
-              background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-              background-size: 200% 100%;
-              animation: loading 1.5s infinite;
-              min-height: 100px;
-              opacity: 0.7;
-            }
-
-            @keyframes loading {
-              0% { background-position: 200% 0; }
-              100% { background-position: -200% 0; }
-            }
-
-            .tiptap-wrapper .tiptap-link {
-              color: #3b82f6;
-              text-decoration: underline;
-            }
-
-            .tiptap-wrapper .ProseMirror-dropcursor {
-              border-left: 2px solid #3b82f6;
-            }
-
-            .tiptap-wrapper .ProseMirror-gapcursor {
-              display: none;
-              pointer-events: none;
-              position: absolute;
-            }
-
-            .tiptap-wrapper .ProseMirror-gapcursor:after {
-              content: '';
-              display: block;
-              position: absolute;
-              top: -2px;
-              width: 20px;
-              border-top: 1px solid #3b82f6;
-              animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
-            }
-
-            @keyframes ProseMirror-cursor-blink {
-              to {
-                visibility: hidden;
-              }
-            }
-
-            .tiptap-wrapper .ProseMirror-selectednode {
-              outline: 2px solid #3b82f6;
-              outline-offset: 2px;
-            }
-
-            .markdown-content img,
-            .rendered-image {
-              max-width: 100% !important;
-              height: auto !important;
-              border-radius: 8px !important;
-              margin: 8px 0 !important;
-              display: block !important;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-              cursor: pointer !important;
-              transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-            }
-
-            .markdown-content .rendered-image:hover {
-              transform: scale(1.02) !important;
-              box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-            }
-
-            .markdown-content img[alt*="불러올 수 없습니다"],
-            .rendered-image[alt*="불러올 수 없습니다"] {
-              opacity: 0.5 !important;
-              filter: grayscale(100%) !important;
-              border: 2px dashed #ccc !important;
-            }
-
-            .scrollbar-hide {
-              -ms-overflow-style: none;
-              scrollbar-width: none;
-            }
-            .scrollbar-hide::-webkit-scrollbar {
-              display: none;
-            }
-          `,
+          __html: editorStyles,
         }}
       />
     </div>
