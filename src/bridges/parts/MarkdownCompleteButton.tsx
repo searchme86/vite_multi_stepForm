@@ -1,10 +1,9 @@
-// bridges/parts/MarkdownCompleteButton.tsx
-
 import React, { useState, useCallback } from 'react';
 import { useBridgeUIComponents } from '../hooks/useBridgeUIComponents';
 import { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 
-interface MarkdownCompleteButtonProps {
+// 버튼 프로퍼티 인터페이스
+interface MarkdownCompleteButtonProperties {
   readonly buttonText?: string;
   readonly size?: 'small' | 'medium' | 'large';
   readonly variant?: 'primary' | 'secondary' | 'success';
@@ -18,23 +17,31 @@ interface MarkdownCompleteButtonProps {
   readonly showDetailedStatus?: boolean;
 }
 
-const createDefaultValidationStatus = () => ({
-  containerCount: 0,
-  paragraphCount: 0,
-  assignedParagraphCount: 0,
-  unassignedParagraphCount: 0,
-  totalContentLength: 0,
-  validationErrors: [],
-  validationWarnings: [],
-  isReadyForTransfer: false,
-});
+// 검증 상태 인터페이스
+interface ValidationStatusForButton {
+  readonly containerCount: number;
+  readonly paragraphCount: number;
+  readonly assignedParagraphCount: number;
+  readonly unassignedParagraphCount: number;
+  readonly totalContentLength: number;
+  readonly validationErrors: string[];
+  readonly validationWarnings: string[];
+  readonly isReadyForTransfer: boolean;
+}
 
-const isValidValidationStatus = (status: unknown): boolean => {
-  if (!status || typeof status !== 'object') {
+// 처리 결과 타입
+type ProcessingResult = 'success' | 'error' | null;
+
+// 타입 가드 함수들
+function isValidationStatusForButton(
+  candidateStatus: unknown
+): candidateStatus is ValidationStatusForButton {
+  if (!candidateStatus || typeof candidateStatus !== 'object') {
     return false;
   }
 
-  const requiredProperties = [
+  const statusObject = candidateStatus as Record<string, unknown>;
+  const requiredProperties = new Set([
     'containerCount',
     'paragraphCount',
     'assignedParagraphCount',
@@ -43,11 +50,35 @@ const isValidValidationStatus = (status: unknown): boolean => {
     'validationErrors',
     'validationWarnings',
     'isReadyForTransfer',
-  ];
+  ]);
 
-  return requiredProperties.every((prop) => prop in status);
-};
+  return Array.from(requiredProperties).every(
+    (propertyName) => propertyName in statusObject
+  );
+}
 
+function isStringArray(candidateArray: unknown): candidateArray is string[] {
+  return (
+    Array.isArray(candidateArray) &&
+    candidateArray.every((item) => typeof item === 'string')
+  );
+}
+
+// 기본 검증 상태 생성 함수
+function createDefaultValidationStatusForButton(): ValidationStatusForButton {
+  return {
+    containerCount: 0,
+    paragraphCount: 0,
+    assignedParagraphCount: 0,
+    unassignedParagraphCount: 0,
+    totalContentLength: 0,
+    validationErrors: [],
+    validationWarnings: [],
+    isReadyForTransfer: false,
+  };
+}
+
+// 마크다운 완성 버튼 컴포넌트
 export function MarkdownCompleteButton({
   buttonText = '마크다운 완성',
   size = 'medium',
@@ -60,37 +91,40 @@ export function MarkdownCompleteButton({
   bridgeConfig,
   forceDisabled = false,
   showDetailedStatus = true,
-}: MarkdownCompleteButtonProps): React.ReactElement {
+}: MarkdownCompleteButtonProperties): React.ReactElement {
   console.log('🔘 [MARKDOWN_BUTTON] 마크다운 완성 버튼 렌더링');
 
+  // Bridge UI 컴포넌트 훅 사용
   const {
-    canTransfer: isTransferAvailable,
-    isTransferring: isTransferInProgress,
-    validationStatus: rawValidationStatus,
-    executeManualTransfer: performBridgeTransfer,
-    refreshValidationStatus: updateValidationStatus,
+    canTransfer: isTransferCurrentlyAvailable,
+    isTransferring: isTransferCurrentlyInProgress,
+    validationStatus: rawValidationStatusData,
+    executeManualTransfer: performBridgeTransferOperation,
+    refreshValidationStatus: updateCurrentValidationStatus,
   } = useBridgeUIComponents(bridgeConfig);
 
-  const safeValidationStatus = React.useMemo(() => {
+  // 안전한 검증 상태 메모이제이션
+  const safeValidationStatusData = React.useMemo(() => {
     console.log('🔍 [MARKDOWN_BUTTON] 검증 상태 안전성 확인:', {
-      rawStatus: rawValidationStatus,
-      isValid: isValidValidationStatus(rawValidationStatus),
+      rawStatus: rawValidationStatusData,
+      isValid: isValidationStatusForButton(rawValidationStatusData),
     });
 
-    if (!isValidValidationStatus(rawValidationStatus)) {
+    if (!isValidationStatusForButton(rawValidationStatusData)) {
       console.warn('⚠️ [MARKDOWN_BUTTON] 유효하지 않은 검증 상태, 기본값 사용');
-      return createDefaultValidationStatus();
+      return createDefaultValidationStatusForButton();
     }
 
-    return rawValidationStatus;
-  }, [rawValidationStatus]);
+    return rawValidationStatusData;
+  }, [rawValidationStatusData]);
 
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // 로컬 상태 관리
+  const [isCurrentlyProcessing, setIsCurrentlyProcessing] =
+    useState<boolean>(false);
+  const [lastProcessingResult, setLastProcessingResult] =
+    useState<ProcessingResult>(null);
 
-  const [lastProcessResult, setLastProcessResult] = useState<
-    'success' | 'error' | null
-  >(null);
-
+  // 검증 상태 구조분해할당으로 추출
   const {
     containerCount = 0,
     paragraphCount = 0,
@@ -100,7 +134,7 @@ export function MarkdownCompleteButton({
     validationErrors = [],
     validationWarnings = [],
     isReadyForTransfer = false,
-  } = safeValidationStatus || createDefaultValidationStatus();
+  } = safeValidationStatusData || createDefaultValidationStatusForButton();
 
   console.log('📊 [MARKDOWN_BUTTON] 현재 검증 상태:', {
     containerCount,
@@ -112,121 +146,145 @@ export function MarkdownCompleteButton({
     isReadyForTransfer,
   });
 
-  const isFinallyEnabled =
+  // 최종 버튼 활성화 상태 계산
+  const isFinalButtonEnabled =
     !forceDisabled &&
-    !isTransferInProgress &&
-    !isProcessing &&
-    isTransferAvailable &&
+    !isTransferCurrentlyInProgress &&
+    !isCurrentlyProcessing &&
+    isTransferCurrentlyAvailable &&
     isReadyForTransfer &&
-    validationErrors.length === 0;
+    (isStringArray(validationErrors) ? validationErrors.length === 0 : true);
 
-  const getButtonDisplayText = useCallback((): string => {
-    if (isTransferInProgress || isProcessing) {
+  // 버튼 표시 텍스트 계산 함수
+  const calculateButtonDisplayText = useCallback((): string => {
+    if (isTransferCurrentlyInProgress || isCurrentlyProcessing) {
       return '마크다운 생성 중...';
     }
 
-    if (validationErrors.length > 0) {
+    const safeValidationErrors = isStringArray(validationErrors)
+      ? validationErrors
+      : [];
+    if (safeValidationErrors.length > 0) {
       return '완성 불가 (오류 해결 필요)';
     }
 
-    if (!isTransferAvailable || !isReadyForTransfer) {
+    if (!isTransferCurrentlyAvailable || !isReadyForTransfer) {
       return '완성 준비 중...';
     }
 
-    if (lastProcessResult === 'success') {
+    if (lastProcessingResult === 'success') {
       return '완성 성공!';
     }
 
-    if (lastProcessResult === 'error') {
+    if (lastProcessingResult === 'error') {
       return '완성 실패 (다시 시도)';
     }
 
     return buttonText;
   }, [
-    isTransferInProgress,
-    isProcessing,
-    validationErrors.length,
-    isTransferAvailable,
+    isTransferCurrentlyInProgress,
+    isCurrentlyProcessing,
+    validationErrors,
+    isTransferCurrentlyAvailable,
     isReadyForTransfer,
-    lastProcessResult,
+    lastProcessingResult,
     buttonText,
   ]);
 
-  const getSizeClasses = useCallback((): string => {
-    const sizeClassMap = {
-      small: 'px-3 py-1.5 text-sm',
-      medium: 'px-4 py-2 text-base',
-      large: 'px-6 py-3 text-lg',
-    };
-    return sizeClassMap[size] || sizeClassMap.medium;
+  // 크기별 CSS 클래스 계산 함수
+  const calculateSizeClasses = useCallback((): string => {
+    const sizeToClassMap = new Map([
+      ['small', 'px-3 py-1.5 text-sm'],
+      ['medium', 'px-4 py-2 text-base'],
+      ['large', 'px-6 py-3 text-lg'],
+    ]);
+
+    return sizeToClassMap.get(size) || sizeToClassMap.get('medium')!;
   }, [size]);
 
-  const getVariantClasses = useCallback((): string => {
-    if (!isFinallyEnabled) {
+  // 변형별 CSS 클래스 계산 함수
+  const calculateVariantClasses = useCallback((): string => {
+    if (!isFinalButtonEnabled) {
       return 'bg-gray-300 text-gray-500 cursor-not-allowed border-gray-300';
     }
 
-    if (lastProcessResult === 'success') {
+    if (lastProcessingResult === 'success') {
       return 'bg-green-600 text-white border-green-600 hover:bg-green-700 focus:ring-green-500';
     }
 
-    if (lastProcessResult === 'error') {
+    if (lastProcessingResult === 'error') {
       return 'bg-red-600 text-white border-red-600 hover:bg-red-700 focus:ring-red-500';
     }
 
-    const variantClassMap = {
-      primary:
+    const variantToClassMap = new Map([
+      [
+        'primary',
         'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 focus:ring-blue-500',
-      secondary:
+      ],
+      [
+        'secondary',
         'bg-gray-600 text-white border-gray-600 hover:bg-gray-700 focus:ring-gray-500',
-      success:
+      ],
+      [
+        'success',
         'bg-green-600 text-white border-green-600 hover:bg-green-700 focus:ring-green-500',
-    };
+      ],
+    ]);
 
-    return variantClassMap[variant] || variantClassMap.primary;
-  }, [isFinallyEnabled, lastProcessResult, variant]);
+    return variantToClassMap.get(variant) || variantToClassMap.get('primary')!;
+  }, [isFinalButtonEnabled, lastProcessingResult, variant]);
 
-  const getWidthClasses = useCallback((): string => {
+  // 너비 CSS 클래스 계산 함수
+  const calculateWidthClasses = useCallback((): string => {
     return fullWidth ? 'w-full' : 'w-auto';
   }, [fullWidth]);
 
-  const getFinalButtonClasses = useCallback((): string => {
+  // 최종 버튼 CSS 클래스 계산 함수
+  const calculateFinalButtonClasses = useCallback((): string => {
     const baseClasses =
       'font-medium rounded-lg border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
-    const sizeClasses = getSizeClasses();
-    const variantClasses = getVariantClasses();
-    const widthClasses = getWidthClasses();
+    const sizeClasses = calculateSizeClasses();
+    const variantClasses = calculateVariantClasses();
+    const widthClasses = calculateWidthClasses();
 
     return `${baseClasses} ${sizeClasses} ${variantClasses} ${widthClasses} ${className}`.trim();
-  }, [getSizeClasses, getVariantClasses, getWidthClasses, className]);
+  }, [
+    calculateSizeClasses,
+    calculateVariantClasses,
+    calculateWidthClasses,
+    className,
+  ]);
 
-  const handleButtonClick = useCallback(async (): Promise<void> => {
+  // 버튼 클릭 핸들러
+  const handleButtonClickEvent = useCallback(async (): Promise<void> => {
     console.log('🔘 [MARKDOWN_BUTTON] 버튼 클릭 처리 시작');
 
-    if (!isFinallyEnabled) {
+    if (!isFinalButtonEnabled) {
       console.warn('⚠️ [MARKDOWN_BUTTON] 버튼 비활성화 상태로 클릭 무시');
       return;
     }
 
-    setIsProcessing(true);
-    setLastProcessResult(null);
+    setIsCurrentlyProcessing(true);
+    setLastProcessingResult(null);
 
     try {
       console.log(
         '🔍 [MARKDOWN_BUTTON] 완성 전 검증 상태:',
-        safeValidationStatus
+        safeValidationStatusData
       );
 
-      updateValidationStatus();
+      updateCurrentValidationStatus();
 
+      // 사용자 정의 사전 검증 실행
       if (onBeforeComplete) {
         console.log('🔍 [MARKDOWN_BUTTON] 사용자 정의 사전 검증 실행');
-        const beforeCompleteResult = await onBeforeComplete();
 
-        if (!beforeCompleteResult) {
+        const beforeCompleteValidationResult = await onBeforeComplete();
+
+        if (!beforeCompleteValidationResult) {
           console.warn('⚠️ [MARKDOWN_BUTTON] 사용자 정의 사전 검증 실패');
-          setLastProcessResult('error');
-          setIsProcessing(false);
+          setLastProcessingResult('error');
+          setIsCurrentlyProcessing(false);
 
           if (onCompleteError) {
             onCompleteError(new Error('사전 검증 실패'));
@@ -236,17 +294,18 @@ export function MarkdownCompleteButton({
       }
 
       console.log('🚀 [MARKDOWN_BUTTON] 브릿지 전송 시작');
-      await performBridgeTransfer();
+      await performBridgeTransferOperation();
 
       console.log('✅ [MARKDOWN_BUTTON] 마크다운 완성 성공');
-      setLastProcessResult('success');
+      setLastProcessingResult('success');
 
       if (onCompleteSuccess) {
         onCompleteSuccess();
       }
 
+      // 3초 후 성공 상태 초기화
       setTimeout(() => {
-        setLastProcessResult(null);
+        setLastProcessingResult(null);
       }, 3000);
     } catch (completionError) {
       console.error(
@@ -254,80 +313,92 @@ export function MarkdownCompleteButton({
         completionError
       );
 
-      setLastProcessResult('error');
+      setLastProcessingResult('error');
 
       if (onCompleteError) {
         onCompleteError(completionError);
       }
 
+      // 5초 후 에러 상태 초기화
       setTimeout(() => {
-        setLastProcessResult(null);
+        setLastProcessingResult(null);
       }, 5000);
     } finally {
-      setIsProcessing(false);
+      setIsCurrentlyProcessing(false);
       console.log('🔘 [MARKDOWN_BUTTON] 버튼 클릭 처리 완료');
     }
   }, [
-    isFinallyEnabled,
-    safeValidationStatus,
-    updateValidationStatus,
+    isFinalButtonEnabled,
+    safeValidationStatusData,
+    updateCurrentValidationStatus,
     onBeforeComplete,
-    performBridgeTransfer,
+    performBridgeTransferOperation,
     onCompleteSuccess,
     onCompleteError,
   ]);
 
-  const getAriaAttributes = useCallback(() => {
-    let ariaLabel = `마크다운 완성 버튼. 현재 상태: ${getButtonDisplayText()}`;
+  // 접근성 속성 계산 함수
+  const calculateAriaAttributes = useCallback(() => {
+    let ariaLabelText = `마크다운 완성 버튼. 현재 상태: ${calculateButtonDisplayText()}`;
 
     if (showDetailedStatus) {
-      ariaLabel += `. 컨테이너 ${containerCount}개, 문단 ${paragraphCount}개`;
+      ariaLabelText += `. 컨테이너 ${containerCount}개, 문단 ${paragraphCount}개`;
 
       if (unassignedParagraphCount > 0) {
-        ariaLabel += `, 미할당 문단 ${unassignedParagraphCount}개`;
+        ariaLabelText += `, 미할당 문단 ${unassignedParagraphCount}개`;
       }
 
-      if (validationErrors.length > 0) {
-        ariaLabel += `, 오류 ${validationErrors.length}개`;
+      const safeValidationErrors = isStringArray(validationErrors)
+        ? validationErrors
+        : [];
+      const safeValidationWarnings = isStringArray(validationWarnings)
+        ? validationWarnings
+        : [];
+
+      if (safeValidationErrors.length > 0) {
+        ariaLabelText += `, 오류 ${safeValidationErrors.length}개`;
       }
 
-      if (validationWarnings.length > 0) {
-        ariaLabel += `, 경고 ${validationWarnings.length}개`;
+      if (safeValidationWarnings.length > 0) {
+        ariaLabelText += `, 경고 ${safeValidationWarnings.length}개`;
       }
     }
 
     return {
-      'aria-label': ariaLabel,
-      'aria-disabled': !isFinallyEnabled,
-      'aria-busy': isTransferInProgress || isProcessing,
+      'aria-label': ariaLabelText,
+      'aria-disabled': !isFinalButtonEnabled,
+      'aria-busy': isTransferCurrentlyInProgress || isCurrentlyProcessing,
       'aria-describedby': showDetailedStatus
         ? 'markdown-button-status'
         : undefined,
     };
   }, [
-    getButtonDisplayText,
+    calculateButtonDisplayText,
     showDetailedStatus,
     containerCount,
     paragraphCount,
     unassignedParagraphCount,
-    validationErrors.length,
-    validationWarnings.length,
-    isFinallyEnabled,
-    isTransferInProgress,
-    isProcessing,
+    validationErrors,
+    validationWarnings,
+    isFinalButtonEnabled,
+    isTransferCurrentlyInProgress,
+    isCurrentlyProcessing,
   ]);
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>): void => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        handleButtonClick();
+  // 키보드 이벤트 핸들러
+  const handleKeyDownEvent = useCallback(
+    (keyboardEvent: React.KeyboardEvent<HTMLButtonElement>): void => {
+      const { key } = keyboardEvent;
+      if (key === 'Enter' || key === ' ') {
+        keyboardEvent.preventDefault();
+        handleButtonClickEvent();
       }
     },
-    [handleButtonClick]
+    [handleButtonClickEvent]
   );
 
-  const LoadingSpinner = (): React.ReactElement => (
+  // 로딩 스피너 컴포넌트
+  const LoadingSpinnerComponent = (): React.ReactElement => (
     <svg
       className="w-4 h-4 mr-2 -ml-1 text-current animate-spin"
       xmlns="http://www.w3.org/2000/svg"
@@ -351,8 +422,9 @@ export function MarkdownCompleteButton({
     </svg>
   );
 
-  const StatusIcon = (): React.ReactElement | null => {
-    if (lastProcessResult === 'success') {
+  // 상태 아이콘 컴포넌트
+  const StatusIconComponent = (): React.ReactElement | null => {
+    if (lastProcessingResult === 'success') {
       return (
         <svg
           className="w-4 h-4 mr-2 text-current"
@@ -372,7 +444,7 @@ export function MarkdownCompleteButton({
       );
     }
 
-    if (lastProcessResult === 'error') {
+    if (lastProcessingResult === 'error') {
       return (
         <svg
           className="w-4 h-4 mr-2 text-current"
@@ -396,30 +468,32 @@ export function MarkdownCompleteButton({
   };
 
   console.log('🔘 [MARKDOWN_BUTTON] 버튼 렌더링 완료:', {
-    isFinallyEnabled,
-    isTransferInProgress,
-    isProcessing,
+    isFinalButtonEnabled,
+    isTransferCurrentlyInProgress,
+    isCurrentlyProcessing,
     validationErrorCount: validationErrors.length,
     validationWarningCount: validationWarnings.length,
-    buttonText: getButtonDisplayText(),
+    buttonText: calculateButtonDisplayText(),
   });
 
   return (
     <div className="flex flex-col items-start space-y-2">
       <button
         type="button"
-        className={getFinalButtonClasses()}
-        disabled={!isFinallyEnabled}
-        onClick={handleButtonClick}
-        onKeyDown={handleKeyDown}
-        {...getAriaAttributes()}
+        className={calculateFinalButtonClasses()}
+        disabled={!isFinalButtonEnabled}
+        onClick={handleButtonClickEvent}
+        onKeyDown={handleKeyDownEvent}
+        {...calculateAriaAttributes()}
       >
         <div className="flex items-center justify-center">
-          {(isTransferInProgress || isProcessing) && <LoadingSpinner />}
+          {(isTransferCurrentlyInProgress || isCurrentlyProcessing) && (
+            <LoadingSpinnerComponent />
+          )}
 
-          <StatusIcon />
+          <StatusIconComponent />
 
-          <span>{getButtonDisplayText()}</span>
+          <span>{calculateButtonDisplayText()}</span>
         </div>
       </button>
 
@@ -451,27 +525,32 @@ export function MarkdownCompleteButton({
             </span>
           </div>
 
-          {validationErrors.length > 0 && (
+          {isStringArray(validationErrors) && validationErrors.length > 0 && (
             <div className="text-red-600">
               <strong>오류:</strong>
               <ul className="ml-2 list-disc list-inside">
-                {validationErrors.map((error: string, index: number) => (
-                  <li key={index}>{error}</li>
-                ))}
+                {validationErrors.map(
+                  (errorMessage: string, errorIndex: number) => (
+                    <li key={errorIndex}>{errorMessage}</li>
+                  )
+                )}
               </ul>
             </div>
           )}
 
-          {validationWarnings.length > 0 && (
-            <div className="text-orange-600">
-              <strong>경고:</strong>
-              <ul className="ml-2 list-disc list-inside">
-                {validationWarnings.map((warning: string, index: number) => (
-                  <li key={index}>{warning}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {isStringArray(validationWarnings) &&
+            validationWarnings.length > 0 && (
+              <div className="text-orange-600">
+                <strong>경고:</strong>
+                <ul className="ml-2 list-disc list-inside">
+                  {validationWarnings.map(
+                    (warningMessage: string, warningIndex: number) => (
+                      <li key={warningIndex}>{warningMessage}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
         </div>
       )}
     </div>

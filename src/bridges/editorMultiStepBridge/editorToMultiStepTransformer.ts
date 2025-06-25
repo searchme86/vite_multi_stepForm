@@ -3,330 +3,553 @@
 import {
   EditorStateSnapshotForBridge,
   EditorToMultiStepDataTransformationResult,
-  EditorContentMetadataForBridge,
+  TransformationMetadata,
 } from './bridgeDataTypes';
+import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 
-export const createDataStructureTransformer = () => {
-  // 🔧 개선된 마크다운 콘텐츠 생성 - 다중 전략 적용
-  const generateMarkdownContent = (
-    snapshot: EditorStateSnapshotForBridge
+// 🔧 변환 전략 타입 정의
+type TransformationStrategy =
+  | 'EXISTING_CONTENT'
+  | 'REBUILD_FROM_CONTAINERS'
+  | 'PARAGRAPH_FALLBACK';
+
+// 🔧 변환 옵션 인터페이스
+interface TransformationOptions {
+  readonly strategy: TransformationStrategy;
+  readonly includeMetadata: boolean;
+  readonly validateResult: boolean;
+}
+
+// 🔧 타입 가드 모듈 - 완전한 타입 검증
+function createTransformerTypeGuardModule() {
+  const isValidString = (value: unknown): value is string => {
+    return typeof value === 'string';
+  };
+
+  const isValidBoolean = (value: unknown): value is boolean => {
+    return typeof value === 'boolean';
+  };
+
+  const isValidNumber = (value: unknown): value is number => {
+    return typeof value === 'number' && !isNaN(value);
+  };
+
+  const isValidObject = (value: unknown): value is Record<string, unknown> => {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  };
+
+  const isValidArray = (value: unknown): value is unknown[] => {
+    return Array.isArray(value);
+  };
+
+  // EditorStateSnapshotForBridge 타입 가드
+  const isValidEditorSnapshot = (
+    snapshot: unknown
+  ): snapshot is EditorStateSnapshotForBridge => {
+    if (!isValidObject(snapshot)) return false;
+
+    // 필수 속성들 검증
+    return (
+      'editorContainers' in snapshot &&
+      'editorParagraphs' in snapshot &&
+      'editorCompletedContent' in snapshot &&
+      'editorIsCompleted' in snapshot &&
+      'extractedTimestamp' in snapshot &&
+      isValidArray(snapshot.editorContainers) &&
+      isValidArray(snapshot.editorParagraphs) &&
+      isValidString(snapshot.editorCompletedContent) &&
+      isValidBoolean(snapshot.editorIsCompleted) &&
+      isValidNumber(snapshot.extractedTimestamp)
+    );
+  };
+
+  // Container 타입 가드
+  const isValidContainer = (container: unknown): container is Container => {
+    if (!isValidObject(container)) return false;
+
+    return (
+      'id' in container &&
+      'name' in container &&
+      'order' in container &&
+      isValidString(container.id) &&
+      isValidString(container.name) &&
+      isValidNumber(container.order)
+    );
+  };
+
+  // ParagraphBlock 타입 가드
+  const isValidParagraph = (
+    paragraph: unknown
+  ): paragraph is ParagraphBlock => {
+    if (!isValidObject(paragraph)) return false;
+
+    return (
+      'id' in paragraph &&
+      'content' in paragraph &&
+      'order' in paragraph &&
+      isValidString(paragraph.id) &&
+      isValidString(paragraph.content) &&
+      isValidNumber(paragraph.order)
+    );
+  };
+
+  return {
+    isValidString,
+    isValidBoolean,
+    isValidNumber,
+    isValidObject,
+    isValidArray,
+    isValidEditorSnapshot,
+    isValidContainer,
+    isValidParagraph,
+  };
+}
+
+// 🔧 데이터 추출 모듈
+function createDataExtractionModule() {
+  const { isValidContainer, isValidParagraph } =
+    createTransformerTypeGuardModule();
+
+  const extractValidContainers = (
+    rawContainers: readonly unknown[]
+  ): Container[] => {
+    console.log('🔍 [TRANSFORMER] 유효한 컨테이너 추출 시작');
+
+    const validContainers = rawContainers.filter(isValidContainer);
+
+    console.log('📊 [TRANSFORMER] 컨테이너 추출 결과:', {
+      totalContainers: rawContainers.length,
+      validContainers: validContainers.length,
+    });
+
+    return validContainers;
+  };
+
+  const extractValidParagraphs = (
+    rawParagraphs: readonly unknown[]
+  ): ParagraphBlock[] => {
+    console.log('🔍 [TRANSFORMER] 유효한 문단 추출 시작');
+
+    const validParagraphs = rawParagraphs.filter(isValidParagraph);
+
+    console.log('📊 [TRANSFORMER] 문단 추출 결과:', {
+      totalParagraphs: rawParagraphs.length,
+      validParagraphs: validParagraphs.length,
+    });
+
+    return validParagraphs;
+  };
+
+  return {
+    extractValidContainers,
+    extractValidParagraphs,
+  };
+}
+
+// 🔧 콘텐츠 생성 모듈
+function createContentGenerationModule() {
+  const generateContentFromContainers = (
+    containers: Container[],
+    paragraphs: ParagraphBlock[]
   ): string => {
-    console.log('🔄 [TRANSFORMER] 마크다운 콘텐츠 생성 시작');
+    console.log('🔄 [TRANSFORMER] 컨테이너 기반 콘텐츠 생성');
 
-    const { editorContainers, editorParagraphs, editorCompletedContent } =
-      snapshot;
-
-    // 🔧 전략 1: 이미 완성된 콘텐츠가 있는 경우 우선 사용
-    if (
-      editorCompletedContent &&
-      typeof editorCompletedContent === 'string' &&
-      editorCompletedContent.trim().length > 0
-    ) {
-      console.log('✅ [TRANSFORMER] 기존 완성된 콘텐츠 사용:', {
-        contentLength: editorCompletedContent.length,
-        strategy: 'EXISTING_COMPLETED_CONTENT',
-      });
-      return editorCompletedContent.trim();
-    }
-
-    // 🔧 전략 2: 컨테이너와 문단이 없는 경우 빈 콘텐츠 반환
-    if (!editorContainers?.length || !editorParagraphs?.length) {
-      console.warn(
-        '⚠️ [TRANSFORMER] 컨테이너 또는 문단이 없음, 빈 콘텐츠 반환'
-      );
+    if (containers.length === 0) {
+      console.warn('⚠️ [TRANSFORMER] 컨테이너가 없어 빈 콘텐츠 반환');
       return '';
     }
 
-    console.log('🔄 [TRANSFORMER] 컨테이너와 문단으로부터 마크다운 생성:', {
-      containerCount: editorContainers.length,
-      paragraphCount: editorParagraphs.length,
-      strategy: 'CONTAINER_PARAGRAPH_REBUILD',
+    // 컨테이너를 순서대로 정렬
+    const sortedContainers = [...containers].sort((a, b) => a.order - b.order);
+
+    const contentParts: string[] = [];
+
+    sortedContainers.forEach((container) => {
+      const { id: containerId, name: containerName } = container;
+
+      // 해당 컨테이너의 문단들 찾기
+      const containerParagraphs = paragraphs
+        .filter((paragraph) => paragraph.containerId === containerId)
+        .sort((a, b) => a.order - b.order);
+
+      if (containerParagraphs.length > 0) {
+        // 컨테이너 제목 추가
+        contentParts.push(`## ${containerName}`);
+
+        // 문단 내용 추가
+        containerParagraphs.forEach((paragraph) => {
+          if (paragraph.content.trim().length > 0) {
+            contentParts.push(paragraph.content.trim());
+          }
+        });
+
+        // 컨테이너 간 구분을 위한 빈 줄
+        contentParts.push('');
+      }
     });
 
-    // 🔧 전략 3: 컨테이너와 문단으로부터 마크다운 재구성
-    try {
-      const sortedContainers = [...editorContainers].sort(
-        (a, b) => (a?.order || 0) - (b?.order || 0)
-      );
+    const generatedContent = contentParts.join('\n');
 
-      let markdownContent = '';
-      const contentSections: string[] = [];
+    console.log('✅ [TRANSFORMER] 컨테이너 기반 콘텐츠 생성 완료:', {
+      contentLength: generatedContent.length,
+      containerCount: sortedContainers.length,
+    });
 
-      sortedContainers.forEach((container, containerIndex) => {
-        if (!container?.id || !container?.name) {
-          console.warn(
-            `⚠️ [TRANSFORMER] 유효하지 않은 컨테이너 ${containerIndex}:`,
-            container
-          );
-          return;
-        }
-
-        const containerParagraphs = editorParagraphs
-          .filter((p) => p && p.containerId === container.id)
-          .sort((a, b) => (a?.order || 0) - (b?.order || 0));
-
-        console.log(`📄 [TRANSFORMER] 컨테이너 "${container.name}" 처리:`, {
-          containerId: container.id,
-          paragraphCount: containerParagraphs.length,
-        });
-
-        if (containerParagraphs.length > 0) {
-          // 컨테이너 헤더 추가 (## 형식)
-          contentSections.push(`## ${container.name}`);
-          contentSections.push(''); // 빈 줄
-
-          // 문단 내용 추가
-          containerParagraphs.forEach((paragraph, paragraphIndex) => {
-            if (paragraph?.content && paragraph.content.trim()) {
-              console.log(`📝 [TRANSFORMER] 문단 ${paragraphIndex + 1} 추가:`, {
-                contentLength: paragraph.content.length,
-                preview: paragraph.content.substring(0, 50) + '...',
-              });
-              contentSections.push(paragraph.content.trim());
-              contentSections.push(''); // 문단 간 빈 줄
-            }
-          });
-        } else {
-          console.warn(
-            `⚠️ [TRANSFORMER] 컨테이너 "${container.name}"에 문단이 없음`
-          );
-        }
-      });
-
-      markdownContent = contentSections.join('\n').trim();
-
-      console.log('✅ [TRANSFORMER] 마크다운 생성 완료:', {
-        finalContentLength: markdownContent.length,
-        sectionCount: contentSections.length,
-        strategy: 'CONTAINER_PARAGRAPH_REBUILD',
-        preview: markdownContent.substring(0, 200) + '...',
-      });
-
-      return markdownContent;
-    } catch (rebuildError) {
-      console.error('❌ [TRANSFORMER] 마크다운 재구성 실패:', rebuildError);
-
-      // 🔧 전략 4: 최후의 수단 - 모든 문단 내용만 합치기
-      try {
-        console.log('🔄 [TRANSFORMER] 최후의 수단: 모든 문단 내용 합치기');
-
-        const allParagraphContents = editorParagraphs
-          .filter((p) => p && p.content && p.content.trim())
-          .sort((a, b) => (a?.order || 0) - (b?.order || 0))
-          .map((p) => p.content.trim());
-
-        const fallbackContent = allParagraphContents.join('\n\n');
-
-        console.log('✅ [TRANSFORMER] 최후의 수단 성공:', {
-          contentLength: fallbackContent.length,
-          paragraphCount: allParagraphContents.length,
-          strategy: 'PARAGRAPH_ONLY_FALLBACK',
-        });
-
-        return fallbackContent;
-      } catch (fallbackError) {
-        console.error('❌ [TRANSFORMER] 최후의 수단도 실패:', fallbackError);
-        return '';
-      }
-    }
+    return generatedContent;
   };
 
-  const createContentMetadata = (
-    snapshot: EditorStateSnapshotForBridge
-  ): EditorContentMetadataForBridge => {
-    console.log('📊 [TRANSFORMER] 콘텐츠 메타데이터 생성');
+  const generateContentFromParagraphs = (
+    paragraphs: ParagraphBlock[]
+  ): string => {
+    console.log('🔄 [TRANSFORMER] 문단 기반 콘텐츠 생성');
 
-    const { editorContainers, editorParagraphs } = snapshot;
+    if (paragraphs.length === 0) {
+      console.warn('⚠️ [TRANSFORMER] 문단이 없어 빈 콘텐츠 반환');
+      return '';
+    }
 
-    // 🔧 안전한 배열 처리
-    const safeContainers = Array.isArray(editorContainers)
-      ? editorContainers
-      : [];
-    const safeParagraphs = Array.isArray(editorParagraphs)
-      ? editorParagraphs
-      : [];
+    // 할당되지 않은 문단들을 순서대로 정렬
+    const unassignedParagraphs = paragraphs
+      .filter((paragraph) => paragraph.containerId === null)
+      .sort((a, b) => a.order - b.order);
 
-    const assignedParagraphs = safeParagraphs.filter(
-      (p) => p && p.containerId !== null
+    const contentParts = unassignedParagraphs
+      .map((paragraph) => paragraph.content.trim())
+      .filter((content) => content.length > 0);
+
+    const generatedContent = contentParts.join('\n\n');
+
+    console.log('✅ [TRANSFORMER] 문단 기반 콘텐츠 생성 완료:', {
+      contentLength: generatedContent.length,
+      unassignedParagraphCount: unassignedParagraphs.length,
+    });
+
+    return generatedContent;
+  };
+
+  return {
+    generateContentFromContainers,
+    generateContentFromParagraphs,
+  };
+}
+
+// 🔧 메타데이터 생성 모듈
+function createMetadataGenerationModule() {
+  const generateTransformationMetadata = (
+    containers: Container[],
+    paragraphs: ParagraphBlock[],
+    transformedContent: string,
+    transformationStartTime: number,
+    transformationEndTime: number
+  ): TransformationMetadata => {
+    console.log('🔄 [TRANSFORMER] 변환 메타데이터 생성');
+
+    const assignedParagraphs = paragraphs.filter(
+      (paragraph) => paragraph.containerId !== null
     );
-    const unassignedParagraphs = safeParagraphs.filter(
-      (p) => p && p.containerId === null
+    const unassignedParagraphs = paragraphs.filter(
+      (paragraph) => paragraph.containerId === null
     );
 
-    const totalContentLength = safeParagraphs.reduce(
-      (total, p) => total + (p?.content?.length || 0),
-      0
-    );
+    const validationWarnings = new Set<string>();
 
-    const metadata: EditorContentMetadataForBridge = {
-      containerCount: safeContainers.length,
-      paragraphCount: safeParagraphs.length,
+    // 경고 조건 체크
+    if (containers.length === 0) {
+      validationWarnings.add('컨테이너가 없습니다');
+    }
+
+    if (unassignedParagraphs.length > 0) {
+      validationWarnings.add(
+        `${unassignedParagraphs.length}개의 할당되지 않은 문단이 있습니다`
+      );
+    }
+
+    if (transformedContent.length === 0) {
+      validationWarnings.add('변환된 콘텐츠가 비어있습니다');
+    }
+
+    const metadata: TransformationMetadata = {
+      containerCount: containers.length,
+      paragraphCount: paragraphs.length,
       assignedParagraphCount: assignedParagraphs.length,
       unassignedParagraphCount: unassignedParagraphs.length,
-      totalContentLength,
+      totalContentLength: transformedContent.length,
       lastModified: new Date(),
+      processingTimeMs: transformationEndTime - transformationStartTime,
+      validationWarnings,
     };
 
-    console.log('✅ [TRANSFORMER] 메타데이터 생성 완료:', metadata);
+    console.log('✅ [TRANSFORMER] 메타데이터 생성 완료:', {
+      containerCount: metadata.containerCount,
+      paragraphCount: metadata.paragraphCount,
+      contentLength: metadata.totalContentLength,
+      warningCount: metadata.validationWarnings.size,
+    });
 
     return metadata;
   };
 
-  // 🔧 강화된 에디터 → 멀티스텝 변환
+  return {
+    generateTransformationMetadata,
+  };
+}
+
+// 🔧 변환 전략 모듈
+function createTransformationStrategyModule() {
+  const { generateContentFromContainers, generateContentFromParagraphs } =
+    createContentGenerationModule();
+
+  const determineOptimalStrategy = (
+    containers: Container[],
+    paragraphs: ParagraphBlock[],
+    existingContent: string
+  ): TransformationStrategy => {
+    console.log('🔍 [TRANSFORMER] 최적 변환 전략 결정');
+
+    // Early Return: 기존 콘텐츠가 있고 충분히 긴 경우
+    if (existingContent.trim().length > 100) {
+      console.log('✅ [TRANSFORMER] 전략: EXISTING_CONTENT');
+      return 'EXISTING_CONTENT';
+    }
+
+    // Early Return: 컨테이너와 할당된 문단이 있는 경우
+    const assignedParagraphs = paragraphs.filter(
+      (paragraph) => paragraph.containerId !== null
+    );
+
+    if (containers.length > 0 && assignedParagraphs.length > 0) {
+      console.log('✅ [TRANSFORMER] 전략: REBUILD_FROM_CONTAINERS');
+      return 'REBUILD_FROM_CONTAINERS';
+    }
+
+    // Default: 문단 기반 변환
+    console.log('✅ [TRANSFORMER] 전략: PARAGRAPH_FALLBACK');
+    return 'PARAGRAPH_FALLBACK';
+  };
+
+  const executeTransformationStrategy = (
+    strategy: TransformationStrategy,
+    containers: Container[],
+    paragraphs: ParagraphBlock[],
+    existingContent: string
+  ): string => {
+    console.log(`🔄 [TRANSFORMER] 전략 실행: ${strategy}`);
+
+    switch (strategy) {
+      case 'EXISTING_CONTENT':
+        return existingContent.trim();
+
+      case 'REBUILD_FROM_CONTAINERS':
+        return generateContentFromContainers(containers, paragraphs);
+
+      case 'PARAGRAPH_FALLBACK':
+        const paragraphContent = generateContentFromParagraphs(paragraphs);
+        return paragraphContent || existingContent.trim();
+
+      default:
+        console.warn('⚠️ [TRANSFORMER] 알 수 없는 전략, 기존 콘텐츠 반환');
+        return existingContent.trim();
+    }
+  };
+
+  return {
+    determineOptimalStrategy,
+    executeTransformationStrategy,
+  };
+}
+
+// 🔧 메인 변환 모듈
+function createMainTransformationModule() {
+  const { isValidEditorSnapshot } = createTransformerTypeGuardModule();
+  const { extractValidContainers, extractValidParagraphs } =
+    createDataExtractionModule();
+  const { generateTransformationMetadata } = createMetadataGenerationModule();
+  const { determineOptimalStrategy, executeTransformationStrategy } =
+    createTransformationStrategyModule();
+
   const transformEditorStateToMultiStep = (
-    snapshot: EditorStateSnapshotForBridge
+    editorSnapshot: EditorStateSnapshotForBridge
   ): EditorToMultiStepDataTransformationResult => {
-    console.log('🔄 [TRANSFORMER] Editor → MultiStep 변환 시작');
-    console.log('📊 [TRANSFORMER] 입력 스냅샷 분석:', {
-      hasSnapshot: !!snapshot,
-      snapshotKeys: snapshot ? Object.keys(snapshot) : [],
-      containerCount: snapshot?.editorContainers?.length || 0,
-      paragraphCount: snapshot?.editorParagraphs?.length || 0,
-      hasCompletedContent: !!(
-        snapshot?.editorCompletedContent &&
-        snapshot.editorCompletedContent.length > 0
-      ),
-      completedContentLength: snapshot?.editorCompletedContent?.length || 0,
-      isCompleted: snapshot?.editorIsCompleted,
-      timestamp: snapshot?.extractedTimestamp,
-    });
+    console.log('🚀 [TRANSFORMER] Editor → MultiStep 변환 시작');
+    const transformationStartTime = performance.now();
 
     try {
-      // 🔧 1단계: 입력 검증
-      if (!snapshot || typeof snapshot !== 'object') {
-        throw new Error('유효하지 않은 스냅샷 데이터');
+      // 1단계: 입력 검증
+      if (!isValidEditorSnapshot(editorSnapshot)) {
+        throw new Error('유효하지 않은 에디터 스냅샷');
       }
 
-      const { editorContainers, editorParagraphs, editorIsCompleted } =
-        snapshot;
+      // 2단계: 데이터 추출
+      const {
+        editorContainers,
+        editorParagraphs,
+        editorCompletedContent,
+        editorIsCompleted,
+      } = editorSnapshot;
 
-      if (
-        !Array.isArray(editorContainers) ||
-        !Array.isArray(editorParagraphs)
-      ) {
-        throw new Error('컨테이너 또는 문단이 배열이 아닙니다');
-      }
+      const validContainers = extractValidContainers(editorContainers);
+      const validParagraphs = extractValidParagraphs(editorParagraphs);
 
-      // 🔧 2단계: 마크다운 콘텐츠 생성
-      const transformedContent = generateMarkdownContent(snapshot);
+      // 3단계: 변환 전략 결정
+      const transformationStrategy = determineOptimalStrategy(
+        validContainers,
+        validParagraphs,
+        editorCompletedContent
+      );
 
-      // 🔧 3단계: 메타데이터 생성
-      const transformedMetadata = createContentMetadata(snapshot);
+      // 4단계: 콘텐츠 변환 실행
+      const transformedContent = executeTransformationStrategy(
+        transformationStrategy,
+        validContainers,
+        validParagraphs,
+        editorCompletedContent
+      );
 
-      // 🔧 4단계: 완성 상태 결정 (더 관대한 기준)
-      const hasContent =
-        transformedContent && transformedContent.trim().length > 0;
-      const hasStructure =
-        editorContainers.length > 0 || editorParagraphs.length > 0;
+      // 5단계: 완료 상태 결정
+      const transformedIsCompleted = Boolean(
+        editorIsCompleted || transformedContent.length > 0
+      );
 
-      // 관대한 완성 조건: 콘텐츠가 있거나 구조가 있으면 OK
-      const transformedIsCompleted =
-        hasContent || hasStructure || editorIsCompleted;
+      const transformationEndTime = performance.now();
 
-      // 🔧 5단계: 결과 구성
-      const result: EditorToMultiStepDataTransformationResult = {
+      // 6단계: 메타데이터 생성
+      const transformedMetadata = generateTransformationMetadata(
+        validContainers,
+        validParagraphs,
+        transformedContent,
+        transformationStartTime,
+        transformationEndTime
+      );
+
+      // 7단계: 결과 구성
+      const transformationResult: EditorToMultiStepDataTransformationResult = {
         transformedContent,
         transformedIsCompleted,
         transformedMetadata,
         transformationSuccess: true,
         transformationErrors: [],
+        transformationStrategy,
       };
 
-      console.log('✅ [TRANSFORMER] 변환 성공:', {
-        originalContentLength: snapshot.editorCompletedContent?.length || 0,
-        transformedContentLength: transformedContent.length,
-        originalCompleted: editorIsCompleted,
-        transformedCompleted: transformedIsCompleted,
-        hasContent,
-        hasStructure,
-        containerCount: transformedMetadata.containerCount,
-        paragraphCount: transformedMetadata.paragraphCount,
-        transformationStrategy:
-          transformedContent === snapshot.editorCompletedContent
-            ? 'EXISTING_CONTENT_USED'
-            : 'CONTENT_REGENERATED',
+      console.log('✅ [TRANSFORMER] Editor → MultiStep 변환 완료:', {
+        strategy: transformationStrategy,
+        contentLength: transformedContent.length,
+        isCompleted: transformedIsCompleted,
+        containerCount: validContainers.length,
+        paragraphCount: validParagraphs.length,
+        processingTime: `${(
+          transformationEndTime - transformationStartTime
+        ).toFixed(2)}ms`,
       });
 
-      return result;
-    } catch (error) {
-      console.error('❌ [TRANSFORMER] 변환 실패:', error);
+      return transformationResult;
+    } catch (transformationError) {
+      console.error('❌ [TRANSFORMER] 변환 실패:', transformationError);
 
-      // 🔧 에러 발생 시 기본 결과 반환
-      const errorResult: EditorToMultiStepDataTransformationResult = {
+      const transformationEndTime = performance.now();
+      const errorMessage =
+        transformationError instanceof Error
+          ? transformationError.message
+          : String(transformationError);
+
+      // 실패 시 기본 메타데이터 생성
+      const fallbackMetadata = generateTransformationMetadata(
+        [],
+        [],
+        '',
+        transformationStartTime,
+        transformationEndTime
+      );
+
+      const failureResult: EditorToMultiStepDataTransformationResult = {
         transformedContent: '',
         transformedIsCompleted: false,
-        transformedMetadata: {
-          containerCount: 0,
-          paragraphCount: 0,
-          assignedParagraphCount: 0,
-          unassignedParagraphCount: 0,
-          totalContentLength: 0,
-          lastModified: new Date(),
-        },
+        transformedMetadata: fallbackMetadata,
         transformationSuccess: false,
-        transformationErrors: [
-          error instanceof Error
-            ? error.message
-            : 'Unknown transformation error',
-        ],
+        transformationErrors: [errorMessage],
+        transformationStrategy: 'PARAGRAPH_FALLBACK',
       };
 
-      console.log('⚠️ [TRANSFORMER] 에러 결과 반환:', errorResult);
-      return errorResult;
+      return failureResult;
     }
   };
+
+  return {
+    transformEditorStateToMultiStep,
+  };
+}
+
+// 🔧 검증 모듈
+function createValidationModule() {
+  const { isValidString, isValidBoolean, isValidObject } =
+    createTransformerTypeGuardModule();
 
   const validateTransformationResult = (
     result: EditorToMultiStepDataTransformationResult
   ): boolean => {
     console.log('🔍 [TRANSFORMER] 변환 결과 검증');
 
-    if (!result || typeof result !== 'object') {
-      console.error('❌ [TRANSFORMER] 결과가 null이거나 객체가 아님');
+    if (!isValidObject(result)) {
+      console.error('❌ [TRANSFORMER] 결과가 객체가 아님');
       return false;
     }
 
-    const {
-      transformedContent,
-      transformedIsCompleted,
-      transformedMetadata,
-      transformationSuccess,
-      transformationErrors,
-    } = result;
-
-    const hasValidContent = typeof transformedContent === 'string';
-    const hasValidCompleted = typeof transformedIsCompleted === 'boolean';
-    const hasValidMetadata =
-      transformedMetadata && typeof transformedMetadata === 'object';
-    const hasValidSuccess = typeof transformationSuccess === 'boolean';
-    const hasValidErrors = Array.isArray(transformationErrors);
+    const hasValidContent = isValidString(result.transformedContent);
+    const hasValidCompleted = isValidBoolean(result.transformedIsCompleted);
+    const hasValidSuccess = isValidBoolean(result.transformationSuccess);
+    const hasValidMetadata = isValidObject(result.transformedMetadata);
+    const hasValidErrors = Array.isArray(result.transformationErrors);
 
     const isValid =
       hasValidContent &&
       hasValidCompleted &&
-      hasValidMetadata &&
       hasValidSuccess &&
+      hasValidMetadata &&
       hasValidErrors;
 
     console.log('📊 [TRANSFORMER] 검증 결과:', {
+      isValid,
       hasValidContent,
       hasValidCompleted,
-      hasValidMetadata,
       hasValidSuccess,
+      hasValidMetadata,
       hasValidErrors,
-      isValid,
-      contentLength: transformedContent?.length || 0,
-      transformationSuccess,
-      errorCount: transformationErrors?.length || 0,
     });
 
     return isValid;
   };
 
   return {
-    generateMarkdownContent,
-    createContentMetadata,
+    validateTransformationResult,
+  };
+}
+
+// 🔧 메인 팩토리 함수 - 이것이 export되는 함수입니다!
+export function createDataStructureTransformer() {
+  console.log('🏭 [TRANSFORMER_FACTORY] 데이터 구조 변환기 생성');
+
+  const { transformEditorStateToMultiStep } = createMainTransformationModule();
+  const { validateTransformationResult } = createValidationModule();
+
+  console.log('✅ [TRANSFORMER_FACTORY] 데이터 구조 변환기 생성 완료');
+
+  return {
     transformEditorStateToMultiStep,
     validateTransformationResult,
   };
-};
+}
+
+// 🔧 추가 유틸리티 함수들
+export function createTransformerUtils() {
+  const { extractValidContainers, extractValidParagraphs } =
+    createDataExtractionModule();
+  const { generateContentFromContainers, generateContentFromParagraphs } =
+    createContentGenerationModule();
+
+  return {
+    extractValidContainers,
+    extractValidParagraphs,
+    generateContentFromContainers,
+    generateContentFromParagraphs,
+  };
+}

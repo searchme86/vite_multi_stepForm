@@ -6,147 +6,520 @@ import {
 } from './bridgeDataTypes';
 import { VALIDATION_CRITERIA } from './bridgeConfiguration';
 
-export const createBridgeDataValidationHandler = () => {
-  // 🔧 관대한 기본 구조 검증 - 빈 데이터도 허용
-  const validateBasicStructure = (
-    snapshot: EditorStateSnapshotForBridge
-  ): boolean => {
-    console.log('🔍 [VALIDATOR] 기본 구조 검증 시작');
+interface ValidatedEditorContainer {
+  readonly id: string;
+  readonly name: string;
+  readonly order: number;
+}
 
-    if (!snapshot || typeof snapshot !== 'object') {
-      console.error('❌ [VALIDATOR] 스냅샷이 null이거나 객체가 아님');
+interface ValidatedEditorParagraph {
+  readonly id: string;
+  readonly content: string;
+  readonly containerId: string | null;
+  readonly order: number;
+}
+
+interface ValidationStatistics {
+  readonly totalContainers: number;
+  readonly totalParagraphs: number;
+  readonly assignedParagraphs: number;
+  readonly unassignedParagraphs: number;
+  readonly totalContentLength: number;
+  readonly emptyContainers: number;
+}
+
+interface ObjectWithProperties {
+  readonly [key: string]:
+    | string
+    | number
+    | boolean
+    | null
+    | undefined
+    | ObjectWithProperties
+    | ObjectWithProperties[];
+}
+
+const REQUIRED_CONTAINER_PROPERTY_SET = new Set(['id', 'name', 'order']);
+const REQUIRED_PARAGRAPH_PROPERTY_SET = new Set(['id', 'content', 'order']);
+
+function createPropertyValidationModule() {
+  const hasValidStringProperty = (
+    targetObject: ObjectWithProperties,
+    propertyName: string
+  ): boolean => {
+    const hasProperty = propertyName in targetObject;
+    if (!hasProperty) {
       return false;
     }
 
-    const { editorContainers, editorParagraphs } = snapshot;
+    const hasOwnProperty = Object.prototype.hasOwnProperty.call(
+      targetObject,
+      propertyName
+    );
+    if (!hasOwnProperty) {
+      return false;
+    }
 
-    // 🔧 배열 타입만 확인, 빈 배열도 유효함
-    const hasContainers = Array.isArray(editorContainers);
-    const hasParagraphs = Array.isArray(editorParagraphs);
+    const propertyValue = targetObject[propertyName];
+    const isStringType = typeof propertyValue === 'string';
+    if (!isStringType) {
+      return false;
+    }
 
-    const isValid = hasContainers && hasParagraphs;
+    const stringValue = propertyValue;
+    const isNonEmptyString = stringValue.trim().length > 0;
+    if (!isNonEmptyString) {
+      return false;
+    }
 
-    console.log('📊 [VALIDATOR] 기본 구조 검증 결과:', {
-      hasContainers,
-      hasParagraphs,
-      isValid,
-      containerCount: editorContainers?.length || 0,
-      paragraphCount: editorParagraphs?.length || 0,
-    });
-
-    return isValid;
+    return true;
   };
 
-  // 🔧 최소 요구사항 검증 - 더 관대한 기준 적용
-  const validateMinimumRequirements = (
-    snapshot: EditorStateSnapshotForBridge
-  ): { isValid: boolean; errors: string[]; warnings: string[] } => {
-    console.log('🔍 [VALIDATOR] 최소 요구사항 검증 시작');
-
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const { editorContainers, editorParagraphs } = snapshot;
-
-    // 🔧 기본 타입 검증
-    if (!Array.isArray(editorContainers)) {
-      errors.push('컨테이너가 유효한 배열이 아닙니다');
-      return { isValid: false, errors, warnings };
+  const hasValidNumberProperty = (
+    targetObject: ObjectWithProperties,
+    propertyName: string
+  ): boolean => {
+    const hasProperty = propertyName in targetObject;
+    if (!hasProperty) {
+      return false;
     }
 
-    if (!Array.isArray(editorParagraphs)) {
-      errors.push('문단이 유효한 배열이 아닙니다');
-      return { isValid: false, errors, warnings };
+    const hasOwnProperty = Object.prototype.hasOwnProperty.call(
+      targetObject,
+      propertyName
+    );
+    if (!hasOwnProperty) {
+      return false;
     }
 
-    // 🔧 컨테이너 요구사항 - 관대한 검증
-    const containerCount = editorContainers.length;
-    if (containerCount < VALIDATION_CRITERIA.minContainers) {
-      // 🔧 에러 대신 경고로 변경
-      warnings.push(
-        `권장: 최소 ${VALIDATION_CRITERIA.minContainers}개의 컨테이너 (현재: ${containerCount}개)`
-      );
+    const propertyValue = targetObject[propertyName];
+    const isNumberType = typeof propertyValue === 'number';
+    if (!isNumberType) {
+      return false;
     }
 
-    // 🔧 문단 요구사항 - 관대한 검증
-    const paragraphCount = editorParagraphs.length;
-    if (paragraphCount < VALIDATION_CRITERIA.minParagraphs) {
-      // 🔧 에러 대신 경고로 변경
-      warnings.push(
-        `권장: 최소 ${VALIDATION_CRITERIA.minParagraphs}개의 문단 (현재: ${paragraphCount}개)`
-      );
+    const numberValue = propertyValue;
+    const isValidNumber = !Number.isNaN(numberValue);
+    if (!isValidNumber) {
+      return false;
     }
 
-    // 🔧 콘텐츠 길이 요구사항 - 더 관대한 검증
-    const totalContentLength = editorParagraphs.reduce((total, paragraph) => {
-      if (!paragraph || typeof paragraph.content !== 'string') {
-        return total;
+    const isNonNegativeNumber = numberValue >= 0;
+    if (!isNonNegativeNumber) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const hasValidContainerIdProperty = (
+    targetObject: ObjectWithProperties
+  ): boolean => {
+    const hasContainerIdProperty = 'containerId' in targetObject;
+    if (!hasContainerIdProperty) {
+      return false;
+    }
+
+    const containerIdValue = targetObject['containerId'];
+    const isNullValue = containerIdValue === null;
+    const isValidStringValue =
+      typeof containerIdValue === 'string' &&
+      containerIdValue.trim().length > 0;
+
+    const isValidContainerId = isNullValue
+      ? true
+      : isValidStringValue
+      ? true
+      : false;
+    return isValidContainerId;
+  };
+
+  return {
+    hasValidStringProperty,
+    hasValidNumberProperty,
+    hasValidContainerIdProperty,
+  };
+}
+
+function createTypeGuardModule() {
+  const {
+    hasValidStringProperty,
+    hasValidNumberProperty,
+    hasValidContainerIdProperty,
+  } = createPropertyValidationModule();
+
+  const isValidObjectWithProperties = (
+    candidateObject: unknown
+  ): candidateObject is ObjectWithProperties => {
+    const isNullValue = candidateObject === null;
+    if (isNullValue) {
+      return false;
+    }
+
+    const isUndefinedValue = candidateObject === undefined;
+    if (isUndefinedValue) {
+      return false;
+    }
+
+    const isObjectType = typeof candidateObject === 'object';
+    if (!isObjectType) {
+      return false;
+    }
+
+    const isArrayType = Array.isArray(candidateObject);
+    if (isArrayType) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const isValidEditorContainer = (
+    candidateContainer: unknown
+  ): candidateContainer is ValidatedEditorContainer => {
+    const isValidObject = isValidObjectWithProperties(candidateContainer);
+    if (!isValidObject) {
+      return false;
+    }
+
+    const containerObject = candidateContainer;
+
+    for (const requiredPropertyName of REQUIRED_CONTAINER_PROPERTY_SET) {
+      const isStringProperty = ['id', 'name'].includes(requiredPropertyName);
+      const isNumberProperty = requiredPropertyName === 'order';
+
+      const hasValidProperty = isStringProperty
+        ? hasValidStringProperty(containerObject, requiredPropertyName)
+        : isNumberProperty
+        ? hasValidNumberProperty(containerObject, requiredPropertyName)
+        : false;
+
+      if (!hasValidProperty) {
+        return false;
       }
-      return total + paragraph.content.length;
-    }, 0);
+    }
 
-    if (totalContentLength < VALIDATION_CRITERIA.minContentLength) {
-      // 🔧 완전히 빈 콘텐츠일 때만 에러, 아니면 경고
-      if (totalContentLength === 0) {
-        warnings.push('콘텐츠가 비어있습니다');
-      } else {
-        warnings.push(
-          `권장: 최소 ${VALIDATION_CRITERIA.minContentLength}자의 내용 (현재: ${totalContentLength}자)`
-        );
+    return true;
+  };
+
+  const isValidEditorParagraph = (
+    candidateParagraph: unknown
+  ): candidateParagraph is ValidatedEditorParagraph => {
+    const isValidObject = isValidObjectWithProperties(candidateParagraph);
+    if (!isValidObject) {
+      return false;
+    }
+
+    const paragraphObject = candidateParagraph;
+
+    for (const requiredPropertyName of REQUIRED_PARAGRAPH_PROPERTY_SET) {
+      const isStringProperty = ['id', 'content'].includes(requiredPropertyName);
+      const isNumberProperty = requiredPropertyName === 'order';
+
+      const hasValidProperty = isStringProperty
+        ? hasValidStringProperty(paragraphObject, requiredPropertyName)
+        : isNumberProperty
+        ? hasValidNumberProperty(paragraphObject, requiredPropertyName)
+        : false;
+
+      if (!hasValidProperty) {
+        return false;
       }
     }
 
-    // 🔧 할당된 문단 검증 - 경고만 표시
-    const assignedParagraphs = editorParagraphs.filter(
-      (paragraph) => paragraph && paragraph.containerId !== null
+    const hasValidContainerId = hasValidContainerIdProperty(paragraphObject);
+    if (!hasValidContainerId) {
+      return false;
+    }
+
+    return true;
+  };
+
+  return {
+    isValidObjectWithProperties,
+    isValidEditorContainer,
+    isValidEditorParagraph,
+  };
+}
+
+function createDataFilterModule() {
+  const { isValidEditorContainer, isValidEditorParagraph } =
+    createTypeGuardModule();
+
+  const extractValidContainerList = (
+    rawContainerList: readonly unknown[]
+  ): ValidatedEditorContainer[] => {
+    console.log(
+      `🔍 [FILTER] ${rawContainerList.length}개 컨테이너 필터링 시작`
     );
 
-    if (assignedParagraphs.length === 0 && paragraphCount > 0) {
-      warnings.push('문단이 컨테이너에 할당되지 않았습니다');
+    const validatedContainerList = rawContainerList.filter(
+      isValidEditorContainer
+    );
+
+    console.log(
+      `📊 [FILTER] 유효한 컨테이너: ${validatedContainerList.length}개`
+    );
+    return validatedContainerList;
+  };
+
+  const extractValidParagraphList = (
+    rawParagraphList: readonly unknown[]
+  ): ValidatedEditorParagraph[] => {
+    console.log(`🔍 [FILTER] ${rawParagraphList.length}개 문단 필터링 시작`);
+
+    const validatedParagraphList = rawParagraphList.filter(
+      isValidEditorParagraph
+    );
+
+    console.log(`📊 [FILTER] 유효한 문단: ${validatedParagraphList.length}개`);
+    return validatedParagraphList;
+  };
+
+  return {
+    extractValidContainerList,
+    extractValidParagraphList,
+  };
+}
+
+function createBasicValidationModule() {
+  const validateBasicStructure = (
+    editorSnapshotData: EditorStateSnapshotForBridge
+  ): boolean => {
+    console.log('🔍 [VALIDATOR] 기본 구조 검증 시작');
+
+    const isNullSnapshot = !editorSnapshotData;
+    if (isNullSnapshot) {
+      console.error('❌ [VALIDATOR] 스냅샷이 null 또는 undefined');
+      return false;
     }
 
-    // 🔧 빈 컨테이너 검증 - 경고만 표시
-    const emptyContainers = editorContainers.filter((container) => {
-      if (!container || !container.id) return false;
-      const containerParagraphs = editorParagraphs.filter(
-        (p) => p && p.containerId === container.id
-      );
-      return containerParagraphs.length === 0;
-    });
-
-    if (emptyContainers.length > 0) {
-      warnings.push(`${emptyContainers.length}개의 빈 컨테이너가 있습니다`);
+    const isValidObjectType = typeof editorSnapshotData === 'object';
+    if (!isValidObjectType) {
+      console.error('❌ [VALIDATOR] 스냅샷이 유효한 객체가 아님');
+      return false;
     }
 
-    // 🔧 더 관대한 검증: 기본 구조만 맞으면 유효
-    const isValid = errors.length === 0;
+    const {
+      editorContainers: containerList = [],
+      editorParagraphs: paragraphList = [],
+    } = editorSnapshotData;
 
-    console.log('📊 [VALIDATOR] 최소 요구사항 검증 결과:', {
-      isValid,
-      errorCount: errors.length,
-      warningCount: warnings.length,
-      containerCount,
-      paragraphCount,
-      totalContentLength,
-      assignedParagraphCount: assignedParagraphs.length,
-      emptyContainerCount: emptyContainers.length,
-      validationMode: 'LENIENT', // 🔧 관대한 모드 표시
+    const isValidContainerArray = Array.isArray(containerList);
+    if (!isValidContainerArray) {
+      console.error('❌ [VALIDATOR] 컨테이너가 배열이 아님');
+      return false;
+    }
+
+    const isValidParagraphArray = Array.isArray(paragraphList);
+    if (!isValidParagraphArray) {
+      console.error('❌ [VALIDATOR] 문단이 배열이 아님');
+      return false;
+    }
+
+    console.log('📊 [VALIDATOR] 기본 구조 검증 통과:', {
+      containerCount: containerList.length,
+      paragraphCount: paragraphList.length,
     });
+
+    return true;
+  };
+
+  const quickValidationCheck = (
+    editorSnapshotData: EditorStateSnapshotForBridge | null
+  ): boolean => {
+    console.log('⚡ [VALIDATOR] 빠른 검증 시작');
+
+    const isNullSnapshot = !editorSnapshotData;
+    if (isNullSnapshot) {
+      console.log('❌ [VALIDATOR] 스냅샷 데이터 없음');
+      return false;
+    }
+
+    const hasValidStructure = validateBasicStructure(editorSnapshotData);
+    if (!hasValidStructure) {
+      console.log('❌ [VALIDATOR] 기본 구조 검증 실패');
+      return false;
+    }
+
+    const {
+      editorContainers: containerList = [],
+      editorParagraphs: paragraphList = [],
+    } = editorSnapshotData;
+
+    const hasContainerData = containerList.length > 0;
+    const hasParagraphData = paragraphList.length > 0;
+    const hasAnyValidData = hasContainerData
+      ? true
+      : hasParagraphData
+      ? true
+      : false;
+
+    console.log('📊 [VALIDATOR] 빠른 검증 결과:', {
+      hasAnyValidData,
+      containerCount: containerList.length,
+      paragraphCount: paragraphList.length,
+    });
+
+    return hasAnyValidData;
+  };
+
+  return {
+    validateBasicStructure,
+    quickValidationCheck,
+  };
+}
+
+function createStatisticsModule() {
+  const { extractValidContainerList, extractValidParagraphList } =
+    createDataFilterModule();
+
+  const calculateValidationStatistics = (
+    editorSnapshotData: EditorStateSnapshotForBridge
+  ): ValidationStatistics => {
+    const {
+      editorContainers: originalContainerList = [],
+      editorParagraphs: originalParagraphList = [],
+    } = editorSnapshotData;
+
+    const mutableContainerList = [...originalContainerList];
+    const mutableParagraphList = [...originalParagraphList];
+
+    const validContainerList = extractValidContainerList(mutableContainerList);
+    const validParagraphList = extractValidParagraphList(mutableParagraphList);
+
+    const assignedParagraphList = validParagraphList.filter(
+      ({ containerId: paragraphContainerId }) => paragraphContainerId !== null
+    );
+    const unassignedParagraphList = validParagraphList.filter(
+      ({ containerId: paragraphContainerId }) => paragraphContainerId === null
+    );
+
+    const totalContentLength = validParagraphList.reduce(
+      (totalLength, { content: paragraphContent }) =>
+        totalLength + paragraphContent.length,
+      0
+    );
+
+    const assignedContainerIdSet = new Set(
+      assignedParagraphList.map(
+        ({ containerId: paragraphContainerId }) => paragraphContainerId
+      )
+    );
+    const emptyContainerCount =
+      validContainerList.length - assignedContainerIdSet.size;
 
     return {
-      isValid,
-      errors,
-      warnings,
+      totalContainers: validContainerList.length,
+      totalParagraphs: validParagraphList.length,
+      assignedParagraphs: assignedParagraphList.length,
+      unassignedParagraphs: unassignedParagraphList.length,
+      totalContentLength,
+      emptyContainers: emptyContainerCount,
     };
   };
 
-  // 🔧 전송 준비 검증 - 매우 관대한 기준
+  return { calculateValidationStatistics };
+}
+
+function createAdvancedValidationModule() {
+  const { validateBasicStructure } = createBasicValidationModule();
+  const { calculateValidationStatistics } = createStatisticsModule();
+
+  const validateMinimumRequirements = (
+    editorSnapshotData: EditorStateSnapshotForBridge
+  ): { isValid: boolean; errors: string[]; warnings: string[] } => {
+    console.log('🔍 [VALIDATOR] 최소 요구사항 검증 시작');
+
+    const errorMessageSet = new Set<string>();
+    const warningMessageSet = new Set<string>();
+
+    const hasValidBasicStructure = validateBasicStructure(editorSnapshotData);
+    if (!hasValidBasicStructure) {
+      errorMessageSet.add('기본 구조가 유효하지 않습니다');
+      return {
+        isValid: false,
+        errors: Array.from(errorMessageSet),
+        warnings: Array.from(warningMessageSet),
+      };
+    }
+
+    const statistics = calculateValidationStatistics(editorSnapshotData);
+    const {
+      totalContainers: containerCount,
+      totalParagraphs: paragraphCount,
+      unassignedParagraphs: unassignedParagraphCount,
+      totalContentLength: contentLength,
+      emptyContainers: emptyContainerCount,
+    } = statistics;
+
+    const isContainerCountSufficient =
+      containerCount >= VALIDATION_CRITERIA.minContainers;
+    const containerWarningMessage = isContainerCountSufficient
+      ? null
+      : `권장: 최소 ${VALIDATION_CRITERIA.minContainers}개의 컨테이너 (현재: ${containerCount}개)`;
+
+    const isParagraphCountSufficient =
+      paragraphCount >= VALIDATION_CRITERIA.minParagraphs;
+    const paragraphWarningMessage = isParagraphCountSufficient
+      ? null
+      : `권장: 최소 ${VALIDATION_CRITERIA.minParagraphs}개의 문단 (현재: ${paragraphCount}개)`;
+
+    const isContentLengthSufficient =
+      contentLength >= VALIDATION_CRITERIA.minContentLength;
+    const contentWarningMessage = isContentLengthSufficient
+      ? null
+      : contentLength === 0
+      ? '콘텐츠가 비어있습니다'
+      : `권장: 최소 ${VALIDATION_CRITERIA.minContentLength}자의 내용 (현재: ${contentLength}자)`;
+
+    containerWarningMessage
+      ? warningMessageSet.add(containerWarningMessage)
+      : null;
+    paragraphWarningMessage
+      ? warningMessageSet.add(paragraphWarningMessage)
+      : null;
+    contentWarningMessage ? warningMessageSet.add(contentWarningMessage) : null;
+
+    const hasUnassignedParagraphs = unassignedParagraphCount > 0;
+    const unassignedWarningMessage = hasUnassignedParagraphs
+      ? `${unassignedParagraphCount}개의 문단이 컨테이너에 할당되지 않았습니다`
+      : null;
+    unassignedWarningMessage
+      ? warningMessageSet.add(unassignedWarningMessage)
+      : null;
+
+    const hasEmptyContainers = emptyContainerCount > 0;
+    const emptyContainerWarningMessage = hasEmptyContainers
+      ? `${emptyContainerCount}개의 빈 컨테이너가 있습니다`
+      : null;
+    emptyContainerWarningMessage
+      ? warningMessageSet.add(emptyContainerWarningMessage)
+      : null;
+
+    const isValidForRequirements = errorMessageSet.size === 0;
+
+    console.log('📊 [VALIDATOR] 최소 요구사항 검증 결과:', {
+      isValidForRequirements,
+      errorCount: errorMessageSet.size,
+      warningCount: warningMessageSet.size,
+      statistics,
+    });
+
+    return {
+      isValid: isValidForRequirements,
+      errors: Array.from(errorMessageSet),
+      warnings: Array.from(warningMessageSet),
+    };
+  };
+
   const validateForTransfer = (
-    snapshot: EditorStateSnapshotForBridge
+    editorSnapshotData: EditorStateSnapshotForBridge
   ): BridgeDataValidationResult => {
     console.log('🔍 [VALIDATOR] 전송 검증 시작 (관대한 모드)');
 
-    // 1. 기본 구조 검증
-    if (!validateBasicStructure(snapshot)) {
+    const hasValidBasicStructure = validateBasicStructure(editorSnapshotData);
+    if (!hasValidBasicStructure) {
       console.error('❌ [VALIDATOR] 기본 구조 검증 실패');
       return {
         isValidForTransfer: false,
@@ -154,169 +527,158 @@ export const createBridgeDataValidationHandler = () => {
         validationWarnings: [],
         hasMinimumContent: false,
         hasRequiredStructure: false,
+        errorDetails: new Map([
+          ['structureError', '기본 구조가 유효하지 않습니다'],
+        ]),
       };
     }
 
-    // 2. 최소 요구사항 검증
+    const requirementValidationResult =
+      validateMinimumRequirements(editorSnapshotData);
     const {
       isValid: meetsMinimumRequirements,
-      errors,
-      warnings,
-    } = validateMinimumRequirements(snapshot);
-    const { editorContainers, editorParagraphs } = snapshot;
+      errors: requirementErrorList,
+      warnings: requirementWarningList,
+    } = requirementValidationResult;
 
-    // 🔧 더 관대한 조건들
-    const hasBasicStructure =
-      Array.isArray(editorContainers) && Array.isArray(editorParagraphs);
+    const statistics = calculateValidationStatistics(editorSnapshotData);
+    const {
+      totalContainers: containerCount,
+      totalParagraphs: paragraphCount,
+      totalContentLength: contentLength,
+    } = statistics;
 
-    // 🔧 데이터가 하나라도 있으면 최소 콘텐츠로 인정
-    const hasAnyContainers = editorContainers.length > 0;
-    const hasAnyParagraphs = editorParagraphs.length > 0;
-    const hasAnyContent = editorParagraphs.some(
-      (p) => p && p.content && p.content.trim().length > 0
-    );
+    const hasDataStructure =
+      containerCount > 0 ? true : paragraphCount > 0 ? true : false;
+    const hasActualContent = contentLength > 0;
+    const hasMinimumContent = hasActualContent
+      ? true
+      : hasDataStructure
+      ? true
+      : false;
+    const hasRequiredStructure = hasDataStructure;
 
-    // 🔧 관대한 최소 콘텐츠 기준
-    const hasMinimumContent =
-      hasAnyContent || hasAnyParagraphs || hasAnyContainers;
+    const additionalWarningSet = new Set(requirementWarningList);
 
-    // 🔧 관대한 필수 구조 기준
-    const hasRequiredStructure = hasBasicStructure;
+    const isCompletelyEmpty = containerCount === 0 && paragraphCount === 0;
+    const emptyWarningMessage = isCompletelyEmpty
+      ? '컨테이너와 문단이 모두 비어있습니다'
+      : null;
+    emptyWarningMessage ? additionalWarningSet.add(emptyWarningMessage) : null;
 
-    // 🔧 할당된 콘텐츠 검증 - 선택사항으로 변경
-    const assignedParagraphs = editorParagraphs.filter(
-      (p) => p && p.containerId !== null
-    );
+    const canProceedWithTransfer =
+      hasRequiredStructure &&
+      (meetsMinimumRequirements ? true : hasDataStructure ? true : false);
 
-    // 🔧 관대한 할당 콘텐츠 기준: 컨테이너나 문단이 있으면 OK
-    const hasAssignedContent = hasAnyContainers || hasAnyParagraphs;
+    const errorDetailsMap = new Map<string, string>();
+    requirementErrorList.forEach((errorMessage, errorIndex) => {
+      errorDetailsMap.set(`error_${errorIndex}`, errorMessage);
+    });
 
-    // 🔧 추가 경고 수집
-    const additionalWarnings = [...warnings];
-
-    if (!hasAnyContainers && !hasAnyParagraphs) {
-      additionalWarnings.push('컨테이너와 문단이 모두 비어있습니다');
-    }
-
-    if (hasAnyParagraphs && assignedParagraphs.length === 0) {
-      additionalWarnings.push('문단이 컨테이너에 할당되지 않았습니다');
-    }
-
-    // 🔧 매우 관대한 전송 허용 조건
-    const canTransfer =
-      hasBasicStructure && // 기본 구조만 있으면 됨
-      meetsMinimumRequirements && // 에러가 없으면 됨 (경고는 무시)
-      (hasAnyContainers || hasAnyParagraphs); // 뭔가 하나라도 있으면 됨
-
-    const result: BridgeDataValidationResult = {
-      isValidForTransfer: canTransfer,
-      validationErrors: errors,
-      validationWarnings: additionalWarnings,
-      hasMinimumContent: hasMinimumContent,
-      hasRequiredStructure: hasRequiredStructure,
+    const transferValidationResult: BridgeDataValidationResult = {
+      isValidForTransfer: canProceedWithTransfer,
+      validationErrors: requirementErrorList,
+      validationWarnings: Array.from(additionalWarningSet),
+      hasMinimumContent,
+      hasRequiredStructure,
+      errorDetails: errorDetailsMap,
     };
 
     console.log('📊 [VALIDATOR] 전송 검증 결과:', {
-      isValidForTransfer: result.isValidForTransfer,
-      errorCount: result.validationErrors.length,
-      warningCount: result.validationWarnings.length,
-      hasBasicStructure,
-      hasAnyContainers,
-      hasAnyParagraphs,
-      hasAnyContent,
-      hasAssignedContent,
-      assignedParagraphCount: assignedParagraphs.length,
-      totalParagraphCount: editorParagraphs.length,
-      totalContainerCount: editorContainers.length,
-      validationMode: 'VERY_LENIENT', // 🔧 매우 관대한 모드
-      canTransferReason: canTransfer
-        ? 'PASSED_LENIENT_VALIDATION'
-        : 'FAILED_BASIC_STRUCTURE',
+      isValidForTransfer: transferValidationResult.isValidForTransfer,
+      errorCount: transferValidationResult.validationErrors.length,
+      warningCount: transferValidationResult.validationWarnings.length,
+      statistics,
+      transferDecision: canProceedWithTransfer ? 'ALLOWED' : 'BLOCKED',
     });
 
-    // 🔧 디버깅 정보 추가
-    if (!canTransfer) {
-      console.warn('⚠️ [VALIDATOR] 전송 불가 상세 정보:', {
-        hasBasicStructure,
-        meetsMinimumRequirements,
-        hasAnyData: hasAnyContainers || hasAnyParagraphs,
-        errors: result.validationErrors,
-      });
-    } else {
-      console.log('✅ [VALIDATOR] 전송 허용됨 (관대한 검증 통과)');
-    }
-
-    return result;
-  };
-
-  // 🔧 추가: 개발 모드용 디버그 검증
-  const validateForDebug = (
-    snapshot: EditorStateSnapshotForBridge
-  ): BridgeDataValidationResult & { debugInfo: any } => {
-    console.log('🐛 [VALIDATOR] 디버그 검증 시작');
-
-    const standardResult = validateForTransfer(snapshot);
-
-    const debugInfo = {
-      snapshotExists: !!snapshot,
-      snapshotKeys: snapshot ? Object.keys(snapshot) : [],
-      containerData:
-        snapshot?.editorContainers?.map((c) => ({
-          id: c?.id,
-          name: c?.name,
-          order: c?.order,
-          hasValidStructure: !!(
-            c?.id &&
-            c?.name &&
-            typeof c?.order === 'number'
-          ),
-        })) || [],
-      paragraphData:
-        snapshot?.editorParagraphs?.map((p) => ({
-          id: p?.id,
-          containerId: p?.containerId,
-          contentLength: p?.content?.length || 0,
-          order: p?.order,
-          hasValidStructure: !!(
-            p?.id &&
-            typeof p?.content === 'string' &&
-            typeof p?.order === 'number'
-          ),
-        })) || [],
-      extractedTimestamp: snapshot?.extractedTimestamp,
-      validationCriteria: VALIDATION_CRITERIA,
-    };
-
-    console.log('🐛 [VALIDATOR] 디버그 정보:', debugInfo);
-
-    return {
-      ...standardResult,
-      debugInfo,
-    };
-  };
-
-  // 🔧 추가: 빠른 상태 체크 (성능 최적화)
-  const quickValidationCheck = (
-    snapshot: EditorStateSnapshotForBridge | null
-  ): boolean => {
-    if (!snapshot) return false;
-
-    const { editorContainers, editorParagraphs } = snapshot;
-
-    // 🔧 최소한의 체크만 수행
-    const hasValidArrays =
-      Array.isArray(editorContainers) && Array.isArray(editorParagraphs);
-    const hasSomeData =
-      editorContainers.length > 0 || editorParagraphs.length > 0;
-
-    return hasValidArrays && hasSomeData;
+    return transferValidationResult;
   };
 
   return {
+    validateMinimumRequirements,
+    validateForTransfer,
+  };
+}
+
+function createDebugValidationModule() {
+  const { validateForTransfer } = createAdvancedValidationModule();
+
+  const validateForDebug = (
+    editorSnapshotData: EditorStateSnapshotForBridge
+  ): BridgeDataValidationResult & {
+    debugInfo: Map<string, unknown>;
+  } => {
+    console.log('🐛 [VALIDATOR] 디버그 검증 시작');
+
+    const standardValidationResult = validateForTransfer(editorSnapshotData);
+
+    // 🔧 수정: Map 타입을 unknown으로 확장하여 배열도 허용
+    const debugInfoMap = new Map<string, unknown>();
+
+    debugInfoMap.set('snapshotExists', Boolean(editorSnapshotData));
+    debugInfoMap.set('validationCriteria', VALIDATION_CRITERIA);
+    debugInfoMap.set('debugTimestamp', Date.now());
+
+    const isNullSnapshot = !editorSnapshotData;
+    if (isNullSnapshot) {
+      debugInfoMap.set('debugInfo', 'No snapshot data available');
+      return {
+        ...standardValidationResult,
+        debugInfo: debugInfoMap,
+      };
+    }
+
+    const {
+      editorContainers: containerList = [],
+      editorParagraphs: paragraphList = [],
+    } = editorSnapshotData;
+
+    // 🔧 수정: Object.keys() 결과를 배열로 안전하게 설정
+    debugInfoMap.set('availableSnapshotKeys', Object.keys(editorSnapshotData));
+    debugInfoMap.set('containerCount', containerList.length);
+    debugInfoMap.set('paragraphCount', paragraphList.length);
+
+    const hasTimestamp = 'extractedTimestamp' in editorSnapshotData;
+    const timestampValue = hasTimestamp
+      ? editorSnapshotData.extractedTimestamp
+      : null;
+
+    if (timestampValue !== null) {
+      debugInfoMap.set('extractedTimestamp', timestampValue);
+    }
+
+    console.log(
+      '🐛 [VALIDATOR] 디버그 정보:',
+      Object.fromEntries(debugInfoMap)
+    );
+
+    return {
+      ...standardValidationResult,
+      debugInfo: debugInfoMap,
+    };
+  };
+
+  return { validateForDebug };
+}
+
+export const createBridgeDataValidationHandler = () => {
+  console.log('🔍 [MAIN_FACTORY] 브릿지 데이터 검증 핸들러 생성 시작');
+
+  const { validateBasicStructure, quickValidationCheck } =
+    createBasicValidationModule();
+  const { validateMinimumRequirements, validateForTransfer } =
+    createAdvancedValidationModule();
+  const { validateForDebug } = createDebugValidationModule();
+
+  const bridgeDataValidationHandlerInstance = {
     validateBasicStructure,
+    quickValidationCheck,
     validateMinimumRequirements,
     validateForTransfer,
     validateForDebug,
-    quickValidationCheck,
   };
+
+  console.log('✅ [MAIN_FACTORY] 브릿지 데이터 검증 핸들러 생성 완료');
+  return bridgeDataValidationHandlerInstance;
 };

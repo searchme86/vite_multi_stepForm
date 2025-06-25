@@ -20,6 +20,44 @@ interface ParagraphBlock {
   readonly order: number;
 }
 
+// 🔧 객체 타입 검증 헬퍼 함수
+const isObjectWithProperties = (
+  item: unknown
+): item is Record<string, unknown> => {
+  return item !== null && typeof item === 'object' && !Array.isArray(item);
+};
+
+// 🔧 타입 가드 함수 - ParagraphBlock 타입 검증 (타입 단언 완전 제거)
+const isParagraphBlock = (item: unknown): item is ParagraphBlock => {
+  if (!isObjectWithProperties(item)) {
+    return false;
+  }
+
+  const candidateObject = item;
+
+  return (
+    typeof candidateObject.id === 'string' &&
+    typeof candidateObject.content === 'string' &&
+    (candidateObject.containerId === null ||
+      typeof candidateObject.containerId === 'string') &&
+    typeof candidateObject.order === 'number'
+  );
+};
+
+// 🔧 ParagraphBlock 배열 타입 가드 함수 - readonly 배열 지원
+const isParagraphBlockArray = (
+  items: readonly unknown[]
+): items is readonly ParagraphBlock[] => {
+  return items.every(isParagraphBlock);
+};
+
+// 🔧 readonly 배열 생성 헬퍼 함수
+const createReadonlyStringArray = (
+  items: readonly string[]
+): readonly string[] => {
+  return Object.freeze([...items]);
+};
+
 // 🔧 검증 상태 인터페이스 - UI에서 사용할 상태 정보
 interface ValidationStatus {
   readonly containerCount: number;
@@ -27,8 +65,8 @@ interface ValidationStatus {
   readonly assignedParagraphCount: number;
   readonly unassignedParagraphCount: number;
   readonly totalContentLength: number;
-  readonly validationErrors: string[];
-  readonly validationWarnings: string[];
+  readonly validationErrors: readonly string[];
+  readonly validationWarnings: readonly string[];
   readonly isReadyForTransfer: boolean;
 }
 
@@ -188,21 +226,21 @@ export const useBridgeUIComponents = (
           assignedParagraphCount: 0,
           unassignedParagraphCount: 0,
           totalContentLength: 0,
-          validationErrors: ['상태 추출 실패'],
-          validationWarnings: [],
+          validationErrors: createReadonlyStringArray(['상태 추출 실패']),
+          validationWarnings: createReadonlyStringArray([]),
           isReadyForTransfer: false,
         };
       }
 
       if (!snapshot) {
-        const fallback = {
+        const fallback: ValidationStatus = {
           containerCount: 0,
           paragraphCount: 0,
           assignedParagraphCount: 0,
           unassignedParagraphCount: 0,
           totalContentLength: 0,
-          validationErrors: ['데이터 없음'],
-          validationWarnings: [],
+          validationErrors: createReadonlyStringArray(['데이터 없음']),
+          validationWarnings: createReadonlyStringArray([]),
           isReadyForTransfer: false,
         };
         validationCache.current = fallback;
@@ -214,22 +252,34 @@ export const useBridgeUIComponents = (
       const containerCount = editorContainers.length;
       const paragraphCount = editorParagraphs.length;
 
-      // 🔧 ParagraphBlock 타입 캐스팅으로 해결
-      const typedParagraphs = editorParagraphs as unknown as ParagraphBlock[];
+      if (!isParagraphBlockArray(editorParagraphs)) {
+        console.error('❌ [BRIDGE_UI_COMPONENTS] 잘못된 paragraph 데이터 구조');
+        return {
+          containerCount,
+          paragraphCount: 0,
+          assignedParagraphCount: 0,
+          unassignedParagraphCount: 0,
+          totalContentLength: 0,
+          validationErrors: createReadonlyStringArray(['잘못된 데이터 구조']),
+          validationWarnings: createReadonlyStringArray([]),
+          isReadyForTransfer: false,
+        };
+      }
 
-      const assignedParagraphs = typedParagraphs.filter(
+      const validatedParagraphs = editorParagraphs;
+
+      const assignedParagraphs = validatedParagraphs.filter(
         (paragraph: ParagraphBlock) => paragraph.containerId !== null
       );
       const assignedParagraphCount = assignedParagraphs.length;
       const unassignedParagraphCount = paragraphCount - assignedParagraphCount;
 
-      const totalContentLength = typedParagraphs.reduce(
+      const totalContentLength = validatedParagraphs.reduce(
         (totalLength: number, paragraph: ParagraphBlock) =>
           totalLength + (paragraph?.content?.length || 0),
         0
       );
 
-      // 🔧 Bridge 검증 수행
       const bridgeValidation = validator.current.validateForTransfer(snapshot);
       const { validationErrors, validationWarnings, isValidForTransfer } =
         bridgeValidation;
@@ -249,8 +299,8 @@ export const useBridgeUIComponents = (
         assignedParagraphCount,
         unassignedParagraphCount,
         totalContentLength,
-        validationErrors,
-        validationWarnings,
+        validationErrors: createReadonlyStringArray(validationErrors),
+        validationWarnings: createReadonlyStringArray(validationWarnings),
         isReadyForTransfer,
       };
 
@@ -267,14 +317,14 @@ export const useBridgeUIComponents = (
     } catch (error) {
       console.error('❌ [BRIDGE_UI_COMPONENTS] 검증 계산 실패:', error);
 
-      const errorResult = {
+      const errorResult: ValidationStatus = {
         containerCount: 0,
         paragraphCount: 0,
         assignedParagraphCount: 0,
         unassignedParagraphCount: 0,
         totalContentLength: 0,
-        validationErrors: ['검증 계산 실패'],
-        validationWarnings: [],
+        validationErrors: createReadonlyStringArray(['검증 계산 실패']),
+        validationWarnings: createReadonlyStringArray([]),
         isReadyForTransfer: false,
       };
       validationCache.current = errorResult;
@@ -282,7 +332,6 @@ export const useBridgeUIComponents = (
     }
   }, [refreshTrigger, getExtractor, bridgeHook.checkCanTransfer]);
 
-  // 🔧 초기화 Effect
   useEffect(() => {
     if (!isInitialized.current) {
       console.log('🔧 [BRIDGE_UI_COMPONENTS] 초기화');
@@ -302,33 +351,23 @@ export const useBridgeUIComponents = (
     }
   }, [bridgeHook.resetBridgeState]);
 
-  // 🔧 Hook 반환값 - 완전한 양방향 지원
   return {
-    // 기존 상태들
     canTransfer: validationStatus.isReadyForTransfer,
     isTransferring: bridgeHook.isTransferInProgress,
     lastTransferResult: bridgeHook.lastTransferResult,
     transferErrors: bridgeHook.transferErrors,
     transferWarnings: bridgeHook.transferWarnings,
     transferAttemptCount: bridgeHook.transferCount,
-
-    // 새로운 양방향 상태들
     isReverseTransferring: bridgeHook.isReverseTransferInProgress,
     lastReverseTransferResult: bridgeHook.lastReverseTransferResult,
     isBidirectionalSyncing: bridgeHook.isBidirectionalSyncInProgress,
     lastBidirectionalSyncResult: bridgeHook.lastBidirectionalSyncResult,
-
-    // 설정 및 검증 상태
     bridgeConfiguration: bridgeHook.bridgeConfiguration,
     validationStatus,
-
-    // 기존 액션들
     executeManualTransfer,
     checkCanTransfer: () => validationStatus.isReadyForTransfer,
     resetBridgeState,
     refreshValidationStatus,
-
-    // 새로운 양방향 액션들
     executeReverseTransfer,
     executeBidirectionalSync,
     checkCanReverseTransfer: bridgeHook.checkCanReverseTransfer,

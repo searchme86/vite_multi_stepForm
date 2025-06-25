@@ -1,6 +1,9 @@
 // bridges/editorMultiStepBridge/editorDataExtractor.ts
 
-import { EditorStateSnapshotForBridge } from './bridgeDataTypes';
+import {
+  EditorStateSnapshotForBridge,
+  SnapshotMetadata,
+} from './bridgeDataTypes';
 import { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import { generateCompletedContent } from '../../store/shared/utilityFunctions';
 import {
@@ -8,621 +11,977 @@ import {
   validateEditorParagraphs,
   calculateEditorStatistics,
 } from '../utils/editorStateUtils';
-// 🔧 핵심 수정: 에디터 스토어 직접 import
 import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
-// 🔧 UI 스토어 정적 import 추가
 import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
 
-// 에디터 상태 추출기를 생성하는 팩토리 함수
-export const createEditorStateExtractor = () => {
-  console.log('🏭 [EXTRACTOR_FACTORY] 에디터 상태 추출기 생성');
+// 🔧 수정: EditorCoreStateData 인터페이스 수정하여 인덱스 시그니처 추가
+interface EditorCoreStateData {
+  readonly containers?: readonly Container[];
+  readonly paragraphs?: readonly ParagraphBlock[];
+  readonly isCompleted?: boolean;
+  readonly completedContent?: string;
+  readonly [key: string]: unknown; // 인덱스 시그니처 추가
+}
 
-  // 🔧 핵심 수정: 강화된 에디터 데이터 추출 로직
-  const extractRawEditorData = (): {
-    containers: Container[];
-    paragraphs: ParagraphBlock[];
-    isCompleted: boolean;
-    activeParagraphId: string | null;
-    selectedParagraphIds: string[];
-    isPreviewOpen: boolean;
-  } | null => {
+interface EditorUIStateData {
+  readonly activeParagraphId?: string | null;
+  readonly selectedParagraphIds?: readonly string[];
+  readonly isPreviewOpen?: boolean;
+}
+
+interface RawEditorExtractedData {
+  readonly containerList: readonly Container[];
+  readonly paragraphList: readonly ParagraphBlock[];
+  readonly completionStatus: boolean;
+  readonly activeParagraphId: string | null;
+  readonly selectedParagraphIdList: readonly string[];
+  readonly previewOpenStatus: boolean;
+}
+
+interface ValidationResultDataInfo {
+  readonly isValid: boolean;
+  readonly containerCount: number;
+  readonly paragraphCount: number;
+}
+
+// 🔧 P1-4: 강화된 타입 가드 모듈
+function createExtractorTypeGuardModule() {
+  const isValidString = (value: unknown): value is string => {
+    return typeof value === 'string';
+  };
+
+  const isValidNumber = (value: unknown): value is number => {
+    return typeof value === 'number' && !Number.isNaN(value);
+  };
+
+  const isValidBoolean = (value: unknown): value is boolean => {
+    return typeof value === 'boolean';
+  };
+
+  const isValidObject = (value: unknown): value is Record<string, unknown> => {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  };
+
+  const isValidArray = (value: unknown): value is unknown[] => {
+    return Array.isArray(value);
+  };
+
+  const isValidDate = (value: unknown): value is Date => {
+    return value instanceof Date && !isNaN(value.getTime());
+  };
+
+  return {
+    isValidString,
+    isValidNumber,
+    isValidBoolean,
+    isValidObject,
+    isValidArray,
+    isValidDate,
+  };
+}
+
+// 🔧 P1-5: 에러 처리 강화 모듈
+function createExtractorErrorHandlerModule() {
+  const { isValidString } = createExtractorTypeGuardModule();
+
+  const safelyExecuteExtraction = <T>(
+    extractionOperation: () => T,
+    fallbackValue: T,
+    operationName: string
+  ): T => {
+    try {
+      return extractionOperation();
+    } catch (extractionError) {
+      console.error(
+        `❌ [EXTRACTOR] ${operationName} 실행 실패:`,
+        extractionError
+      );
+      return fallbackValue;
+    }
+  };
+
+  const extractSafeErrorMessage = (error: unknown): string => {
+    // Early Return: Error 인스턴스인 경우
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    // Early Return: 문자열인 경우
+    if (isValidString(error)) {
+      return error;
+    }
+
+    // 안전한 문자열 변환
+    try {
+      return String(error);
+    } catch (conversionError) {
+      console.warn('⚠️ [EXTRACTOR] 에러 메시지 변환 실패:', conversionError);
+      return 'Unknown extraction error';
+    }
+  };
+
+  return {
+    safelyExecuteExtraction,
+    extractSafeErrorMessage,
+  };
+}
+
+function createPropertyValidationModule() {
+  const { isValidString, isValidNumber } = createExtractorTypeGuardModule();
+
+  const hasValidStringProperty = (
+    targetObject: Record<string, unknown>,
+    propertyName: string
+  ): boolean => {
+    // Early Return: 속성이 없는 경우
+    if (!(propertyName in targetObject)) {
+      return false;
+    }
+
+    // Early Return: 자체 속성이 아닌 경우
+    if (!Object.prototype.hasOwnProperty.call(targetObject, propertyName)) {
+      return false;
+    }
+
+    const propertyValue = targetObject[propertyName];
+
+    // Early Return: 문자열이 아닌 경우
+    if (!isValidString(propertyValue)) {
+      return false;
+    }
+
+    return propertyValue.trim().length > 0;
+  };
+
+  const hasValidNumberProperty = (
+    targetObject: Record<string, unknown>,
+    propertyName: string
+  ): boolean => {
+    // Early Return: 속성이 없는 경우
+    if (!(propertyName in targetObject)) {
+      return false;
+    }
+
+    const propertyValue = targetObject[propertyName];
+
+    // Early Return: 숫자가 아니거나 NaN인 경우
+    if (!isValidNumber(propertyValue)) {
+      return false;
+    }
+
+    return propertyValue >= 0;
+  };
+
+  return {
+    hasValidStringProperty,
+    hasValidNumberProperty,
+  };
+}
+
+function createEditorTypeGuardModule() {
+  const { hasValidStringProperty, hasValidNumberProperty } =
+    createPropertyValidationModule();
+  const { isValidObject, isValidArray } = createExtractorTypeGuardModule();
+
+  const isValidContainer = (
+    candidateContainer: unknown
+  ): candidateContainer is Container => {
+    // Early Return: 유효한 객체가 아닌 경우
+    if (!isValidObject(candidateContainer)) {
+      return false;
+    }
+
+    // 필수 속성들 검증
+    const hasValidId = hasValidStringProperty(candidateContainer, 'id');
+    const hasValidName = hasValidStringProperty(candidateContainer, 'name');
+    const hasValidOrder = hasValidNumberProperty(candidateContainer, 'order');
+
+    return hasValidId && hasValidName && hasValidOrder;
+  };
+
+  const isValidParagraph = (
+    candidateParagraph: unknown
+  ): candidateParagraph is ParagraphBlock => {
+    // Early Return: 유효한 객체가 아닌 경우
+    if (!isValidObject(candidateParagraph)) {
+      return false;
+    }
+
+    // 필수 속성들 검증
+    const hasValidId = hasValidStringProperty(candidateParagraph, 'id');
+    const hasValidOrder = hasValidNumberProperty(candidateParagraph, 'order');
+
+    // content 속성은 빈 문자열도 허용
+    const hasContentProperty = 'content' in candidateParagraph;
+    const contentValue = candidateParagraph['content'];
+    const hasValidContent = typeof contentValue === 'string';
+
+    // containerId는 null 또는 유효한 문자열이어야 함
+    const hasContainerIdProperty = 'containerId' in candidateParagraph;
+    const containerIdValue = candidateParagraph['containerId'];
+    const hasValidContainerId =
+      containerIdValue === null ||
+      (typeof containerIdValue === 'string' &&
+        containerIdValue.trim().length > 0);
+
+    return (
+      hasValidId &&
+      hasValidOrder &&
+      hasContentProperty &&
+      hasValidContent &&
+      hasContainerIdProperty &&
+      hasValidContainerId
+    );
+  };
+
+  const isEditorStoreStateObject = (
+    candidateState: unknown
+  ): candidateState is Record<string, unknown> => {
+    return isValidObject(candidateState);
+  };
+
+  const isEditorCoreState = (
+    candidateState: Record<string, unknown>
+  ): candidateState is EditorCoreStateData => {
+    // containers 속성 검증
+    const hasContainersProperty = 'containers' in candidateState;
+    const containersValue = hasContainersProperty
+      ? candidateState['containers']
+      : undefined;
+    const hasValidContainers =
+      containersValue === undefined || isValidArray(containersValue);
+
+    // Early Return: 유효하지 않은 컨테이너인 경우
+    if (!hasValidContainers) {
+      return false;
+    }
+
+    // paragraphs 속성 검증
+    const hasParagraphsProperty = 'paragraphs' in candidateState;
+    const paragraphsValue = hasParagraphsProperty
+      ? candidateState['paragraphs']
+      : undefined;
+    const hasValidParagraphs =
+      paragraphsValue === undefined || isValidArray(paragraphsValue);
+
+    return hasValidParagraphs;
+  };
+
+  return {
+    isValidContainer,
+    isValidParagraph,
+    isEditorStoreStateObject,
+    isEditorCoreState,
+  };
+}
+
+function createStoreAccessModule() {
+  const {
+    isEditorStoreStateObject,
+    isEditorCoreState,
+    isValidContainer,
+    isValidParagraph,
+  } = createEditorTypeGuardModule();
+  const { safelyExecuteExtraction } = createExtractorErrorHandlerModule();
+
+  const extractCoreState = (): EditorCoreStateData | null => {
+    return safelyExecuteExtraction(
+      () => {
+        const coreStoreState = useEditorCoreStore.getState();
+
+        // Early Return: null 상태인 경우
+        if (!coreStoreState) {
+          console.warn('⚠️ [EXTRACTOR] 코어 스토어 상태 없음');
+          return null;
+        }
+
+        // Early Return: 유효하지 않은 스토어 객체인 경우
+        if (!isEditorStoreStateObject(coreStoreState)) {
+          console.warn('⚠️ [EXTRACTOR] 유효하지 않은 스토어 객체');
+          return null;
+        }
+
+        // Early Return: 유효하지 않은 코어 상태인 경우
+        if (!isEditorCoreState(coreStoreState)) {
+          console.warn('⚠️ [EXTRACTOR] 유효하지 않은 코어 상태');
+          return null;
+        }
+
+        console.log('✅ [EXTRACTOR] 코어 상태 추출 성공');
+        return coreStoreState;
+      },
+      null,
+      'CORE_STATE_EXTRACTION'
+    );
+  };
+
+  const extractUIState = (): EditorUIStateData => {
+    return safelyExecuteExtraction(
+      () => {
+        const uiStoreState = useEditorUIStore.getState();
+
+        // Early Return: null 상태인 경우
+        if (!uiStoreState) {
+          console.warn('⚠️ [EXTRACTOR] UI 상태 없음, 기본값 사용');
+          return createDefaultUIState();
+        }
+
+        // Early Return: 유효하지 않은 스토어 객체인 경우
+        if (!isEditorStoreStateObject(uiStoreState)) {
+          console.warn('⚠️ [EXTRACTOR] UI 상태 객체 타입 오류, 기본값 사용');
+          return createDefaultUIState();
+        }
+
+        // 🔧 P1-3: 구조분해할당으로 안전한 속성 추출
+        const {
+          activeParagraphId: rawActiveParagraphId,
+          selectedParagraphIds: rawSelectedParagraphIds,
+          isPreviewOpen: rawIsPreviewOpen,
+        } = uiStoreState;
+
+        const safeActiveParagraphId =
+          typeof rawActiveParagraphId === 'string'
+            ? rawActiveParagraphId
+            : null;
+        const safeSelectedParagraphIds = Array.isArray(rawSelectedParagraphIds)
+          ? rawSelectedParagraphIds
+          : [];
+        const safeIsPreviewOpen = Boolean(rawIsPreviewOpen);
+
+        console.log('✅ [EXTRACTOR] UI 상태 추출 성공');
+
+        // 🔧 수정: 인터페이스와 일치하는 속성명 사용
+        return {
+          activeParagraphId: safeActiveParagraphId,
+          selectedParagraphIds: safeSelectedParagraphIds,
+          isPreviewOpen: safeIsPreviewOpen,
+        };
+      },
+      createDefaultUIState(),
+      'UI_STATE_EXTRACTION'
+    );
+  };
+
+  const createDefaultUIState = (): EditorUIStateData => ({
+    activeParagraphId: null,
+    selectedParagraphIds: [],
+    isPreviewOpen: false,
+  });
+
+  const extractRawEditorData = (): RawEditorExtractedData | null => {
     console.log('🔍 [EXTRACTOR] 원시 에디터 데이터 추출 시작');
 
-    try {
-      // 🔧 1단계: 에디터 코어 스토어에서 데이터 추출
-      let editorState = null;
-      try {
-        editorState = useEditorCoreStore.getState();
-        console.log('📊 [EXTRACTOR] 에디터 코어 스토어 접근 성공:', {
-          stateExists: !!editorState,
-          stateKeys: editorState ? Object.keys(editorState) : [],
-        });
-      } catch (coreStoreError) {
-        console.error(
-          '❌ [EXTRACTOR] 에디터 코어 스토어 접근 실패:',
-          coreStoreError
-        );
+    return safelyExecuteExtraction(
+      () => {
+        const coreState = extractCoreState();
 
-        // 🔧 fallback: window 객체에서 시도
-        try {
-          console.log(
-            '🔄 [EXTRACTOR] fallback: window 객체에서 에디터 데이터 시도'
-          );
-          const globalEditorData = (window as any).__EDITOR_STORE__;
-          if (globalEditorData) {
-            editorState = globalEditorData;
-            console.log('✅ [EXTRACTOR] window 객체에서 에디터 데이터 발견');
-          }
-        } catch (windowError) {
-          console.warn(
-            '⚠️ [EXTRACTOR] window 객체에서도 에디터 데이터 없음:',
-            windowError
-          );
+        // Early Return: 코어 상태가 null인 경우
+        if (!coreState) {
+          console.warn('⚠️ [EXTRACTOR] 코어 상태 없음, 기본 데이터 반환');
+          return createDefaultRawData();
         }
-      }
 
-      if (!editorState) {
-        console.warn('⚠️ [EXTRACTOR] 에디터 상태가 null, 빈 데이터로 진행');
-        // 🔧 빈 상태라도 기본 구조 반환 (Bridge가 작동할 수 있도록)
-        return {
-          containers: [],
-          paragraphs: [],
-          isCompleted: false,
-          activeParagraphId: null,
-          selectedParagraphIds: [],
-          isPreviewOpen: false,
+        const uiState = extractUIState();
+
+        // 🔧 P1-3: 구조분해할당 + Fallback으로 코어 상태 추출
+        const {
+          containers: rawContainerList = [],
+          paragraphs: rawParagraphList = [],
+          isCompleted: editorCompletionStatus = false,
+        } = coreState;
+
+        // 🔧 수정: 인터페이스와 일치하는 속성명 사용하여 UI 상태 추출
+        const {
+          activeParagraphId: currentActiveParagraphId = null,
+          selectedParagraphIds: currentSelectedParagraphIds = [],
+          isPreviewOpen: currentPreviewOpenStatus = false,
+        } = uiState;
+
+        // 🔧 P1-4: 타입 가드를 통한 안전한 필터링
+        const validContainerList = Array.isArray(rawContainerList)
+          ? rawContainerList.filter(isValidContainer)
+          : [];
+
+        const validParagraphList = Array.isArray(rawParagraphList)
+          ? rawParagraphList.filter(isValidParagraph)
+          : [];
+
+        const extractedData: RawEditorExtractedData = {
+          containerList: validContainerList,
+          paragraphList: validParagraphList,
+          completionStatus: Boolean(editorCompletionStatus),
+          activeParagraphId: currentActiveParagraphId,
+          selectedParagraphIdList: [...currentSelectedParagraphIds],
+          previewOpenStatus: currentPreviewOpenStatus,
         };
-      }
 
-      // 🔧 2단계: 에디터 상태에서 필요한 데이터 추출
-      const {
-        containers = [],
-        paragraphs = [],
-        isCompleted = false,
-        completedContent = '',
-      } = editorState;
-
-      console.log('📊 [EXTRACTOR] 에디터 코어 데이터 추출 결과:', {
-        containersType: Array.isArray(containers) ? 'array' : typeof containers,
-        paragraphsType: Array.isArray(paragraphs) ? 'array' : typeof paragraphs,
-        containerCount: Array.isArray(containers) ? containers.length : 0,
-        paragraphCount: Array.isArray(paragraphs) ? paragraphs.length : 0,
-        isCompleted: Boolean(isCompleted),
-        hasCompletedContent:
-          typeof completedContent === 'string' && completedContent.length > 0,
-        // 🔧 디버깅용: 실제 데이터 샘플
-        containerSample: Array.isArray(containers)
-          ? containers.slice(0, 2).map((c) => ({ id: c?.id, name: c?.name }))
-          : [],
-        paragraphSample: Array.isArray(paragraphs)
-          ? paragraphs.slice(0, 2).map((p) => ({
-              id: p?.id,
-              content: p?.content?.substring(0, 50),
-            }))
-          : [],
-      });
-
-      // 🔧 3단계: UI 스토어에서 UI 관련 상태 가져오기
-      let activeParagraphId: string | null = null;
-      let selectedParagraphIds: string[] = [];
-      let isPreviewOpen = false;
-
-      try {
-        const uiState = useEditorUIStore.getState();
-        if (uiState) {
-          activeParagraphId = uiState.activeParagraphId || null;
-          selectedParagraphIds = uiState.selectedParagraphIds || [];
-          isPreviewOpen = uiState.isPreviewOpen || false;
-        }
-
-        console.log('📱 [EXTRACTOR] UI 상태 접근 성공:', {
-          hasActiveParagraph: activeParagraphId !== null,
-          selectedCount: selectedParagraphIds.length,
-          isPreviewOpen,
+        console.log('✅ [EXTRACTOR] 원시 데이터 추출 완료:', {
+          containerCount: extractedData.containerList.length,
+          paragraphCount: extractedData.paragraphList.length,
+          isCompleted: extractedData.completionStatus,
         });
-      } catch (uiError) {
-        console.warn('⚠️ [EXTRACTOR] UI 상태 접근 실패, 기본값 사용:', uiError);
-        activeParagraphId = null;
-        selectedParagraphIds = [];
-        isPreviewOpen = false;
-      }
 
-      // 🔧 4단계: 안전한 데이터 구조로 변환
-      const safeContainers = Array.isArray(containers) ? containers : [];
-      const safeParagraphs = Array.isArray(paragraphs) ? paragraphs : [];
-
-      // 🔧 5단계: 데이터 무결성 검증
-      const containerIds = new Set(
-        safeContainers.map((c) => c?.id).filter(Boolean)
-      );
-      const validParagraphs = safeParagraphs.filter((p) => {
-        const hasValidId = p?.id && typeof p.id === 'string';
-        const hasValidContent = typeof p?.content === 'string';
-        return hasValidId && hasValidContent;
-      });
-
-      console.log('🔍 [EXTRACTOR] 데이터 무결성 검증 결과:', {
-        originalContainerCount: safeContainers.length,
-        validContainerIds: containerIds.size,
-        originalParagraphCount: safeParagraphs.length,
-        validParagraphCount: validParagraphs.length,
-        hasDataIntegrityIssues:
-          containerIds.size !== safeContainers.length ||
-          validParagraphs.length !== safeParagraphs.length,
-      });
-
-      const result = {
-        containers: safeContainers,
-        paragraphs: validParagraphs, // 🔧 검증된 문단만 사용
-        isCompleted: Boolean(isCompleted),
-        activeParagraphId,
-        selectedParagraphIds,
-        isPreviewOpen,
-      };
-
-      console.log('✅ [EXTRACTOR] 원시 데이터 추출 완료:', {
-        containerCount: result.containers.length,
-        paragraphCount: result.paragraphs.length,
-        isCompleted: result.isCompleted,
-        hasActiveParagraph: result.activeParagraphId !== null,
-        selectedCount: result.selectedParagraphIds.length,
-        isPreviewOpen: result.isPreviewOpen,
-      });
-
-      return result;
-    } catch (extractionError) {
-      console.error('❌ [EXTRACTOR] 원시 데이터 추출 실패:', extractionError);
-      console.error('🔍 [EXTRACTOR] 에러 상세 정보:', {
-        errorName:
-          extractionError instanceof Error ? extractionError.name : 'Unknown',
-        errorMessage:
-          extractionError instanceof Error
-            ? extractionError.message
-            : String(extractionError),
-        errorStack:
-          extractionError instanceof Error
-            ? extractionError.stack
-            : 'No stack trace',
-        storeAccessAttempt: 'useEditorCoreStore.getState()',
-      });
-
-      // 🔧 에러 발생 시에도 기본 구조 반환 (Bridge 작동 유지)
-      return {
-        containers: [],
-        paragraphs: [],
-        isCompleted: false,
-        activeParagraphId: null,
-        selectedParagraphIds: [],
-        isPreviewOpen: false,
-      };
-    }
+        return extractedData;
+      },
+      createDefaultRawData(),
+      'RAW_EDITOR_DATA_EXTRACTION'
+    );
   };
 
-  // 🔧 관대한 검증으로 변경 - 빈 데이터도 유효하다고 처리
+  const createDefaultRawData = (): RawEditorExtractedData => ({
+    containerList: [],
+    paragraphList: [],
+    completionStatus: false,
+    activeParagraphId: null,
+    selectedParagraphIdList: [],
+    previewOpenStatus: false,
+  });
+
+  return {
+    extractCoreState,
+    extractUIState,
+    extractRawEditorData,
+  };
+}
+
+function createDataValidationModule() {
+  const { safelyExecuteExtraction } = createExtractorErrorHandlerModule();
+
   const validateExtractedData = (
-    containers: Container[],
-    paragraphs: ParagraphBlock[]
-  ): boolean => {
+    containersToValidate: readonly Container[],
+    paragraphsToValidate: readonly ParagraphBlock[]
+  ): ValidationResultDataInfo => {
     console.log('🔍 [EXTRACTOR] 추출된 데이터 검증');
 
-    try {
-      // 🔧 기본 타입 검사만 수행 (빈 배열이어도 유효)
-      const isValidContainerType = Array.isArray(containers);
-      const isValidParagraphType = Array.isArray(paragraphs);
+    return safelyExecuteExtraction(
+      () => {
+        // 🔧 P1-1: Early Return 패턴으로 기본 구조 검증
+        if (!Array.isArray(containersToValidate)) {
+          console.error('❌ [EXTRACTOR] 컨테이너가 배열이 아님');
+          return { isValid: false, containerCount: 0, paragraphCount: 0 };
+        }
 
-      if (!isValidContainerType || !isValidParagraphType) {
-        console.error('❌ [EXTRACTOR] 기본 타입 검사 실패:', {
-          isValidContainerType,
-          isValidParagraphType,
+        if (!Array.isArray(paragraphsToValidate)) {
+          console.error('❌ [EXTRACTOR] 문단이 배열이 아님');
+          return { isValid: false, containerCount: 0, paragraphCount: 0 };
+        }
+
+        const containerCount = containersToValidate.length;
+        const paragraphCount = paragraphsToValidate.length;
+
+        // 🔧 P1-2: 삼항연산자로 검증 실행 여부 결정
+        const shouldValidateContainers = containerCount > 0 ? true : false;
+        const shouldValidateParagraphs = paragraphCount > 0 ? true : false;
+
+        let containersValidationResult = true;
+        let paragraphsValidationResult = true;
+
+        // 🔧 P1-5: 안전한 검증 실행
+        if (shouldValidateContainers) {
+          containersValidationResult = safelyExecuteExtraction(
+            () => validateEditorContainers([...containersToValidate]),
+            true, // 관대한 모드로 계속 진행
+            'CONTAINER_VALIDATION'
+          );
+        }
+
+        if (shouldValidateParagraphs) {
+          paragraphsValidationResult = safelyExecuteExtraction(
+            () => validateEditorParagraphs([...paragraphsToValidate]),
+            true, // 관대한 모드로 계속 진행
+            'PARAGRAPH_VALIDATION'
+          );
+        }
+
+        // 🔧 P1-2: 삼항연산자로 종합 검증 결과 계산
+        const isCompletelyValid =
+          containersValidationResult && paragraphsValidationResult
+            ? true
+            : false;
+
+        console.log('📊 [EXTRACTOR] 데이터 검증 결과:', {
+          isCompletelyValid,
+          containerCount,
+          paragraphCount,
+          containersValid: containersValidationResult,
+          paragraphsValid: paragraphsValidationResult,
         });
-        return false;
-      }
 
-      // 🔧 데이터가 있을 때만 구조 검증 수행
-      let isValidContainers = true;
-      let isValidParagraphs = true;
-
-      if (containers.length > 0) {
-        try {
-          isValidContainers = validateEditorContainers(containers);
-        } catch (containerValidationError) {
-          console.warn(
-            '⚠️ [EXTRACTOR] 컨테이너 구조 검증 실패, 계속 진행:',
-            containerValidationError
-          );
-          isValidContainers = true; // 🔧 구조 검증 실패해도 계속 진행
-        }
-      }
-
-      if (paragraphs.length > 0) {
-        try {
-          isValidParagraphs = validateEditorParagraphs(paragraphs);
-        } catch (paragraphValidationError) {
-          console.warn(
-            '⚠️ [EXTRACTOR] 문단 구조 검증 실패, 계속 진행:',
-            paragraphValidationError
-          );
-          isValidParagraphs = true; // 🔧 구조 검증 실패해도 계속 진행
-        }
-      }
-
-      const isValid =
-        isValidContainerType &&
-        isValidParagraphType &&
-        isValidContainers &&
-        isValidParagraphs;
-
-      console.log('📊 [EXTRACTOR] 데이터 검증 결과:', {
-        isValidContainerType,
-        isValidParagraphType,
-        isValidContainers,
-        isValidParagraphs,
-        isValid,
-        containerCount: containers.length,
-        paragraphCount: paragraphs.length,
-      });
-
-      return isValid;
-    } catch (validationError) {
-      console.error('❌ [EXTRACTOR] 데이터 검증 실패:', validationError);
-      // 🔧 검증 자체가 실패해도 데이터가 있다면 true 반환
-      return Array.isArray(containers) && Array.isArray(paragraphs);
-    }
+        return {
+          isValid: isCompletelyValid,
+          containerCount,
+          paragraphCount,
+        };
+      },
+      { isValid: false, containerCount: 0, paragraphCount: 0 },
+      'DATA_VALIDATION'
+    );
   };
 
-  // 강화된 완성된 콘텐츠 생성 함수
+  return { validateExtractedData };
+}
+
+function createContentGenerationModule() {
+  const { safelyExecuteExtraction } = createExtractorErrorHandlerModule();
+
   const generateCompletedContentSafely = (
-    containers: Container[],
-    paragraphs: ParagraphBlock[]
+    containersForContent: readonly Container[],
+    paragraphsForContent: readonly ParagraphBlock[]
   ): string => {
     console.log('🔄 [EXTRACTOR] 완성된 콘텐츠 생성');
 
-    try {
-      if (!Array.isArray(containers) || !Array.isArray(paragraphs)) {
-        console.warn('⚠️ [EXTRACTOR] 유효하지 않은 배열 타입, 빈 콘텐츠 반환');
-        return '';
-      }
+    return safelyExecuteExtraction(
+      () => {
+        // 🔧 P1-1: Early Return 패턴으로 유효성 체크
+        if (!Array.isArray(containersForContent)) {
+          console.warn(
+            '⚠️ [EXTRACTOR] 유효하지 않은 컨테이너 배열, 빈 콘텐츠 반환'
+          );
+          return '';
+        }
 
-      if (containers.length === 0 || paragraphs.length === 0) {
-        console.warn('⚠️ [EXTRACTOR] 데이터 부족으로 빈 콘텐츠 반환');
-        return '';
-      }
+        if (!Array.isArray(paragraphsForContent)) {
+          console.warn(
+            '⚠️ [EXTRACTOR] 유효하지 않은 문단 배열, 빈 콘텐츠 반환'
+          );
+          return '';
+        }
 
-      let completedContent = '';
-      try {
-        completedContent = generateCompletedContent(containers, paragraphs);
-      } catch (contentGenerationError) {
-        console.warn(
-          '⚠️ [EXTRACTOR] 기본 콘텐츠 생성 실패, 수동 생성 시도:',
-          contentGenerationError
+        // 🔧 P1-2: 삼항연산자로 필수 데이터 확인
+        const hasContainers = containersForContent.length > 0 ? true : false;
+        const hasParagraphs = paragraphsForContent.length > 0 ? true : false;
+        const hasRequiredData = hasContainers && hasParagraphs ? true : false;
+
+        // Early Return: 필수 데이터가 없는 경우
+        if (!hasRequiredData) {
+          console.warn('⚠️ [EXTRACTOR] 데이터 부족으로 빈 콘텐츠 반환');
+          return '';
+        }
+
+        // 🔧 P1-5: 기본 콘텐츠 생성 시도
+        try {
+          const generatedContent = generateCompletedContent(
+            [...containersForContent],
+            [...paragraphsForContent]
+          );
+          console.log('✅ [EXTRACTOR] 기본 콘텐츠 생성 성공:', {
+            contentLength: generatedContent.length,
+          });
+          return generatedContent;
+        } catch (contentGenerationError) {
+          console.warn(
+            '⚠️ [EXTRACTOR] 기본 콘텐츠 생성 실패, 수동 생성 시도:',
+            contentGenerationError
+          );
+          return generateManualContent(
+            containersForContent,
+            paragraphsForContent
+          );
+        }
+      },
+      '',
+      'CONTENT_GENERATION'
+    );
+  };
+
+  const generateManualContent = (
+    containers: readonly Container[],
+    paragraphs: readonly ParagraphBlock[]
+  ): string => {
+    return safelyExecuteExtraction(
+      () => {
+        // 🔧 P1-3: 구조분해할당으로 정렬된 컨테이너 생성
+        const sortedContainerList = [...containers].sort(
+          (firstContainer, secondContainer) => {
+            const { order: firstOrder = 0 } = firstContainer;
+            const { order: secondOrder = 0 } = secondContainer;
+            return firstOrder - secondOrder;
+          }
         );
 
-        // 🔧 fallback: 수동으로 콘텐츠 생성
-        try {
-          const sortedContainers = [...containers].sort(
-            (a, b) => (a?.order || 0) - (b?.order || 0)
+        const contentPartsList: string[] = [];
+
+        sortedContainerList.forEach((containerItem) => {
+          const { id: containerId = '', name: containerName = '' } =
+            containerItem;
+
+          // 🔧 P1-2: 삼항연산자로 유효성 체크
+          const hasValidContainerId = containerId ? true : false;
+          const hasValidContainerName = containerName ? true : false;
+          const isValidContainer =
+            hasValidContainerId && hasValidContainerName ? true : false;
+
+          // Early Return: 유효하지 않은 컨테이너인 경우
+          if (!isValidContainer) {
+            return;
+          }
+
+          // 🔧 P1-3: 구조분해할당으로 문단 필터링 및 정렬
+          const containerParagraphList = paragraphs
+            .filter((paragraphItem) => {
+              const { containerId: paragraphContainerId } = paragraphItem;
+              return paragraphContainerId === containerId;
+            })
+            .sort((firstParagraph, secondParagraph) => {
+              const { order: firstOrder = 0 } = firstParagraph;
+              const { order: secondOrder = 0 } = secondParagraph;
+              return firstOrder - secondOrder;
+            });
+
+          // 🔧 P1-2: 삼항연산자로 문단 존재 여부 확인
+          const hasValidParagraphs =
+            containerParagraphList.length > 0 ? true : false;
+
+          if (hasValidParagraphs) {
+            contentPartsList.push(`## ${containerName}`);
+
+            containerParagraphList.forEach((paragraphItem) => {
+              const { content: paragraphContent = '' } = paragraphItem;
+              const hasValidContent =
+                paragraphContent && paragraphContent.trim().length > 0
+                  ? true
+                  : false;
+
+              // 🔧 P1-2: 삼항연산자로 콘텐츠 추가 여부 결정
+              hasValidContent ? contentPartsList.push(paragraphContent) : null;
+            });
+
+            contentPartsList.push('');
+          }
+        });
+
+        const manualGeneratedContent = contentPartsList.join('\n');
+        console.log('✅ [EXTRACTOR] 수동 콘텐츠 생성 성공');
+        return manualGeneratedContent;
+      },
+      '',
+      'MANUAL_CONTENT_GENERATION'
+    );
+  };
+
+  return { generateCompletedContentSafely };
+}
+
+function createSnapshotModule() {
+  const { extractRawEditorData } = createStoreAccessModule();
+  const { validateExtractedData } = createDataValidationModule();
+  const { generateCompletedContentSafely } = createContentGenerationModule();
+  const { safelyExecuteExtraction } = createExtractorErrorHandlerModule();
+
+  const extractEditorStateSnapshot =
+    (): EditorStateSnapshotForBridge | null => {
+      console.log('🚀 [EXTRACTOR] 에디터 상태 추출 시작');
+      const extractionStartTime = performance.now();
+
+      return safelyExecuteExtraction(
+        () => {
+          const rawEditorData = extractRawEditorData();
+
+          // Early Return: 원시 데이터가 null인 경우
+          if (!rawEditorData) {
+            console.error('❌ [EXTRACTOR] 원시 데이터 추출 실패');
+            return null;
+          }
+
+          // 🔧 P1-3: 구조분해할당으로 원시 데이터 추출
+          const {
+            containerList: extractedContainerList,
+            paragraphList: extractedParagraphList,
+            completionStatus: editorCompletionStatus,
+            activeParagraphId: currentActiveParagraphId,
+            selectedParagraphIdList: currentSelectedParagraphIds,
+            previewOpenStatus: currentPreviewOpenStatus,
+          } = rawEditorData;
+
+          const validationResult = validateExtractedData(
+            extractedContainerList,
+            extractedParagraphList
           );
-          const contentParts: string[] = [];
 
-          sortedContainers.forEach((container) => {
-            if (container?.id && container?.name) {
-              const containerParagraphs = paragraphs
-                .filter((p) => p?.containerId === container.id)
-                .sort((a, b) => (a?.order || 0) - (b?.order || 0));
+          // 🔧 P1-3: 구조분해할당으로 검증 결과 추출
+          const {
+            isValid: isDataValid,
+            containerCount,
+            paragraphCount,
+          } = validationResult;
 
-              if (containerParagraphs.length > 0) {
-                contentParts.push(`## ${container.name}`);
-                containerParagraphs.forEach((p) => {
-                  if (p?.content) {
-                    contentParts.push(p.content);
-                  }
-                });
-                contentParts.push(''); // 빈 줄 추가
-              }
-            }
+          // 🔧 P1-2: 삼항연산자로 기본 배열 구조 확인
+          const hasBasicArrayStructure =
+            Array.isArray(extractedContainerList) &&
+            Array.isArray(extractedParagraphList)
+              ? true
+              : false;
+
+          // Early Return: 기본 배열 구조가 없는 경우
+          if (!hasBasicArrayStructure) {
+            console.error('❌ [EXTRACTOR] 데이터 구조 자체가 잘못됨');
+            return null;
+          }
+
+          const generatedCompletedContent = generateCompletedContentSafely(
+            extractedContainerList,
+            extractedParagraphList
+          );
+
+          const extractionEndTime = performance.now();
+          const extractionDuration = extractionEndTime - extractionStartTime;
+
+          // 🔧 P1-3: 구조분해할당으로 SnapshotMetadata 객체 생성
+          const snapshotMetadata: SnapshotMetadata = {
+            extractionTimestamp: Date.now(),
+            processingDurationMs: extractionDuration,
+            validationStatus: isDataValid,
+            dataIntegrity: generatedCompletedContent.length > 0,
+            sourceInfo: {
+              coreStoreVersion: '1.0.0',
+              uiStoreVersion: '1.0.0',
+            },
+          };
+
+          const editorSnapshot: EditorStateSnapshotForBridge = {
+            editorContainers: extractedContainerList,
+            editorParagraphs: extractedParagraphList,
+            editorCompletedContent: generatedCompletedContent,
+            editorIsCompleted: editorCompletionStatus,
+            editorActiveParagraphId: currentActiveParagraphId,
+            editorSelectedParagraphIds: [...currentSelectedParagraphIds],
+            editorIsPreviewOpen: currentPreviewOpenStatus,
+            extractedTimestamp: Date.now(),
+            snapshotMetadata,
+          };
+
+          console.log('✅ [EXTRACTOR] 에디터 상태 추출 완료:', {
+            duration: `${extractionDuration.toFixed(2)}ms`,
+            containerCount,
+            paragraphCount,
+            contentLength: generatedCompletedContent.length,
+            isCompleted: editorCompletionStatus,
+            isDataValid,
           });
 
-          completedContent = contentParts.join('\n');
-          console.log('✅ [EXTRACTOR] 수동 콘텐츠 생성 성공');
-        } catch (manualGenerationError) {
-          console.error(
-            '❌ [EXTRACTOR] 수동 콘텐츠 생성도 실패:',
-            manualGenerationError
-          );
-          completedContent = '';
-        }
-      }
+          return editorSnapshot;
+        },
+        createFallbackSnapshot(),
+        'EDITOR_STATE_SNAPSHOT'
+      );
+    };
 
-      const contentLength = completedContent?.length || 0;
+  const createFallbackSnapshot = (): EditorStateSnapshotForBridge => {
+    console.log('🔄 [EXTRACTOR] fallback 스냅샷 생성');
 
-      console.log('✅ [EXTRACTOR] 완성된 콘텐츠 생성 완료:', {
-        contentLength,
-        hasContent: contentLength > 0,
-      });
+    const fallbackMetadata: SnapshotMetadata = {
+      extractionTimestamp: Date.now(),
+      processingDurationMs: 0,
+      validationStatus: false,
+      dataIntegrity: false,
+      sourceInfo: {
+        coreStoreVersion: '1.0.0-fallback',
+        uiStoreVersion: '1.0.0-fallback',
+      },
+    };
 
-      return completedContent || '';
-    } catch (contentGenerationError) {
-      console.error('❌ [EXTRACTOR] 콘텐츠 생성 실패:', contentGenerationError);
-      return '';
-    }
+    return {
+      editorContainers: [],
+      editorParagraphs: [],
+      editorCompletedContent: '',
+      editorIsCompleted: false,
+      editorActiveParagraphId: null,
+      editorSelectedParagraphIds: [],
+      editorIsPreviewOpen: false,
+      extractedTimestamp: Date.now(),
+      snapshotMetadata: fallbackMetadata,
+    };
   };
 
-  // 메인 추출 함수 - 강화된 에러 처리
-  const extractEditorState = (): EditorStateSnapshotForBridge | null => {
-    console.log('🚀 [EXTRACTOR] 에디터 상태 추출 시작');
-
-    const startTime = performance.now();
-
-    try {
-      // 1. 원시 데이터 추출
-      const rawData = extractRawEditorData();
-      if (!rawData) {
-        console.error('❌ [EXTRACTOR] 원시 데이터 추출 실패');
-        return null;
-      }
-
-      const {
-        containers,
-        paragraphs,
-        isCompleted,
-        activeParagraphId,
-        selectedParagraphIds,
-        isPreviewOpen,
-      } = rawData;
-
-      // 🔧 디버깅용: 실제 추출된 데이터 확인
-      console.log('🔍 [EXTRACTOR] 추출된 원시 데이터 상세:', {
-        containers: containers.map((c) => ({
-          id: c?.id,
-          name: c?.name,
-          order: c?.order,
-        })),
-        paragraphs: paragraphs.map((p) => ({
-          id: p?.id,
-          containerId: p?.containerId,
-          contentLength: p?.content?.length || 0,
-          order: p?.order,
-        })),
-        containerLength: containers.length,
-        paragraphLength: paragraphs.length,
-        isCompleted,
-      });
-
-      // 2. 데이터 검증 - 관대한 검증
-      const isValidData = validateExtractedData(containers, paragraphs);
-
-      // 🔧 기본 구조만 확인하고 계속 진행
-      if (
-        !isValidData &&
-        !(Array.isArray(containers) && Array.isArray(paragraphs))
-      ) {
-        console.error('❌ [EXTRACTOR] 데이터 구조 자체가 잘못됨');
-        return null;
-      }
-
-      // 3. 완성된 콘텐츠 생성
-      const completedContent = generateCompletedContentSafely(
-        containers,
-        paragraphs
-      );
-
-      // 4. 스냅샷 생성
-      const snapshot: EditorStateSnapshotForBridge = {
-        editorContainers: containers,
-        editorParagraphs: paragraphs,
-        editorCompletedContent: completedContent,
-        editorIsCompleted: isCompleted,
-        editorActiveParagraphId: activeParagraphId,
-        editorSelectedParagraphIds: selectedParagraphIds,
-        editorIsPreviewOpen: isPreviewOpen,
-        extractedTimestamp: Date.now(),
-      };
-
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-
-      console.log('✅ [EXTRACTOR] 에디터 상태 추출 완료:', {
-        duration: `${duration.toFixed(2)}ms`,
-        containerCount: containers.length,
-        paragraphCount: paragraphs.length,
-        contentLength: completedContent.length,
-        isCompleted,
-        snapshotValid: true,
-        extractionSuccess: true,
-      });
-
-      return snapshot;
-    } catch (extractionError) {
-      console.error(
-        '❌ [EXTRACTOR] 에디터 상태 추출 중 예외:',
-        extractionError
-      );
-
-      // 🔧 최후의 fallback: 최소한의 빈 스냅샷 생성
-      try {
-        console.log('🔄 [EXTRACTOR] 최후의 fallback: 빈 스냅샷 생성');
-        const fallbackSnapshot: EditorStateSnapshotForBridge = {
-          editorContainers: [],
-          editorParagraphs: [],
-          editorCompletedContent: '',
-          editorIsCompleted: false,
-          editorActiveParagraphId: null,
-          editorSelectedParagraphIds: [],
-          editorIsPreviewOpen: false,
-          extractedTimestamp: Date.now(),
-        };
-
-        console.log('⚠️ [EXTRACTOR] fallback 스냅샷 생성 완료');
-        return fallbackSnapshot;
-      } catch (fallbackError) {
-        console.error(
-          '❌ [EXTRACTOR] fallback 스냅샷 생성도 실패:',
-          fallbackError
-        );
-        return null;
-      }
-    }
-  };
-
-  // 추출된 상태의 유효성을 검증하는 함수 - 관대한 검증
-  const validateExtractedState = (
-    snapshot: EditorStateSnapshotForBridge | null
+  const validateExtractedStateSnapshot = (
+    snapshotToValidate: EditorStateSnapshotForBridge | null
   ): boolean => {
     console.log('🔍 [EXTRACTOR] 추출된 상태 검증');
 
-    if (!snapshot) {
-      console.error('❌ [EXTRACTOR] 스냅샷이 null');
-      return false;
-    }
+    return safelyExecuteExtraction(
+      () => {
+        // Early Return: 스냅샷이 null인 경우
+        if (!snapshotToValidate) {
+          console.error('❌ [EXTRACTOR] 스냅샷이 null');
+          return false;
+        }
 
-    try {
-      const {
-        editorContainers,
-        editorParagraphs,
-        editorCompletedContent,
-        editorIsCompleted,
-        extractedTimestamp,
-      } = snapshot;
+        // 🔧 P1-3: 구조분해할당으로 스냅샷 속성 추출
+        const {
+          editorContainers: snapshotContainerList,
+          editorParagraphs: snapshotParagraphList,
+          editorCompletedContent: snapshotCompletedContent,
+          editorIsCompleted: snapshotCompletionStatus,
+          extractedTimestamp: snapshotTimestamp,
+        } = snapshotToValidate;
 
-      // 기본 타입 검증
-      const hasValidContainers = Array.isArray(editorContainers);
-      const hasValidParagraphs = Array.isArray(editorParagraphs);
-      const hasValidContent = typeof editorCompletedContent === 'string';
-      const hasValidCompleted = typeof editorIsCompleted === 'boolean';
-      const hasValidTimestamp =
-        typeof extractedTimestamp === 'number' && extractedTimestamp > 0;
+        // 🔧 P1-2: 삼항연산자로 각 속성 검증
+        const hasValidContainers = Array.isArray(snapshotContainerList)
+          ? true
+          : false;
+        const hasValidParagraphs = Array.isArray(snapshotParagraphList)
+          ? true
+          : false;
+        const hasValidContent =
+          typeof snapshotCompletedContent === 'string' ? true : false;
+        const hasValidCompleted =
+          typeof snapshotCompletionStatus === 'boolean' ? true : false;
+        const hasValidTimestamp =
+          typeof snapshotTimestamp === 'number' && snapshotTimestamp > 0
+            ? true
+            : false;
 
-      // 🔧 기본 구조만 검증 (빈 배열도 유효)
-      const hasValidStructure = hasValidContainers && hasValidParagraphs;
+        const isCompletelyValid =
+          hasValidContainers &&
+          hasValidParagraphs &&
+          hasValidContent &&
+          hasValidCompleted &&
+          hasValidTimestamp
+            ? true
+            : false;
 
-      const isValid =
-        hasValidContainers &&
-        hasValidParagraphs &&
-        hasValidContent &&
-        hasValidCompleted &&
-        hasValidTimestamp &&
-        hasValidStructure;
+        console.log('📊 [EXTRACTOR] 상태 검증 결과:', {
+          isCompletelyValid,
+          containerCount: snapshotContainerList.length,
+          paragraphCount: snapshotParagraphList.length,
+          contentLength: snapshotCompletedContent.length,
+        });
 
-      console.log('📊 [EXTRACTOR] 상태 검증 결과:', {
-        hasValidContainers,
-        hasValidParagraphs,
-        hasValidContent,
-        hasValidCompleted,
-        hasValidTimestamp,
-        hasValidStructure,
-        isValid,
-        containerCount: editorContainers.length,
-        paragraphCount: editorParagraphs.length,
-        contentLength: editorCompletedContent.length,
-      });
-
-      return isValid;
-    } catch (validationError) {
-      console.error('❌ [EXTRACTOR] 상태 검증 실패:', validationError);
-      return false;
-    }
+        return isCompletelyValid;
+      },
+      false,
+      'STATE_SNAPSHOT_VALIDATION'
+    );
   };
 
-  // 검증과 함께 상태를 추출하는 함수
   const getEditorStateWithValidation =
     (): EditorStateSnapshotForBridge | null => {
       console.log('🔄 [EXTRACTOR] 검증과 함께 상태 추출');
 
-      try {
-        const snapshot = extractEditorState();
+      return safelyExecuteExtraction(
+        () => {
+          const extractedSnapshot = extractEditorStateSnapshot();
 
-        if (!snapshot) {
-          console.warn('⚠️ [EXTRACTOR] 상태 추출 결과가 null');
-          return null;
-        }
+          // Early Return: 스냅샷이 null인 경우
+          if (!extractedSnapshot) {
+            console.warn('⚠️ [EXTRACTOR] 상태 추출 결과가 null');
+            return null;
+          }
 
-        const isValid = validateExtractedState(snapshot);
+          const isSnapshotValid =
+            validateExtractedStateSnapshot(extractedSnapshot);
 
-        if (!isValid) {
-          console.warn(
-            '⚠️ [EXTRACTOR] 추출된 상태가 유효하지 않지만 반환 (개발 모드)'
-          );
-          // 🔧 개발 중에는 유효하지 않더라도 반환하여 디버깅 가능하도록 함
-        }
+          // 🔧 P1-2: 삼항연산자로 경고 메시지 생성
+          const shouldLogWarning = !isSnapshotValid ? true : false;
+          shouldLogWarning
+            ? console.warn(
+                '⚠️ [EXTRACTOR] 추출된 상태가 유효하지 않지만 반환 (관대한 모드)'
+              )
+            : null;
 
-        console.log('✅ [EXTRACTOR] 검증된 상태 추출 완료:', {
-          isValid,
-          containerCount: snapshot.editorContainers.length,
-          paragraphCount: snapshot.editorParagraphs.length,
-          hasContent: snapshot.editorCompletedContent.length > 0,
-        });
+          console.log('✅ [EXTRACTOR] 검증된 상태 추출 완료:', {
+            isValid: isSnapshotValid,
+            containerCount: extractedSnapshot.editorContainers.length,
+            paragraphCount: extractedSnapshot.editorParagraphs.length,
+            hasContent: extractedSnapshot.editorCompletedContent.length > 0,
+          });
 
-        return snapshot;
-      } catch (validationError) {
-        console.error('❌ [EXTRACTOR] 검증된 상태 추출 실패:', validationError);
-        return null;
-      }
+          return extractedSnapshot;
+        },
+        null,
+        'VALIDATED_STATE_EXTRACTION'
+      );
     };
 
-  // 통계 정보를 포함한 상태 추출
   const extractEditorStateWithStatistics = () => {
     console.log('📊 [EXTRACTOR] 통계 정보와 함께 상태 추출');
 
-    try {
-      const snapshot = getEditorStateWithValidation();
+    return safelyExecuteExtraction(
+      () => {
+        const editorSnapshot = getEditorStateWithValidation();
 
-      if (!snapshot) {
-        return null;
-      }
+        // Early Return: 스냅샷이 null인 경우
+        if (!editorSnapshot) {
+          return null;
+        }
 
-      const { editorContainers, editorParagraphs } = snapshot;
-      let statistics = null;
+        // 🔧 P1-3: 구조분해할당으로 컨테이너와 문단 리스트 추출
+        const {
+          editorContainers: containerList,
+          editorParagraphs: paragraphList,
+        } = editorSnapshot;
 
-      try {
-        statistics = calculateEditorStatistics(
-          editorContainers,
-          editorParagraphs
+        const editorStatistics = safelyExecuteExtraction(
+          () =>
+            calculateEditorStatistics([...containerList], [...paragraphList]),
+          createFallbackStatistics(containerList, paragraphList),
+          'STATISTICS_CALCULATION'
         );
-      } catch (statisticsError) {
-        console.warn(
-          '⚠️ [EXTRACTOR] 통계 계산 실패, 기본 통계 사용:',
-          statisticsError
-        );
-        statistics = {
-          totalContainers: editorContainers.length,
-          totalParagraphs: editorParagraphs.length,
-          assignedParagraphs: editorParagraphs.filter(
-            (p) => p.containerId !== null
-          ).length,
-          unassignedParagraphs: editorParagraphs.filter(
-            (p) => p.containerId === null
-          ).length,
-          totalContentLength: editorParagraphs.reduce(
-            (total, p) => total + (p.content?.length || 0),
-            0
-          ),
-          averageContentLength: 0,
-          emptyContainers: 0,
-          containerUtilization: [],
+
+        return {
+          snapshot: editorSnapshot,
+          statistics: editorStatistics,
         };
-      }
-
-      return {
-        snapshot,
-        statistics,
-      };
-    } catch (statisticsError) {
-      console.error(
-        '❌ [EXTRACTOR] 통계 포함 상태 추출 실패:',
-        statisticsError
-      );
-      return null;
-    }
+      },
+      null,
+      'STATE_WITH_STATISTICS_EXTRACTION'
+    );
   };
 
-  // 추출기 인스턴스 반환
+  const createFallbackStatistics = (
+    containerList: readonly Container[],
+    paragraphList: readonly ParagraphBlock[]
+  ) => {
+    // 🔧 P1-3: 구조분해할당으로 안전한 통계 계산
+    const assignedParagraphsCount = paragraphList.filter(
+      ({ containerId }) => containerId !== null
+    ).length;
+    const totalContentLength = paragraphList.reduce(
+      (totalLength, { content = '' }) => totalLength + content.length,
+      0
+    );
+
+    return {
+      totalContainers: containerList.length,
+      totalParagraphs: paragraphList.length,
+      assignedParagraphs: assignedParagraphsCount,
+      unassignedParagraphs: paragraphList.length - assignedParagraphsCount,
+      totalContentLength,
+      averageContentLength: 0,
+      emptyContainers: 0,
+      containerUtilization: [],
+    };
+  };
+
   return {
-    extractEditorState,
-    validateExtractedState,
+    extractEditorStateSnapshot,
+    validateExtractedStateSnapshot,
+    getEditorStateWithValidation,
+    extractEditorStateWithStatistics,
+  };
+}
+
+export function createEditorStateExtractor() {
+  console.log('🏭 [EXTRACTOR_FACTORY] 에디터 상태 추출기 생성');
+
+  // 🔧 P1-3: 구조분해할당으로 모듈 함수들 추출
+  const { extractRawEditorData } = createStoreAccessModule();
+  const { validateExtractedData } = createDataValidationModule();
+  const { generateCompletedContentSafely } = createContentGenerationModule();
+  const {
+    extractEditorStateSnapshot,
+    validateExtractedStateSnapshot,
+    getEditorStateWithValidation,
+    extractEditorStateWithStatistics,
+  } = createSnapshotModule();
+
+  return {
+    extractEditorState: extractEditorStateSnapshot,
+    validateExtractedState: validateExtractedStateSnapshot,
     getEditorStateWithValidation,
     extractEditorStateWithStatistics,
     extractRawDataFromStore: extractRawEditorData,
     validateDataStructure: validateExtractedData,
     generateContentFromState: generateCompletedContentSafely,
   };
-};
+}
