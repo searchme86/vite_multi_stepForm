@@ -1,4 +1,3 @@
-//====여기부터 수정됨====
 // 미리보기 패널 메인 컨테이너 - 무한 렌더링 해결
 import { ReactNode } from 'react';
 import { Button, Modal, ModalContent, ModalBody } from '@heroui/react';
@@ -42,6 +41,8 @@ function PreviewPanelContainer(): ReactNode {
     isEditorCompleted,
   } = storeData;
 
+  console.log('storeData', storeData);
+
   // localStorage 기능 - 메모이제이션된 함수들 사용하여 무한 렌더링 방지
   useLocalStorage({
     isMobile,
@@ -57,6 +58,8 @@ function PreviewPanelContainer(): ReactNode {
     editorContainers,
     editorParagraphs,
   });
+
+  console.log('transformedData', transformedData);
 
   // 변환된 데이터 구조분해할당 - 이미 메모이제이션된 데이터 사용
   const {
@@ -182,7 +185,7 @@ function PreviewPanelContainer(): ReactNode {
             isUsingFallbackImage={isUsingFallbackImage}
           />
 
-          {/* 데스크탑 모달 버튼 */}
+          {/* 데스크탑 뷰 일 경우, 미리보기 섹션 상단 */}
           {!isMobile && (
             <div className="flex justify-end gap-2 mb-4">
               <Button
@@ -213,8 +216,19 @@ function PreviewPanelContainer(): ReactNode {
             </div>
           )}
 
-          {/* 미리보기 콘텐츠 */}
-          <PreviewContentComponent
+          {/* 데스크탑뷰에서 우측상단의 미리보기 버튼을 클릭시, 오른쪽에 보이는 미리보기 영역 */}
+          {/* <PreviewContentComponent
+            currentFormValues={currentFormValues}
+            displayContent={displayContent}
+            heroImage={heroImage}
+            tagArray={tagArray}
+            avatarProps={avatarProps}
+            swiperKey={swiperKey}
+            customGalleryViews={customGalleryViews}
+          />
+           */}
+
+          <DesktopContentComponent
             currentFormValues={currentFormValues}
             displayContent={displayContent}
             heroImage={heroImage}
@@ -224,7 +238,7 @@ function PreviewPanelContainer(): ReactNode {
             customGalleryViews={customGalleryViews}
           />
 
-          {/* 모바일 모달 */}
+          {/* 모바일뷰 보기 클릭 시, 활성화 모달 */}
           {isMobileModalOpen && (
             <Modal
               isOpen={isMobileModalOpen}
@@ -269,7 +283,7 @@ function PreviewPanelContainer(): ReactNode {
             </Modal>
           )}
 
-          {/* 데스크탑 모달 */}
+          {/* 데스크탑뷰 보기 클릭 시, 활성화 모달 */}
           {isDesktopModalOpen && (
             <Modal
               isOpen={isDesktopModalOpen}

@@ -34,6 +34,7 @@ function DesktopContentComponent({
 
   return (
     <div>
+      {/* 이미지영역 */}
       <div className="relative h-[300px] mb-10">
         <img
           src={heroImage || DEFAULT_DESKTOP_HERO_IMAGE}
