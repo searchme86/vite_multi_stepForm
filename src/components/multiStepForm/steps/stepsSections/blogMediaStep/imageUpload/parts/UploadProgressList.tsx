@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Progress } from '@heroui/react';
-import { Icon } from '@iconify/react';
 
 // ✅ 원본 방식: 단순한 props 타입 (복잡한 매핑 제거)
 interface UploadProgressListProps {
