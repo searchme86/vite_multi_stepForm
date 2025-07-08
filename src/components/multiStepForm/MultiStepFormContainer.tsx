@@ -272,18 +272,11 @@ function MultiStepFormContainer(): React.ReactNode {
 
         {/* 오른쪽 미리보기 영역 */}
         {showPreview && (
-          <div className="hidden md:block lg:sticky">
-            <Card className="h-full shadow-sm">
-              <CardBody className="p-3 sm:p-6">
-                <PreviewPanel />
-              </CardBody>
-            </Card>
+          //미리보기 영역
+          <div className="top-0 hidden md:block lg:sticky h-svh">
+            <PreviewPanel />
           </div>
         )}
-
-        <div className="md:hidden">
-          <PreviewPanel />
-        </div>
       </DesktopPreviewLayout>
 
       {bridgeDebugEnabled && (
