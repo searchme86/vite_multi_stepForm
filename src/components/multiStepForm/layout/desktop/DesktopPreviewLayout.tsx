@@ -10,17 +10,11 @@ function DesktopPreviewLayout({ children }: DesktopPreviewLayoutProps) {
 
   return (
     <div
-      className={`flex flex-col ${
-        showPreview ? 'lg:flex-row' : ''
-      } transition-all duration-500 ease ${showPreview ? 'gap-4' : ''}`}
+      className={`flex ${
+        showPreview ? 'transition-all duration-500 ease gap-4' : 'w-full'
+      }`}
     >
-      <div
-        className={`transition-all duration-500 ease ${
-          showPreview ? 'lg:w-1/2' : 'w-full'
-        } overflow-y-auto mb-4 lg:mb-0`}
-      >
-        {children}
-      </div>
+      {children}
     </div>
   );
 }

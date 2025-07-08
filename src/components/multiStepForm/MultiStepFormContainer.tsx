@@ -234,21 +234,24 @@ function MultiStepFormContainer(): React.ReactNode {
   ]);
 
   return (
-    <div className=" mx-auto  max-w-[1200px] sm:p-4 md:p-8 mb-xs:w-[300px] mb-sm:w-[350px] mb-md:w-[400px] mb-lg:w-[400px] mb-xl:w-[450px] tb:w-[1200px]   ">
+    <div className="mx-auto max-w-[1200px] sm:p-4 md:p-8 mb-xs:w-[300px] mb-sm:w-[350px] mb-md:w-[400px] mb-lg:w-[400px] mb-xl:w-[450px] tb:w-[1200px]   ">
       {bridgeDebugEnabled && (
         <div className="fixed z-50 px-3 py-1 text-sm text-yellow-700 bg-yellow-100 border border-yellow-400 rounded debug-indicator top-4 right-4">
           🔧 BRIDGE DEBUG MODE
         </div>
       )}
 
+      {/* 헤더영역*/}
       <FormHeaderContainer
         showPreview={showPreview}
         onTogglePreview={handlePreviewToggle}
       />
 
+      {/* 데스크탑뷰에서 컨텐츠가 보여질 영역,DesktopPreviewLayout안에 children으로 보여짐  */}
       <DesktopPreviewLayout>
         <FormProvider {...methods}>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
+            {/* 멀티스텝폼의 버튼 헤더 부분 */}
             <StepNavigationWrapper
               currentStep={currentStep}
               progressWidth={progressWidth}
@@ -266,21 +269,22 @@ function MultiStepFormContainer(): React.ReactNode {
             />
           </form>
         </FormProvider>
-      </DesktopPreviewLayout>
 
-      {showPreview && (
-        <div className="hidden md:block w-full lg:w-1/2 h-[500px] lg:h-screen lg:sticky lg:top-0 overflow-y-auto">
-          <Card className="h-full shadow-sm">
-            <CardBody className="p-3 sm:p-6">
-              <PreviewPanel />
-            </CardBody>
-          </Card>
+        {/* 오른쪽 미리보기 영역 */}
+        {showPreview && (
+          <div className="hidden md:block lg:sticky">
+            <Card className="h-full shadow-sm">
+              <CardBody className="p-3 sm:p-6">
+                <PreviewPanel />
+              </CardBody>
+            </Card>
+          </div>
+        )}
+
+        <div className="md:hidden">
+          <PreviewPanel />
         </div>
-      )}
-
-      <div className="md:hidden">
-        <PreviewPanel />
-      </div>
+      </DesktopPreviewLayout>
 
       {bridgeDebugEnabled && (
         <div className="fixed z-50 max-w-sm p-4 bg-gray-100 border border-gray-300 rounded debug-panel bottom-4 right-4">
