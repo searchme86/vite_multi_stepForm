@@ -1,26 +1,20 @@
-// blogMediaStep/imageUpload/parts/UploadProgressList.tsx - ImageUpload
-
-/**
- * ImageUpload - 업로드 진행률 목록 컴포넌트
- * 파일별 업로드 진행률과 상태를 시각적으로 표시
- * 기존 업로드 진행률 UI 부분을 독립 컴포넌트로 분리
- */
+// blogMediaStep/imageUpload/parts/UploadProgressList.tsx
 
 import React from 'react';
 import { Progress } from '@heroui/react';
 import { Icon } from '@iconify/react';
 
-// ✅ 개별 업로드 진행률 정보 타입
+// 개별 업로드 진행률 정보 타입 (단순화)
 interface UploadProgressItem {
-  uniqueItemKey: string; // 🔧 추가: React key 전용 고유 식별자
+  uniqueItemKey: string; // React key 전용 식별자
   fileId: string;
   fileName: string;
   progress: number;
   status: 'uploading' | 'success' | 'error';
-  itemType: 'uploading' | 'completed'; // 🔧 추가: 아이템 유형 구분
+  itemType: 'uploading' | 'completed';
 }
 
-// ✅ UploadProgressList props 타입
+// UploadProgressList props 타입
 interface UploadProgressListProps {
   uploading: Record<string, number>; // fileId -> progress
   uploadStatus: Record<string, 'uploading' | 'success' | 'error'>; // fileName -> status
@@ -30,28 +24,9 @@ interface UploadProgressListProps {
   maxItems?: number;
 }
 
-// 🔧 추가: 고유 키 생성 함수
-let keyGenerationCounter = 0;
-const generateUniqueItemKey = (prefix: string, identifier: string): string => {
-  const currentTimestamp = Date.now();
-  const incrementedCounter = ++keyGenerationCounter;
-  const randomSuffix = Math.random().toString(36).substring(2, 9);
-
-  const uniqueKey = `${prefix}-${identifier}-${currentTimestamp}-${incrementedCounter}-${randomSuffix}`;
-
-  console.log('🔑 [DEBUG] 고유 키 생성:', {
-    prefix,
-    identifier: identifier.slice(0, 20) + '...',
-    uniqueKey,
-    timestamp: new Date().toLocaleTimeString(),
-  });
-
-  return uniqueKey;
-};
-
 /**
- * 업로드 진행률 목록 컴포넌트
- * 기존 업로드 진행률 표시 로직을 독립 컴포넌트로 분리
+ * 업로드 진행률 목록 컴포넌트 (단순화된 버전)
+ * 원본 코드의 단순한 키 생성 방식을 따라 복잡한 로직 제거
  */
 function UploadProgressList({
   uploading,
@@ -66,7 +41,7 @@ function UploadProgressList({
   const { length: uploadingCount } = uploadingEntries;
   const { length: statusCount } = uploadStatusEntries;
 
-  console.log('🔧 [DEBUG] UploadProgressList 렌더링:', {
+  console.log('🔧 UploadProgressList 렌더링 (단순화):', {
     uploadingCount,
     statusCount,
     showCompleted,
@@ -74,24 +49,32 @@ function UploadProgressList({
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // ✅ 업로드 진행률 아이템 생성 (Key 중복 문제 해결)
+  // 🔥 핵심 수정: 단순한 진행률 아이템 생성 (원본 방식)
   const createProgressItems = (): UploadProgressItem[] => {
     const progressItems: UploadProgressItem[] = [];
 
-    console.log('📋 [DEBUG] 진행률 아이템 생성 시작:', {
+    console.log('📋 진행률 아이템 생성 시작 (단순화):', {
       uploadingCount,
       statusCount,
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    // 현재 업로드 중인 파일들
+    // 🚨 핵심: 현재 업로드 중인 파일들 (원본 코드 방식)
     uploadingEntries.forEach(([currentFileId, currentProgress]) => {
       const mappedFileName =
-        fileIdToNameMap[currentFileId] || `파일 ${currentFileId}`;
-      const currentFileStatus = uploadStatus[mappedFileName] || 'uploading';
+        fileIdToNameMap[currentFileId] !== null &&
+        fileIdToNameMap[currentFileId] !== undefined
+          ? fileIdToNameMap[currentFileId]
+          : `파일 ${currentFileId}`;
 
-      // 🔧 업로드 중인 파일용 고유 키 생성
-      const uniqueItemKey = generateUniqueItemKey('uploading', currentFileId);
+      const currentFileStatus =
+        uploadStatus[mappedFileName] !== null &&
+        uploadStatus[mappedFileName] !== undefined
+          ? uploadStatus[mappedFileName]
+          : 'uploading';
+
+      // 🔥 핵심 수정: 원본 코드와 동일한 단순한 키 생성
+      const uniqueItemKey = currentFileId; // 원본: key={id}
 
       const uploadingItem: UploadProgressItem = {
         uniqueItemKey,
@@ -104,7 +87,7 @@ function UploadProgressList({
 
       progressItems.push(uploadingItem);
 
-      console.log('📤 [DEBUG] 업로딩 아이템 추가:', {
+      console.log('📤 업로딩 아이템 추가 (단순화):', {
         fileName: mappedFileName,
         fileId: currentFileId,
         uniqueItemKey,
@@ -116,7 +99,7 @@ function UploadProgressList({
 
     // 완료/에러 파일들 (showCompleted가 true일 때)
     if (showCompleted) {
-      console.log('✅ [DEBUG] 완료된 파일 처리 시작:', {
+      console.log('✅ 완료된 파일 처리 시작 (단순화):', {
         showCompleted,
         timestamp: new Date().toLocaleTimeString(),
       });
@@ -132,7 +115,7 @@ function UploadProgressList({
         const shouldIncludeCompletedItem =
           !isAlreadyInUploading && isCompletedStatus;
 
-        console.log('🔍 [DEBUG] 완료 파일 조건 검사:', {
+        console.log('🔍 완료 파일 조건 검사 (단순화):', {
           statusFileName,
           statusValue,
           isAlreadyInUploading,
@@ -142,17 +125,14 @@ function UploadProgressList({
         });
 
         if (shouldIncludeCompletedItem) {
-          // 🔧 완료된 파일용 고유 키 생성 (fileName + timestamp + counter로 중복 방지)
-          const uniqueItemKey = generateUniqueItemKey(
-            'completed',
-            statusFileName
-          );
+          // 🔥 핵심 수정: 단순한 키 생성 (원본 방식)
+          const uniqueItemKey = `completed-${statusFileName}`; // 단순하고 명확
 
           const completedProgress = statusValue === 'success' ? 100 : 0;
 
           const completedItem: UploadProgressItem = {
             uniqueItemKey,
-            fileId: `completed-${statusFileName}`, // 🔧 완료된 파일은 접두사를 붙인 고유 fileId 사용
+            fileId: `completed-${statusFileName}`,
             fileName: statusFileName,
             progress: completedProgress,
             status: statusValue,
@@ -161,7 +141,7 @@ function UploadProgressList({
 
           progressItems.push(completedItem);
 
-          console.log('✅ [DEBUG] 완료 아이템 추가:', {
+          console.log('✅ 완료 아이템 추가 (단순화):', {
             fileName: statusFileName,
             uniqueItemKey,
             completedProgress,
@@ -176,7 +156,7 @@ function UploadProgressList({
     const limitedItems = progressItems.slice(0, maxItems);
     const { length: finalItemCount } = limitedItems;
 
-    console.log('📋 [DEBUG] 진행률 아이템 생성 완료:', {
+    console.log('📋 진행률 아이템 생성 완료 (단순화):', {
       totalCreated: progressItems.length,
       afterLimit: finalItemCount,
       maxItems,
@@ -189,13 +169,14 @@ function UploadProgressList({
   const progressItems = createProgressItems();
   const { length: progressItemCount } = progressItems;
 
-  // ✅ 표시할 아이템이 없으면 null 반환
-  if (progressItemCount === 0) {
-    console.log('⚠️ [DEBUG] 표시할 업로드 진행률 없음');
+  // 표시할 아이템이 없으면 null 반환
+  const hasNoItemsToShow = progressItemCount === 0;
+  if (hasNoItemsToShow) {
+    console.log('⚠️ 표시할 업로드 진행률 없음 (단순화)');
     return null;
   }
 
-  console.log('📊 [DEBUG] 최종 업로드 진행률 아이템들:', {
+  console.log('📊 최종 업로드 진행률 아이템들 (단순화):', {
     itemCount: progressItemCount,
     items: progressItems.map((progressItem) => {
       const { fileName, progress, status, uniqueItemKey } = progressItem;
@@ -209,66 +190,66 @@ function UploadProgressList({
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // ✅ 상태별 아이콘 반환
+  // 상태별 아이콘 반환 (기존과 동일)
   const getStatusIcon = (itemStatus: string) => {
-    console.log('🎨 [DEBUG] getStatusIcon 호출:', {
+    console.log('🎨 getStatusIcon 호출 (단순화):', {
       itemStatus,
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    switch (itemStatus) {
-      case 'uploading':
-        return (
-          <Icon
-            icon="lucide:loader-2"
-            className="text-sm animate-spin text-primary"
-            aria-hidden="true"
-          />
-        );
-      case 'success':
-        return (
-          <Icon
-            icon="lucide:check-circle"
-            className="text-sm text-success"
-            aria-hidden="true"
-          />
-        );
-      case 'error':
-        return (
-          <Icon
-            icon="lucide:x-circle"
-            className="text-sm text-danger"
-            aria-hidden="true"
-          />
-        );
-      default:
-        return (
-          <Icon
-            icon="lucide:clock"
-            className="text-sm text-default-400"
-            aria-hidden="true"
-          />
-        );
-    }
+    const statusValue = itemStatus;
+
+    // 삼항연산자 사용 (기본설정에 따라)
+    const iconElement =
+      statusValue === 'uploading' ? (
+        <Icon
+          icon="lucide:loader-2"
+          className="text-sm animate-spin text-primary"
+          aria-hidden="true"
+        />
+      ) : statusValue === 'success' ? (
+        <Icon
+          icon="lucide:check-circle"
+          className="text-sm text-success"
+          aria-hidden="true"
+        />
+      ) : statusValue === 'error' ? (
+        <Icon
+          icon="lucide:x-circle"
+          className="text-sm text-danger"
+          aria-hidden="true"
+        />
+      ) : (
+        <Icon
+          icon="lucide:clock"
+          className="text-sm text-default-400"
+          aria-hidden="true"
+        />
+      );
+
+    return iconElement;
   };
 
-  // ✅ 상태별 색상 반환
+  // 상태별 색상 반환 (기존과 동일)
   const getProgressColor = (itemStatus: string) => {
-    console.log('🎨 [DEBUG] getProgressColor 호출:', {
+    console.log('🎨 getProgressColor 호출 (단순화):', {
       itemStatus,
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    switch (itemStatus) {
-      case 'uploading':
-        return 'primary';
-      case 'success':
-        return 'success';
-      case 'error':
-        return 'danger';
-      default:
-        return 'default';
-    }
+    const statusValue = itemStatus;
+
+    // 삼항연산자 사용 (기본설정에 따라)
+    const colorValue =
+      statusValue === 'uploading'
+        ? 'primary'
+        : statusValue === 'success'
+        ? 'success'
+        : statusValue === 'error'
+        ? 'danger'
+        : 'default';
+
+    return colorValue;
   };
 
   const uploadingKeys = Object.keys(uploading);
@@ -277,15 +258,15 @@ function UploadProgressList({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {/* ✅ 제목 (기존과 동일) */}
+      {/* 제목 (기존과 동일) */}
       <h4 className="text-sm font-medium">업로드 중...</h4>
 
-      {/* ✅ 진행률 아이템들 - 🔧 고유 key 사용으로 중복 문제 해결 */}
+      {/* 🔥 핵심 수정: 진행률 아이템들 - 단순한 key 사용 */}
       {progressItems.map((progressItem) => {
         const { uniqueItemKey, fileName, progress, status, itemType } =
           progressItem;
 
-        console.log('🔄 [DEBUG] 진행률 아이템 렌더링:', {
+        console.log('🔄 진행률 아이템 렌더링 (단순화):', {
           uniqueItemKey,
           fileName,
           progress,
@@ -296,7 +277,7 @@ function UploadProgressList({
 
         return (
           <div
-            key={uniqueItemKey} // 🔧 핵심: 고유한 key 사용으로 중복 문제 해결
+            key={uniqueItemKey} // 🔥 핵심: 단순한 키 사용 (원본 방식)
             className="space-y-1"
             role="progressbar"
             aria-valuenow={progress}
@@ -304,7 +285,7 @@ function UploadProgressList({
             aria-valuemax={100}
             aria-label={`${fileName} 업로드 진행률`}
           >
-            {/* ✅ 파일명과 진행률 (기존 구조 유지) */}
+            {/* 파일명과 진행률 (기존 구조 유지) */}
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center flex-1 min-w-0 gap-2">
                 {/* 상태 아이콘 */}
@@ -314,11 +295,6 @@ function UploadProgressList({
                 <span className="truncate" title={fileName}>
                   {fileName}
                 </span>
-
-                {/* 🔧 디버깅용: 아이템 타입 표시 (개발 모드에서만) */}
-                {/* {process.env.NODE_ENV === 'development' && (
-                  <span className="text-xs text-gray-400">[{itemType}]</span>
-                )} */}
               </div>
 
               {/* 진행률 퍼센트 */}
@@ -327,7 +303,7 @@ function UploadProgressList({
               </span>
             </div>
 
-            {/* ✅ 진행률 바 (기존과 동일) */}
+            {/* 진행률 바 (기존과 동일) */}
             <Progress
               value={progress}
               color={getProgressColor(status) as any}
@@ -340,14 +316,14 @@ function UploadProgressList({
               }}
             />
 
-            {/* ✅ 에러 메시지 (에러 상태일 때만) */}
+            {/* 에러 메시지 (에러 상태일 때만) */}
             {status === 'error' && (
               <div className="mt-1 text-xs text-danger">
                 업로드 실패 - 다시 시도해주세요
               </div>
             )}
 
-            {/* ✅ 완료 메시지 (성공 상태일 때만) */}
+            {/* 완료 메시지 (성공 상태일 때만) */}
             {status === 'success' && showCompleted && (
               <div className="mt-1 text-xs text-success">업로드 완료</div>
             )}
@@ -355,7 +331,7 @@ function UploadProgressList({
         );
       })}
 
-      {/* ✅ 더 많은 파일이 있을 때 표시 */}
+      {/* 더 많은 파일이 있을 때 표시 */}
       {hasMoreItemsThanLimit && (
         <div className="pt-1 text-xs text-center text-default-500">
           +{remainingUploadCount - maxItems}개 파일 더 업로드 중...

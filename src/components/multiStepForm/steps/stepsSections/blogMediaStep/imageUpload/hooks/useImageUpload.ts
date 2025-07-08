@@ -1,24 +1,20 @@
-// blogMediaStep/imageUpload/hooks/useImageUpload.ts - BlogMediaStep 컴포넌트
-
-/**
- * BlogMediaStep 컴포넌트 - 이미지 업로드 관리 훅
- * 파일 업로드, 진행률 관리, 에러 처리를 담당
- * 기존 handleFiles 함수의 로직을 유지하면서 훅으로 분리
- */
+// blogMediaStep/imageUpload/hooks/useImageUpload.ts
 
 import { useCallback } from 'react';
 import { validateFile } from '../../utils/fileValidationUtils';
 
-// ✅ 업로드 진행률 콜백 타입
 type ProgressCallback = (fileId: string, progress: number) => void;
 type StatusCallback = (
   fileName: string,
   status: 'uploading' | 'success' | 'error'
 ) => void;
-type CompleteCallback = (result: string, fileName: string) => void;
+type CompleteCallback = (
+  result: string,
+  fileName: string,
+  fileId: string
+) => void;
 type ErrorCallback = (fileName: string, error: string) => void;
 
-// ✅ 업로드 옵션 타입
 interface UploadOptions {
   onProgress: ProgressCallback;
   onStatusChange: StatusCallback;
@@ -26,145 +22,337 @@ interface UploadOptions {
   onError: ErrorCallback;
 }
 
-// ✅ 업로드 훅 반환 타입
 interface ImageUploadResult {
   handleFiles: (files: FileList) => void;
   handleSingleFile: (file: File) => void;
   isValidFile: (file: File) => boolean;
 }
 
-/**
- * 이미지 업로드 관리 훅
- * 기존 handleFiles 함수의 로직을 그대로 유지하면서 훅으로 분리
- */
-export const useImageUpload = (options: UploadOptions): ImageUploadResult => {
-  console.log('🔧 useImageUpload 훅 초기화'); // 디버깅용
+// 🔥 핵심 수정: 안전한 파일 ID 생성을 위한 카운터
+let globalFileCounter = 0;
 
-  const { onProgress, onStatusChange, onComplete, onError } = options;
+const generateUniqueFileId = (fileName: string): string => {
+  const timestamp = Date.now();
+  const counter = ++globalFileCounter;
+  const randomId = Math.random().toString(36).substring(2, 9);
+  const filePrefix = fileName.slice(0, 5).replace(/[^a-zA-Z0-9]/g, '');
 
-  // ✅ 단일 파일 처리 (기존 로직 유지)
+  return `file-${timestamp}-${counter}-${randomId}-${filePrefix}`;
+};
+
+export const useImageUpload = (
+  uploadOptions: UploadOptions
+): ImageUploadResult => {
+  console.log('🚀 useImageUpload 훅 초기화 (수정된 버전):', {
+    timestamp: new Date().toLocaleTimeString(),
+    hasOnProgress: !!uploadOptions.onProgress,
+    hasOnStatusChange: !!uploadOptions.onStatusChange,
+    hasOnComplete: !!uploadOptions.onComplete,
+    hasOnError: !!uploadOptions.onError,
+  });
+
+  const {
+    onProgress: progressUpdateCallback,
+    onStatusChange: statusChangeCallback,
+    onComplete: completionCallback,
+    onError: errorHandlingCallback,
+  } = uploadOptions;
+
   const handleSingleFile = useCallback(
-    (file: File) => {
-      console.log('🔧 handleSingleFile 호출:', {
-        fileName: file.name,
-        size: file.size,
-        type: file.type,
-      }); // 디버깅용
+    (uploadTargetFile: File) => {
+      console.log('🔥 handleSingleFile 수정된 버전 시작:', {
+        fileName: uploadTargetFile.name,
+        size: uploadTargetFile.size,
+        type: uploadTargetFile.type,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
-      const fileId = `file-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 9)}`;
-      const fileName = file.name;
+      // 🔥 핵심 수정: 더 안전한 파일 ID 생성
+      const uniqueFileIdentifier = generateUniqueFileId(uploadTargetFile.name);
 
-      // ✅ 파일 검증 (기존 로직과 동일)
-      const validation = validateFile(file);
-      if (!validation.isValid) {
-        console.log('❌ 파일 검증 실패:', {
-          fileName,
-          error: validation.errorMessage,
-        }); // 디버깅용
-        onStatusChange(fileName, 'error');
-        onError(fileName, validation.errorMessage || '파일 검증 실패');
+      console.log('🆔 안전한 파일 ID 생성:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        counter: globalFileCounter,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      // 파일 검증
+      const validationResult = validateFile(uploadTargetFile);
+      const { isValid: fileIsValid, errorMessage: validationError } =
+        validationResult;
+
+      console.log('🔍 파일 검증 결과:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        isValid: fileIsValid,
+        error: validationError || 'none',
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      if (!fileIsValid) {
+        console.log('❌ 파일 검증 실패 - 콜백 호출:', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          error: validationError,
+        });
+
+        statusChangeCallback(uploadTargetFile.name, 'error');
+        const errorText =
+          validationError !== null && validationError !== undefined
+            ? validationError
+            : '파일 검증 실패';
+        errorHandlingCallback(uploadTargetFile.name, errorText);
         return;
       }
 
-      // ✅ FileReader 생성 및 설정
-      const reader = new FileReader();
+      // FileReader 생성
+      const fileReaderInstance = new FileReader();
+
+      console.log('📖 FileReader 생성 및 이벤트 설정:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
       // 업로드 시작 상태 설정
-      onStatusChange(fileName, 'uploading');
-      onProgress(fileId, 0);
+      console.log('🔄 업로드 시작 - 상태 초기화:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
-      // ✅ 진행률 이벤트 (기존 로직 유지)
-      reader.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          console.log('📊 업로드 진행률:', { fileName, progress }); // 디버깅용
-          onProgress(fileId, progress);
+      statusChangeCallback(uploadTargetFile.name, 'uploading');
+      progressUpdateCallback(uniqueFileIdentifier, 0);
+
+      // 진행률 이벤트
+      fileReaderInstance.onprogress = (progressEvent) => {
+        console.log('📊 FileReader onprogress 이벤트:', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          loaded: progressEvent.loaded,
+          total: progressEvent.total,
+          lengthComputable: progressEvent.lengthComputable,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        const isProgressCalculatable = progressEvent.lengthComputable;
+        if (isProgressCalculatable) {
+          const currentProgress = Math.round(
+            (progressEvent.loaded / progressEvent.total) * 100
+          );
+
+          console.log('📊 진행률 콜백 호출:', {
+            fileName: uploadTargetFile.name,
+            fileId: uniqueFileIdentifier,
+            progress: currentProgress,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+
+          progressUpdateCallback(uniqueFileIdentifier, currentProgress);
         }
       };
 
-      // ✅ 완료 이벤트 (기존 로직 유지 - 1.5초 지연)
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
+      // 🔥 핵심 수정: 완료 이벤트 처리 로직 개선
+      fileReaderInstance.onload = (loadCompletionEvent) => {
+        console.log('📁 *** FileReader onload 이벤트 발생! ***:', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          hasResult: !!loadCompletionEvent.target?.result,
+          timestamp: new Date().toLocaleTimeString(),
+        });
 
-        console.log('📁 파일 읽기 완료:', {
-          fileName,
-          resultLength: result?.length || 0,
-        }); // 디버깅용
+        const { target: readerTarget } = loadCompletionEvent;
+        const readResult = readerTarget?.result;
+        const resultAsString = typeof readResult === 'string' ? readResult : '';
 
-        // 기존과 동일하게 1.5초 지연 후 완료 처리
+        console.log('📁 파일 읽기 완료 - setTimeout 시작:', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          resultLength: resultAsString.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // 원본 코드와 동일한 1.5초 지연 후 처리
         setTimeout(() => {
+          console.log('⏰ *** setTimeout 콜백 실행 (수정된 방식)! ***:', {
+            fileName: uploadTargetFile.name,
+            fileId: uniqueFileIdentifier,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+
           try {
-            console.log('✅ 업로드 완료 처리:', { fileName }); // 디버깅용
+            console.log('🔄 상태 업데이트 시작 (수정된 순서):', {
+              fileName: uploadTargetFile.name,
+              fileId: uniqueFileIdentifier,
+              timestamp: new Date().toLocaleTimeString(),
+            });
 
-            onStatusChange(fileName, 'success');
-            onComplete(result, fileName);
+            // 1. 진행률 100%로 설정
+            progressUpdateCallback(uniqueFileIdentifier, 100);
 
-            // 진행률 상태에서 제거 (완료되면 더 이상 표시 안함)
-            onProgress(fileId, 100);
-          } catch (error) {
-            console.error('❌ 업로드 완료 처리 중 에러:', { fileName, error }); // 디버깅용
-            onStatusChange(fileName, 'error');
-            onError(fileName, '파일 처리 중 오류가 발생했습니다.');
+            // 2. 성공 상태로 변경
+            statusChangeCallback(uploadTargetFile.name, 'success');
+
+            // 3. 완료 콜백 호출 (미디어 파일 추가)
+            console.log('🎯 *** onComplete 콜백 호출 (수정된 방식)! ***:', {
+              fileName: uploadTargetFile.name,
+              fileId: uniqueFileIdentifier,
+              resultLength: resultAsString.length,
+              timestamp: new Date().toLocaleTimeString(),
+            });
+
+            completionCallback(
+              resultAsString,
+              uploadTargetFile.name,
+              uniqueFileIdentifier
+            );
+
+            console.log('✅ 모든 완료 처리 끝 (수정된 방식):', {
+              fileName: uploadTargetFile.name,
+              fileId: uniqueFileIdentifier,
+              timestamp: new Date().toLocaleTimeString(),
+            });
+          } catch (uploadProcessError) {
+            console.error('❌ setTimeout 내부 에러:', {
+              fileName: uploadTargetFile.name,
+              fileId: uniqueFileIdentifier,
+              error: uploadProcessError,
+              timestamp: new Date().toLocaleTimeString(),
+            });
+
+            statusChangeCallback(uploadTargetFile.name, 'error');
+            errorHandlingCallback(
+              uploadTargetFile.name,
+              '파일 처리 중 오류가 발생했습니다.'
+            );
           }
-        }, 1500); // 기존과 동일한 1.5초 지연
+        }, 1500); // 원본과 동일한 1.5초 지연
+
+        console.log('⏰ setTimeout 등록 완료 (수정된 방식):', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          timestamp: new Date().toLocaleTimeString(),
+        });
       };
 
-      // ✅ 에러 이벤트
-      reader.onerror = (error) => {
-        console.error('❌ FileReader 에러:', { fileName, error }); // 디버깅용
-        onStatusChange(fileName, 'error');
-        onError(fileName, '파일 읽기 중 오류가 발생했습니다.');
+      // 에러 이벤트
+      fileReaderInstance.onerror = (readerErrorEvent) => {
+        console.error('❌ FileReader 에러 이벤트:', {
+          fileName: uploadTargetFile.name,
+          fileId: uniqueFileIdentifier,
+          error: readerErrorEvent,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        statusChangeCallback(uploadTargetFile.name, 'error');
+        errorHandlingCallback(
+          uploadTargetFile.name,
+          '파일 읽기 중 오류가 발생했습니다.'
+        );
       };
 
-      // ✅ 파일 읽기 시작
-      reader.readAsDataURL(file);
+      // 파일 읽기 시작
+      console.log('📖 *** FileReader.readAsDataURL 시작! ***:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      fileReaderInstance.readAsDataURL(uploadTargetFile);
+
+      console.log('📖 FileReader.readAsDataURL 호출 완료:', {
+        fileName: uploadTargetFile.name,
+        fileId: uniqueFileIdentifier,
+        timestamp: new Date().toLocaleTimeString(),
+      });
     },
-    [onProgress, onStatusChange, onComplete, onError]
+    [
+      progressUpdateCallback,
+      statusChangeCallback,
+      completionCallback,
+      errorHandlingCallback,
+    ]
   );
 
-  // ✅ 여러 파일 처리 (기존 Array.from(files).forEach 로직 유지)
   const handleFiles = useCallback(
-    (files: FileList) => {
-      console.log('🔧 handleFiles 호출:', {
-        fileCount: files.length,
+    (fileListToProcess: FileList) => {
+      console.log('🚨 *** handleFiles 호출됨 (수정된 방식)! ***:', {
+        fileCount: fileListToProcess.length,
         timestamp: new Date().toLocaleTimeString(),
-      }); // 디버깅용
+      });
 
-      if (files.length === 0) {
-        console.log('⚠️ 업로드할 파일이 없음'); // 디버깅용
+      const hasNoFiles = fileListToProcess.length === 0;
+      if (hasNoFiles) {
+        console.log('⚠️ 업로드할 파일이 없음');
         return;
       }
 
-      // 기존과 동일하게 Array.from으로 변환 후 forEach로 처리
-      Array.from(files).forEach((file, fileIndex) => {
-        console.log('📁 파일 처리 시작:', {
-          fileName: file.name,
-          fileIndex,
-          totalFiles: files.length,
-        }); // 디버깅용
-
-        handleSingleFile(file);
+      console.log('📁 Array.from으로 파일 변환 시작:', {
+        originalLength: fileListToProcess.length,
+        timestamp: new Date().toLocaleTimeString(),
       });
 
-      console.log('✅ 모든 파일 처리 시작 완료:', { totalFiles: files.length }); // 디버깅용
+      const fileArrayFromList = Array.from(fileListToProcess);
+
+      console.log('📁 파일 배열 변환 완료, forEach 시작:', {
+        arrayLength: fileArrayFromList.length,
+        fileNames: fileArrayFromList.map(
+          (individualFile) => individualFile.name
+        ),
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      // 🔥 핵심 수정: 파일들을 순차적으로 처리하되 각각 고유 ID 보장
+      fileArrayFromList.forEach((individualFile, fileArrayIndex) => {
+        console.log('📁 개별 파일 처리 시작 (수정된 방식):', {
+          fileName: individualFile.name,
+          fileIndex: fileArrayIndex,
+          totalFiles: fileArrayFromList.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // 각 파일마다 약간의 지연을 두어 ID 중복 방지
+        setTimeout(() => {
+          handleSingleFile(individualFile);
+
+          console.log('📁 handleSingleFile 호출 완료 (지연 처리):', {
+            fileName: individualFile.name,
+            fileIndex: fileArrayIndex,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        }, fileArrayIndex * 10); // 각 파일마다 10ms 지연
+      });
+
+      console.log('✅ 모든 파일 처리 시작 완료 (수정된 방식):', {
+        totalFiles: fileArrayFromList.length,
+        timestamp: new Date().toLocaleTimeString(),
+      });
     },
     [handleSingleFile]
   );
 
-  // ✅ 파일 유효성 검사 함수 (별도 제공)
-  const isValidFile = useCallback((file: File): boolean => {
-    console.log('🔧 isValidFile 호출:', { fileName: file.name }); // 디버깅용
+  const isValidFile = useCallback((fileToValidate: File): boolean => {
+    console.log('🔧 isValidFile 호출:', {
+      fileName: fileToValidate.name,
+      timestamp: new Date().toLocaleTimeString(),
+    });
 
-    const validation = validateFile(file);
-    const isValid = validation.isValid;
+    const validationCheck = validateFile(fileToValidate);
+    const { isValid: fileValidationResult } = validationCheck;
 
-    console.log('✅ isValidFile 결과:', { fileName: file.name, isValid }); // 디버깅용
-    return isValid;
+    console.log('✅ isValidFile 결과:', {
+      fileName: fileToValidate.name,
+      isValid: fileValidationResult,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    return fileValidationResult;
   }, []);
 
-  console.log('✅ useImageUpload 초기화 완료'); // 디버깅용
+  console.log('✅ useImageUpload 초기화 완료 (수정된 버전):', {
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   return {
     handleFiles,
