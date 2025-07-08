@@ -3,7 +3,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useToastStore } from '../../../../../../store/toast/toastStore';
-import { useFormDataStore } from '../../../../../../store/formData/formDataStore';
+// import { useFormDataStore } from '../../../../../../store/formData/formDataStore';
 
 interface BlogMediaFormFields {
   media: string[];
@@ -28,7 +28,7 @@ interface FormDataStoreType {
 
 interface BlogMediaStepIntegrationResult {
   toastStore: ToastStoreType;
-  formDataStore: FormDataStoreType;
+  // formDataStore: FormDataStoreType;
   setMediaValue: (value: string[]) => void;
   setMainImageValue: (value: string) => void;
   setSliderImagesValue: (value: string[]) => void;
@@ -43,15 +43,15 @@ export const useBlogMediaStepIntegration =
     const { setValue, watch } = useFormContext();
 
     const rawToastStore = useToastStore();
-    const rawFormDataStore = useFormDataStore();
+    // const rawFormDataStore = useFormDataStore();
 
     const toastStore: ToastStoreType = {
       addToast: rawToastStore?.addToast || (() => {}),
     };
 
-    const formDataStore: FormDataStoreType = {
-      updateFormData: rawFormDataStore?.updateFormData,
-    };
+    // const formDataStore: FormDataStoreType = {
+    //   updateFormData: rawFormDataStore?.updateFormData,
+    // };
 
     const prevFormValuesRef = useRef<BlogMediaFormFields>({
       media: [],
@@ -78,11 +78,12 @@ export const useBlogMediaStepIntegration =
 
         setValue('media', value);
 
-        if (formDataStore?.updateFormData) {
-          formDataStore.updateFormData({ media: value });
-        }
+        // if (formDataStore?.updateFormData) {
+        //   formDataStore.updateFormData({ media: value });
+        // }
       },
-      [setValue, formDataStore]
+      // [setValue, formDataStore]
+      [setValue]
     );
 
     const setMainImageValue = useCallback(
@@ -95,11 +96,12 @@ export const useBlogMediaStepIntegration =
 
         setValue('mainImage', value);
 
-        if (formDataStore?.updateFormData) {
-          formDataStore.updateFormData({ mainImage: value });
-        }
+        // if (formDataStore?.updateFormData) {
+        //   formDataStore.updateFormData({ mainImage: value });
+        // }
       },
-      [setValue, formDataStore]
+      // [setValue, formDataStore]
+      [setValue]
     );
 
     const setSliderImagesValue = useCallback(
@@ -112,11 +114,12 @@ export const useBlogMediaStepIntegration =
 
         setValue('sliderImages', value);
 
-        if (formDataStore?.updateFormData) {
-          formDataStore.updateFormData({ sliderImages: value });
-        }
+        // if (formDataStore?.updateFormData) {
+        //   formDataStore.updateFormData({ sliderImages: value });
+        // }
       },
-      [setValue, formDataStore]
+      // [setValue, formDataStore]
+      [setValue]
     );
 
     const addToast = useCallback(
@@ -164,20 +167,21 @@ export const useBlogMediaStepIntegration =
         if (hasSliderImagesChanged)
           updateData.sliderImages = current.sliderImages;
 
-        if (formDataStore?.updateFormData) {
-          formDataStore.updateFormData(updateData);
-        }
+        // if (formDataStore?.updateFormData) {
+        //   formDataStore.updateFormData(updateData);
+        // }
 
         prevFormValuesRef.current = { ...current };
 
         console.log('✅ 스토어 동기화 완료:', updateData);
       }
-    }, [currentFormValues, formDataStore]);
+      // }, [currentFormValues, formDataStore]);
+    }, [currentFormValues]);
 
     useEffect(() => {
       console.log('✅ useBlogMediaStepIntegration 초기화 완료:', {
         hasToastStore: !!toastStore,
-        hasFormDataStore: !!formDataStore,
+        // hasFormDataStore: !!formDataStore,
         initialFormValues: currentFormValues,
         timestamp: new Date().toLocaleTimeString(),
       });
@@ -185,7 +189,7 @@ export const useBlogMediaStepIntegration =
 
     return {
       toastStore,
-      formDataStore,
+      // formDataStore,
       setMediaValue,
       setMainImageValue,
       setSliderImagesValue,
