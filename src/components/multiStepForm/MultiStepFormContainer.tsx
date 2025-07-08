@@ -2,24 +2,15 @@
 
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { FormProvider } from 'react-hook-form';
-import { Card, CardBody } from '@heroui/react';
-
 import { useMultiStepFormState } from './reactHookForm/useMultiStepFormState';
-
 import { useBidirectionalBridge } from '../../bridges/hooks/useBidirectionalBridge';
-
-import PreviewPanel from '../previewPanel/PreviewPanelContainer';
-
+import PreviewPanelContainer from '../previewPanel/PreviewPanelContainer';
 import FormHeaderContainer from './layout/shared/FormHeaderContainer';
 import DesktopPreviewLayout from './layout/desktop/DesktopPreviewLayout';
-
 import StepNavigationWrapper from './layout/shared/StepNavigationWrapper';
 import NavigationButtons from './layout/shared/NavigationButtons';
-
 import StepContentContainer from './animation/StepContentContainer';
-
 import ToastManager from '../toaster/ToastManager';
-
 import { StepNumber, renderStepComponent } from './types/stepTypes';
 
 function MultiStepFormContainer(): React.ReactNode {
@@ -241,13 +232,11 @@ function MultiStepFormContainer(): React.ReactNode {
         </div>
       )}
 
-      {/* 헤더영역*/}
       <FormHeaderContainer
         showPreview={showPreview}
         onTogglePreview={handlePreviewToggle}
       />
 
-      {/* 데스크탑뷰에서 컨텐츠가 보여질 영역,DesktopPreviewLayout안에 children으로 보여짐  */}
       <DesktopPreviewLayout>
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
@@ -270,11 +259,9 @@ function MultiStepFormContainer(): React.ReactNode {
           </form>
         </FormProvider>
 
-        {/* 오른쪽 미리보기 영역 */}
         {showPreview && (
-          //미리보기 영역
           <div className="top-0 hidden md:block lg:sticky h-svh">
-            <PreviewPanel />
+            <PreviewPanelContainer />
           </div>
         )}
       </DesktopPreviewLayout>
