@@ -11,6 +11,13 @@ import StatusIndicatorComponent from './parts/StatusIndicatorComponent';
 import MobileContentComponent from './parts/MobileContentComponent';
 import DesktopContentComponent from './parts/DesktopContentComponent';
 
+// 🎯 모바일 사이즈 타입 및 검증 함수 import
+import {
+  validateMobileSize,
+  getMobileDeviceInfo,
+  type MobileDeviceSize,
+} from './types/previewPanel.types';
+
 // Zustand 스토어 import
 import { usePreviewPanelStore } from './store/previewPanelStore';
 
@@ -28,12 +35,12 @@ function PreviewPanelContainer(): ReactNode {
     handleHeaderClick,
   } = useTouchHandlers();
 
-  // Zustand 상태들을 개별적으로 구독
-  const isPreviewPanelOpen = usePreviewPanelStore(
-    (state) => state.isPreviewPanelOpen
-  );
+  // 🎯 Zustand 상태들을 개별적으로 구독 (이제 MobileDeviceSize 타입 지원)
   const selectedMobileSize = usePreviewPanelStore(
     (state) => state.selectedMobileSize
+  );
+  const isPreviewPanelOpen = usePreviewPanelStore(
+    (state) => state.isPreviewPanelOpen
   );
   const hasTabChanged = usePreviewPanelStore((state) => state.hasTabChanged);
   const isMobileModalOpen = usePreviewPanelStore(
@@ -44,7 +51,7 @@ function PreviewPanelContainer(): ReactNode {
   );
   const deviceType = usePreviewPanelStore((state) => state.deviceType);
 
-  // Zustand 액션들을 개별적으로 구독
+  // 🎯 Zustand 액션들을 개별적으로 구독 (이제 MobileDeviceSize 타입 지원)
   const zustandSetSelectedMobileSize = usePreviewPanelStore(
     (state) => state.setSelectedMobileSize
   );
@@ -71,34 +78,74 @@ function PreviewPanelContainer(): ReactNode {
     (state) => state.closeDesktopModal
   );
 
-  // MobileContentComponent를 위한 타입 안전한 래퍼 함수
+  // 🎯 MobileContentComponent를 위한 픽셀 기반 사이즈 검증 함수
   const setSelectedMobileSize = useCallback(
-    (sizeValue: string) => {
-      const validSizes = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
-      const isValidSize = validSizes.includes(sizeValue as any);
-
-      const finalSize = isValidSize
-        ? (sizeValue as 'xs' | 'sm' | 'md' | 'lg' | 'xl')
-        : 'md';
-
-      console.log('📏 [MOBILE_SIZE] 모바일 사이즈 설정:', {
-        requestedSize: sizeValue,
-        isValid: isValidSize,
-        finalSize,
+    (requestedSizeValue: string) => {
+      console.log('🔍 [MOBILE_TAB] 모바일 사이즈 변경 요청 시작:', {
+        requestedSize: requestedSizeValue,
+        currentSize: selectedMobileSize,
         timestamp: new Date().toISOString(),
       });
 
-      const shouldWarn = !isValidSize;
-      if (shouldWarn) {
-        console.warn(
-          '⚠️ [MOBILE_SIZE] 유효하지 않은 모바일 사이즈, 기본값 사용'
-        );
+      // 🎯 타입 안전한 검증 로직
+      const validationResult = validateMobileSize(requestedSizeValue);
+      const { isValid, validatedSize, errorMessage } = validationResult;
+
+      // 🎯 Early return 패턴 - 유효하지 않은 경우 처리
+      if (!isValid) {
+        console.warn('⚠️ [MOBILE_TAB] 유효하지 않은 모바일 사이즈:', {
+          requestedSize: requestedSizeValue,
+          errorMessage,
+          fallbackSize: validatedSize,
+          timestamp: new Date().toISOString(),
+        });
       }
 
+      // 🎯 디바이스 정보 가져오기
+      const deviceConfigInfo = getMobileDeviceInfo(validatedSize);
+      const {
+        size: finalSize,
+        width: deviceWidth,
+        label: deviceLabel,
+        description: deviceDescription,
+      } = deviceConfigInfo;
+
+      console.log('📏 [MOBILE_TAB] 모바일 사이즈 설정 완료:', {
+        requestedSize: requestedSizeValue,
+        isValid,
+        finalSize,
+        deviceWidth,
+        deviceLabel,
+        deviceDescription,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 🎯 hasTabChanged 상태 업데이트
+      const hasSizeChanged = selectedMobileSize !== finalSize;
+      if (hasSizeChanged) {
+        setHasTabChanged(true);
+        console.log('🔄 [MOBILE_TAB] 탭 변경 상태 업데이트:', {
+          previousSize: selectedMobileSize,
+          newSize: finalSize,
+          hasChanged: true,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // 🎯 Zustand 스토어 업데이트 (이제 타입 안전하게 직접 전달)
       zustandSetSelectedMobileSize(finalSize);
     },
-    [zustandSetSelectedMobileSize]
+    [selectedMobileSize, zustandSetSelectedMobileSize, setHasTabChanged]
   );
+
+  // 🎯 선택된 모바일 사이즈 디버깅 useEffect
+  useEffect(() => {
+    console.log('📱 [MOBILE_TAB] selectedMobileSize 상태 변경:', {
+      newSize: selectedMobileSize,
+      deviceInfo: getMobileDeviceInfo(selectedMobileSize),
+      timestamp: new Date().toISOString(),
+    });
+  }, [selectedMobileSize]);
 
   // 디바이스 타입 자동 감지 및 설정
   useEffect(() => {
@@ -126,7 +173,7 @@ function PreviewPanelContainer(): ReactNode {
     isEditorCompleted,
   } = storeData;
 
-  // formData fallback 처리
+  // 🎯 formData fallback 처리 - mainImage null 타입 해결
   const formData = useMemo(() => {
     const hasRawFormData = rawFormData !== undefined;
 
@@ -142,7 +189,7 @@ function PreviewPanelContainer(): ReactNode {
           description: '',
           tags: undefined,
           content: '',
-          mainImage: null,
+          mainImage: undefined, // null → undefined로 변경
           media: [],
           sliderImages: [],
           author: '',
@@ -184,7 +231,7 @@ function PreviewPanelContainer(): ReactNode {
     swiperKey,
   } = transformedData;
 
-  // 타입 안전성을 위한 변환 및 fallback 처리
+  // 🎯 currentFormValues 타입 안전성 처리 - 모든 필수 속성 추가
   const currentFormValues = useMemo(() => {
     const hasRawCurrentFormValues = rawCurrentFormValues !== undefined;
 
@@ -199,6 +246,20 @@ function PreviewPanelContainer(): ReactNode {
           bio: rawCurrentFormValues.bio ?? '',
           userImage: rawCurrentFormValues.userImage ?? null,
           mainImage: rawCurrentFormValues.mainImage ?? null,
+          media: Array.isArray(rawCurrentFormValues.media)
+            ? rawCurrentFormValues.media.filter(
+                (item): item is string => typeof item === 'string'
+              )
+            : [],
+          sliderImages: Array.isArray(rawCurrentFormValues.sliderImages)
+            ? rawCurrentFormValues.sliderImages.filter(
+                (item): item is string => typeof item === 'string'
+              )
+            : [],
+          tags: rawCurrentFormValues.tags ?? '',
+          editorCompletedContent:
+            rawCurrentFormValues.editorCompletedContent ?? '',
+          isEditorCompleted: rawCurrentFormValues.isEditorCompleted ?? false,
         }
       : {
           title: '',
@@ -210,27 +271,30 @@ function PreviewPanelContainer(): ReactNode {
           bio: '',
           userImage: null,
           mainImage: null,
+          media: [],
+          sliderImages: [],
+          tags: '',
+          editorCompletedContent: '',
+          isEditorCompleted: false,
         };
   }, [rawCurrentFormValues]);
 
-  // DisplayContent 타입 처리
+  // 🎯 DisplayContent 타입 처리 - text, source 속성 추가
   const displayContent = useMemo(() => {
     const isStringContent = typeof rawDisplayContent === 'string';
 
     return isStringContent
       ? {
-          content: rawDisplayContent,
-          type: 'text' as const,
-          metadata: {},
+          text: rawDisplayContent,
+          source: 'editor' as const,
         }
       : rawDisplayContent ?? {
-          content: '',
-          type: 'text' as const,
-          metadata: {},
+          text: '',
+          source: 'basic' as const,
         };
   }, [rawDisplayContent]);
 
-  // EditorStatusInfo 타입 처리 - 누락된 속성들 추가
+  // 🎯 EditorStatusInfo 타입 처리 - 누락된 속성들 추가
   const editorStatusInfo = useMemo(() => {
     const hasRawEditorStatusInfo = rawEditorStatusInfo !== undefined;
 
@@ -255,13 +319,13 @@ function PreviewPanelContainer(): ReactNode {
         };
   }, [rawEditorStatusInfo]);
 
-  // AvatarProps 타입 처리 - 누락된 속성들 추가
+  // 🎯 AvatarProps 타입 처리 - 누락된 속성들 추가
   const avatarProps = useMemo(() => {
     const hasRawAvatarProps = rawAvatarProps !== undefined;
 
     return hasRawAvatarProps
       ? {
-          src: rawAvatarProps.src,
+          src: rawAvatarProps.src ?? '',
           name: rawAvatarProps.name ?? '',
           fallback: rawAvatarProps.fallback ?? '',
           className: rawAvatarProps.className ?? '',
@@ -269,7 +333,7 @@ function PreviewPanelContainer(): ReactNode {
           isBordered: rawAvatarProps.isBordered ?? false,
         }
       : {
-          src: undefined,
+          src: '',
           name: '',
           fallback: '',
           className: '',

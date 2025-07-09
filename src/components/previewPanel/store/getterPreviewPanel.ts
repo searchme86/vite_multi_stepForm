@@ -1,12 +1,13 @@
 // src/components/previewPanel/store/getterPreviewPanel.ts
 
-import { type PreviewPanelState } from './initialPreviewPanelState';
+import type { PreviewPanelState } from './initialPreviewPanelState';
+import type { MobileDeviceSize } from '../types/previewPanel.types';
 
 export interface PreviewPanelGetters {
   // 기본 상태 getter
   getIsPreviewOpen: () => boolean;
   getDeviceType: () => 'mobile' | 'desktop';
-  getSelectedMobileSize: () => 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  getSelectedMobileSize: () => MobileDeviceSize;
 
   // 모달 상태 getter
   getIsMobileModalOpen: () => boolean;
@@ -41,87 +42,106 @@ export const createPreviewPanelGetters = (
 ): PreviewPanelGetters => ({
   // 기본 상태 getter
   getIsPreviewOpen: () => {
-    const state = get();
-    return state.isPreviewPanelOpen;
+    const currentState = get();
+    const { isPreviewPanelOpen } = currentState;
+    return isPreviewPanelOpen;
   },
 
   getDeviceType: () => {
-    const state = get();
-    return state.deviceType;
+    const currentState = get();
+    const { deviceType } = currentState;
+    return deviceType;
   },
 
+  // 🎯 모바일 사이즈 getter - 360, 768 픽셀 기반으로 변경
   getSelectedMobileSize: () => {
-    const state = get();
-    return state.selectedMobileSize;
+    const currentState = get();
+    const { selectedMobileSize } = currentState;
+    return selectedMobileSize;
   },
 
   // 모달 상태 getter
   getIsMobileModalOpen: () => {
-    const state = get();
-    return state.isMobileModalOpen;
+    const currentState = get();
+    const { isMobileModalOpen } = currentState;
+    return isMobileModalOpen;
   },
 
   getIsDesktopModalOpen: () => {
-    const state = get();
-    return state.isDesktopModalOpen;
+    const currentState = get();
+    const { isDesktopModalOpen } = currentState;
+    return isDesktopModalOpen;
   },
 
   getIsAnyModalOpen: () => {
-    const state = get();
-    return state.isMobileModalOpen || state.isDesktopModalOpen;
+    const currentState = get();
+    const { isMobileModalOpen, isDesktopModalOpen } = currentState;
+    return isMobileModalOpen || isDesktopModalOpen;
   },
 
   // 추가 상태 getter
   getHasTabChanged: () => {
-    const state = get();
-    return state.hasTabChanged;
+    const currentState = get();
+    const { hasTabChanged } = currentState;
+    return hasTabChanged;
   },
 
   getIsMountedRef: () => {
-    const state = get();
-    return state.isMountedRef;
+    const currentState = get();
+    const { isMountedRef } = currentState;
+    return isMountedRef;
   },
 
   // 터치 상태 getter
   getTouchState: () => {
-    const state = get();
+    const currentState = get();
+    const { touchStartY, touchCurrentY, isDragging } = currentState;
+
     return {
-      startY: state.touchStartY,
-      currentY: state.touchCurrentY,
-      isDragging: state.isDragging,
+      startY: touchStartY,
+      currentY: touchCurrentY,
+      isDragging,
     };
   },
 
   // 복합 상태 getter
   getShouldShowMobileOverlay: () => {
-    const state = get();
-    return state.deviceType === 'mobile' && state.isPreviewPanelOpen;
+    const currentState = get();
+    const { deviceType, isPreviewPanelOpen } = currentState;
+    const isMobileDevice = deviceType === 'mobile';
+    const isPanelOpen = isPreviewPanelOpen;
+
+    return isMobileDevice && isPanelOpen;
   },
 
   getShouldShowPanel: () => {
-    const state = get();
-    return state.isPreviewPanelOpen;
+    const currentState = get();
+    const { isPreviewPanelOpen } = currentState;
+    return isPreviewPanelOpen;
   },
 
   getPanelTransformClass: () => {
-    const state = get();
-    const isMobile = state.deviceType === 'mobile';
+    const currentState = get();
+    const { deviceType, isPreviewPanelOpen } = currentState;
+    const isMobileDevice = deviceType === 'mobile';
+    const isPanelOpen = isPreviewPanelOpen;
 
-    if (isMobile && !state.isPreviewPanelOpen) {
-      return 'translate-y-full';
-    }
-    return 'translate-y-0';
+    const isMobileAndClosed = isMobileDevice && !isPanelOpen;
+
+    return isMobileAndClosed ? 'translate-y-full' : 'translate-y-0';
   },
 
   // localStorage 상태 getter
   getIsLocalStorageEnabled: () => {
-    const state = get();
-    return state.isLocalStorageEnabled;
+    const currentState = get();
+    const { isLocalStorageEnabled } = currentState;
+    return isLocalStorageEnabled;
   },
 
   // 디버그 상태 getter
   getDebugMode: () => {
-    const state = get();
-    return state.debugMode;
+    const currentState = get();
+    const { debugMode } = currentState;
+    return debugMode;
   },
 });

@@ -1,12 +1,14 @@
 // src/components/previewPanel/store/initialPreviewPanelState.ts
 
+import type { MobileDeviceSize } from '../types/previewPanel.types';
+
 export interface PreviewPanelState {
   // 미리보기 패널 기본 상태
   isPreviewPanelOpen: boolean;
 
-  // 디바이스 관련 상태
+  // 🎯 디바이스 관련 상태 - 360, 768 픽셀 기반으로 변경
   deviceType: 'mobile' | 'desktop';
-  selectedMobileSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  selectedMobileSize: MobileDeviceSize;
 
   // 모달 상태
   isMobileModalOpen: boolean;
@@ -32,9 +34,9 @@ export const initialPreviewPanelState: PreviewPanelState = {
   // 미리보기 패널 기본 상태 - 모바일/데스크탑 모두 비활성화로 시작
   isPreviewPanelOpen: false,
 
-  // 디바이스 관련 상태
+  // 🎯 디바이스 관련 상태 - 360px 기본값으로 설정
   deviceType: 'desktop',
-  selectedMobileSize: 'md',
+  selectedMobileSize: '360',
 
   // 모달 상태
   isMobileModalOpen: false,

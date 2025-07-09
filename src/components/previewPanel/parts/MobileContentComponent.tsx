@@ -1,10 +1,13 @@
-// 모바일 콘텐츠 컴포넌트
+// src/components/previewPanel/parts/MobileContentComponent.tsx
+
 import { Tabs, Tab, Chip, Badge, Avatar } from '@heroui/react';
 import type { Key } from '@react-types/shared';
 import {
   CurrentFormValues,
   DisplayContent,
   AvatarProps,
+  getMobileDeviceInfo,
+  type MobileDeviceSize,
 } from '../types/previewPanel.types';
 import { DEFAULT_HERO_IMAGE } from '../utils/constants';
 import { renderMarkdown } from '../utils/markdownRenderer.tsx';
@@ -21,6 +24,8 @@ interface MobileContentComponentProps {
   customGalleryViews: any[];
   selectedMobileSize: string;
   setSelectedMobileSize: (size: string) => void;
+  hasTabChanged: boolean;
+  setHasTabChanged: (changed: boolean) => void;
 }
 
 function MobileContentComponent({
@@ -33,13 +38,101 @@ function MobileContentComponent({
   customGalleryViews,
   selectedMobileSize,
   setSelectedMobileSize,
+  hasTabChanged,
+  setHasTabChanged,
 }: MobileContentComponentProps) {
-  console.log('📱 모바일 콘텐츠 렌더링:', { selectedSize: selectedMobileSize });
+  console.log('📱 [MOBILE_CONTENT] 모바일 콘텐츠 렌더링 시작:', {
+    selectedSize: selectedMobileSize,
+    hasTabChanged,
+    propsReceived: {
+      hasCurrentFormValues: !!currentFormValues,
+      hasDisplayContent: !!displayContent,
+      hasHeroImage: !!heroImage,
+      tagArrayLength: tagArray.length,
+      hasAvatarProps: !!avatarProps,
+      customGalleryViewsLength: customGalleryViews.length,
+    },
+    timestamp: new Date().toISOString(),
+  });
 
-  const handleTabChange = (key: Key) => {
-    console.log('📱 모바일 크기 변경:', key);
-    setSelectedMobileSize(String(key));
+  // 🎯 디바이스 정보 가져오기
+  const currentDeviceInfo = getMobileDeviceInfo(
+    selectedMobileSize as MobileDeviceSize
+  );
+  const {
+    width: deviceWidth,
+    label: deviceLabel,
+    description: deviceDescription,
+  } = currentDeviceInfo;
+
+  console.log('📱 [MOBILE_CONTENT] 현재 디바이스 정보:', {
+    selectedSize: selectedMobileSize,
+    deviceWidth,
+    deviceLabel,
+    deviceDescription,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 탭 변경 핸들러 - 구체적인 디버깅 로그 추가
+  const handleTabChange = (tabKey: Key) => {
+    const newSizeValue = String(tabKey);
+
+    console.log('📱 [MOBILE_CONTENT] 탭 변경 이벤트 발생:', {
+      previousSize: selectedMobileSize,
+      newSize: newSizeValue,
+      tabKey,
+      keyType: typeof tabKey,
+      timestamp: new Date().toISOString(),
+    });
+
+    // 🎯 Early return - 같은 사이즈 선택 시 처리하지 않음
+    if (selectedMobileSize === newSizeValue) {
+      console.log('📱 [MOBILE_CONTENT] 동일한 사이즈 선택 - 변경 없음:', {
+        currentSize: selectedMobileSize,
+        requestedSize: newSizeValue,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // 🎯 변경 상태 업데이트
+    setHasTabChanged(true);
+
+    // 🎯 사이즈 변경 함수 호출
+    setSelectedMobileSize(newSizeValue);
+
+    console.log('📱 [MOBILE_CONTENT] 탭 변경 완료:', {
+      previousSize: selectedMobileSize,
+      newSize: newSizeValue,
+      hasTabChanged: true,
+      timestamp: new Date().toISOString(),
+    });
   };
+
+  // 🎯 너비 클래스 계산 - 구조분해 할당과 fallback 사용
+  const containerWidthClass =
+    selectedMobileSize === '360' ? 'w-[360px] mx-auto' : 'w-[768px] mx-auto';
+
+  console.log('📱 [MOBILE_CONTENT] 컨테이너 너비 클래스:', {
+    selectedSize: selectedMobileSize,
+    widthClass: containerWidthClass,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 폼 값 구조분해 할당과 fallback 처리
+  const {
+    title: formTitle = '블로그 제목이 여기에 표시됩니다',
+    description:
+      formDescription = 'In the fast-evolving world of home decor, embracing the art of transformation is the key to keeping your living spaces fresh, vibrant, and in tune with the latest trends.',
+    nickname: formNickname = 'Ariel van Houten',
+    media: formMedia = [],
+    sliderImages: formSliderImages = [],
+  } = currentFormValues;
+
+  // 🎯 디스플레이 콘텐츠 구조분해 할당과 fallback 처리
+  const { text: displayText = '' } = displayContent;
+
+  console.log('📱 [MOBILE_CONTENT] 렌더링 완료, JSX 반환');
 
   return (
     <div>
@@ -53,18 +146,12 @@ function MobileContentComponent({
         </Tabs>
       </div>
 
-      <div
-        className={
-          selectedMobileSize === '360'
-            ? 'w-[360px] mx-auto'
-            : 'w-[768px] mx-auto'
-        }
-      >
+      <div className={containerWidthClass}>
         <div>
           <div className="relative">
             <img
               src={heroImage || DEFAULT_HERO_IMAGE}
-              alt={currentFormValues.title || '블로그 커버 이미지'}
+              alt={formTitle || '블로그 커버 이미지'}
               className="w-full h-[500px] object-cover"
             />
 
@@ -79,10 +166,10 @@ function MobileContentComponent({
               </div>
 
               <h1 className="mb-3 text-3xl font-bold text-white">
-                {currentFormValues.title || '블로그 제목이 여기에 표시됩니다'}
+                {formTitle}
               </h1>
 
-              {tagArray.length > 0 && (
+              {tagArray.length > 0 ? (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {tagArray.map((tag: string, index: number) => (
                     <Chip
@@ -95,30 +182,25 @@ function MobileContentComponent({
                     </Chip>
                   ))}
                 </div>
-              )}
+              ) : null}
 
               <div className="flex items-center gap-3 mb-4">
                 <Avatar {...avatarProps} />
                 <div>
                   <p className="mb-0 text-sm text-white/80">Written by</p>
-                  <p className="font-medium text-white">
-                    {currentFormValues.nickname || 'Ariel van Houten'}
-                  </p>
+                  <p className="font-medium text-white">{formNickname}</p>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="p-5 space-y-6">
-            <p className="text-lg leading-relaxed">
-              {currentFormValues.description ||
-                'In the fast-evolving world of home decor, embracing the art of transformation is the key to keeping your living spaces fresh, vibrant, and in tune with the latest trends.'}
-            </p>
+            <p className="text-lg leading-relaxed">{formDescription}</p>
 
             <h2 className="text-2xl font-bold">Introduction</h2>
 
-            {displayContent.text ? (
-              renderMarkdown(displayContent.text)
+            {displayText ? (
+              renderMarkdown(displayText)
             ) : (
               <p>
                 Software as a Service (SaaS) has transformed the way businesses
@@ -127,26 +209,26 @@ function MobileContentComponent({
               </p>
             )}
 
-            {currentFormValues.media && currentFormValues.media.length > 1 && (
+            {formMedia && formMedia.length > 1 ? (
               <div className="my-6">
                 <img
-                  src={currentFormValues.media[1]}
+                  src={formMedia[1]}
                   alt="Blog content image"
                   className="w-full h-auto rounded-lg"
                 />
               </div>
-            )}
+            ) : null}
 
             <CustomImageGalleryComponent
               customGalleryViews={customGalleryViews}
             />
             <SwiperGalleryComponent
-              sliderImages={currentFormValues.sliderImages}
+              sliderImages={formSliderImages}
               swiperKey={swiperKey}
             />
 
-            {displayContent.text && displayContent.text.split('\n\n')[1] ? (
-              renderMarkdown(displayContent.text.split('\n\n')[1])
+            {displayText && displayText.split('\n\n')[1] ? (
+              renderMarkdown(displayText.split('\n\n')[1])
             ) : (
               <p>
                 Macrivate offers a range of features that can help your team

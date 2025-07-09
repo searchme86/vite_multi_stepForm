@@ -1,6 +1,7 @@
 // src/components/previewPanel/store/setterPreviewPanel.ts
 
 import type { PreviewPanelState } from './initialPreviewPanelState';
+import type { MobileDeviceSize } from '../types/previewPanel.types';
 
 export interface PreviewPanelSetters {
   // 미리보기 패널 제어
@@ -9,9 +10,9 @@ export interface PreviewPanelSetters {
   togglePreviewPanel: () => void;
   setIsPreviewPanelOpen: (isOpen: boolean) => void;
 
-  // 디바이스 타입 제어
+  // 🎯 디바이스 타입 제어 - 360, 768 픽셀 기반으로 변경
   setDeviceType: (deviceType: 'mobile' | 'desktop') => void;
-  setSelectedMobileSize: (size: 'xs' | 'sm' | 'md' | 'lg' | 'xl') => void;
+  setSelectedMobileSize: (size: MobileDeviceSize) => void;
 
   // 모달 제어
   openMobileModal: () => void;
@@ -84,18 +85,19 @@ export const createPreviewPanelSetters = (
 
   togglePreviewPanel: () => {
     const currentState = stateGetter();
-    const newState = !currentState.isPreviewPanelOpen;
+    const { isPreviewPanelOpen: currentOpenState } = currentState;
+    const newOpenState = !currentOpenState;
 
     console.log('🔄 [SETTER] 미리보기 패널 토글 액션:', {
-      from: currentState.isPreviewPanelOpen,
-      to: newState,
-      action: newState ? 'OPEN_PANEL' : 'CLOSE_PANEL',
+      from: currentOpenState,
+      to: newOpenState,
+      action: newOpenState ? 'OPEN_PANEL' : 'CLOSE_PANEL',
       timestamp: new Date().toISOString(),
     });
 
     stateUpdater((prevState) => ({
       ...prevState,
-      isPreviewPanelOpen: newState,
+      isPreviewPanelOpen: newOpenState,
     }));
   },
 
@@ -112,7 +114,7 @@ export const createPreviewPanelSetters = (
     }));
   },
 
-  // 디바이스 타입 제어
+  // 🎯 디바이스 타입 제어 - 360, 768 픽셀 기반으로 변경
   setDeviceType: (deviceTypeValue: 'mobile' | 'desktop') => {
     console.log('📱 [SETTER] 디바이스 타입 설정:', {
       deviceType: deviceTypeValue,
@@ -125,15 +127,17 @@ export const createPreviewPanelSetters = (
     }));
   },
 
-  setSelectedMobileSize: (sizeValue: 'xs' | 'sm' | 'md' | 'lg' | 'xl') => {
-    console.log('📏 [SETTER] 모바일 사이즈 선택:', {
-      size: sizeValue,
+  setSelectedMobileSize: (pixelSizeValue: MobileDeviceSize) => {
+    console.log('📏 [SETTER] 모바일 픽셀 사이즈 선택:', {
+      pixelSize: pixelSizeValue,
+      width: pixelSizeValue === '360' ? '360px' : '768px',
+      deviceType: pixelSizeValue === '360' ? 'small mobile' : 'tablet portrait',
       timestamp: new Date().toISOString(),
     });
 
     stateUpdater((currentState) => ({
       ...currentState,
-      selectedMobileSize: sizeValue,
+      selectedMobileSize: pixelSizeValue,
     }));
   },
 
@@ -310,10 +314,11 @@ export const createPreviewPanelSetters = (
 
   toggleDebugMode: () => {
     const currentState = stateGetter();
-    const newDebugMode = !currentState.debugMode;
+    const { debugMode: currentDebugMode } = currentState;
+    const newDebugMode = !currentDebugMode;
 
     console.log('🔄 [SETTER] 디버그 모드 토글:', {
-      from: currentState.debugMode,
+      from: currentDebugMode,
       to: newDebugMode,
       timestamp: new Date().toISOString(),
     });
