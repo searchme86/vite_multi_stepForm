@@ -1,6 +1,6 @@
 // src/components/previewPanel/PreviewPanelContainer.tsx
 
-import { ReactNode, useEffect, useCallback, useMemo } from 'react';
+import { ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button, Modal, ModalContent, ModalBody } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { useMobileDetection } from './hooks/useMobileDetection';
@@ -23,6 +23,12 @@ import { usePreviewPanelStore } from './store/previewPanelStore';
 
 function PreviewPanelContainer(): ReactNode {
   console.log('🎯 [PREVIEW_PANEL] 컴포넌트 렌더링 시작');
+
+  // 🎯 모바일 패널 높이 상수 정의
+  const MOBILE_PANEL_HEIGHT = '85vh';
+
+  // 패널 엘리먼트 참조
+  const panelElementRef = useRef<HTMLDivElement>(null);
 
   // 모바일 감지 훅
   const { isMobile } = useMobileDetection();
@@ -77,6 +83,177 @@ function PreviewPanelContainer(): ReactNode {
   const closeDesktopModal = usePreviewPanelStore(
     (state) => state.closeDesktopModal
   );
+
+  // 🚫 배경 스크롤 차단 로직 추가
+  useEffect(() => {
+    const shouldBlockBackgroundScroll = isMobile && isPreviewPanelOpen;
+
+    if (shouldBlockBackgroundScroll) {
+      // 현재 스크롤 위치 저장
+      const currentScrollY = window.scrollY;
+
+      // body 스크롤 차단
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${currentScrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+
+      console.log('🚫 [SCROLL_LOCK] 배경 스크롤 차단 활성화:', {
+        currentScrollY,
+        deviceType: 'mobile',
+        panelState: 'open',
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      // body 스크롤 복원
+      const scrollY = parseInt(document.body.style.top || '0', 10);
+
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+
+      // 원래 스크롤 위치로 복원
+      const shouldRestoreScroll = scrollY !== 0;
+      if (shouldRestoreScroll) {
+        window.scrollTo(0, Math.abs(scrollY));
+      }
+
+      console.log('✅ [SCROLL_LOCK] 배경 스크롤 차단 해제:', {
+        restoredScrollY: Math.abs(scrollY),
+        deviceType: isMobile ? 'mobile' : 'desktop',
+        panelState: 'closed',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 컴포넌트 언마운트 시 정리
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+
+      console.log('🧹 [SCROLL_LOCK] 컴포넌트 언마운트 시 스크롤 설정 정리');
+    };
+  }, [isMobile, isPreviewPanelOpen]);
+
+  // 🎯 패널 내부 wheel 이벤트 차단 핸들러
+  const handleWheelEventPrevention = useCallback((wheelEvent: WheelEvent) => {
+    const panelElement = panelElementRef.current;
+    const hasValidPanelElement = panelElement !== null;
+
+    if (!hasValidPanelElement) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = panelElement;
+    const { deltaY } = wheelEvent;
+
+    // 스크롤 가능한 영역 확인
+    const isScrollableContent = scrollHeight > clientHeight;
+    const isAtTop = scrollTop === 0;
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight;
+
+    // 스크롤 불가능하거나 경계에서 더 스크롤하려는 경우 차단
+    const shouldPreventScroll =
+      !isScrollableContent ||
+      (isAtTop && deltaY < 0) ||
+      (isAtBottom && deltaY > 0);
+
+    if (shouldPreventScroll) {
+      wheelEvent.preventDefault();
+      wheelEvent.stopPropagation();
+
+      console.log('🚫 [WHEEL_BLOCK] 패널 내부 wheel 이벤트 차단:', {
+        deltaY,
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        isScrollableContent,
+        isAtTop,
+        isAtBottom,
+        reason: !isScrollableContent ? 'no_scroll_needed' : 'at_boundary',
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.log('✅ [WHEEL_ALLOW] 패널 내부 스크롤 허용:', {
+        deltaY,
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        scrollDirection: deltaY > 0 ? 'down' : 'up',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, []);
+
+  // 🎯 터치 스크롤 제어 핸들러
+  const handleTouchScrollControl = useCallback((touchEvent: TouchEvent) => {
+    const panelElement = panelElementRef.current;
+    const hasValidPanelElement = panelElement !== null;
+
+    if (!hasValidPanelElement) return;
+
+    const { touches } = touchEvent;
+    const hasValidTouch = touches.length > 0;
+
+    if (!hasValidTouch) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = panelElement;
+    const isScrollableContent = scrollHeight > clientHeight;
+
+    // 스크롤 불가능한 경우 터치 이벤트 차단
+    if (!isScrollableContent) {
+      touchEvent.preventDefault();
+      touchEvent.stopPropagation();
+
+      console.log('🚫 [TOUCH_SCROLL_BLOCK] 터치 스크롤 차단:', {
+        scrollHeight,
+        clientHeight,
+        reason: 'no_scroll_needed',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, []);
+
+  // 🎯 이벤트 리스너 등록
+  useEffect(() => {
+    const panelElement = panelElementRef.current;
+    const shouldAttachListeners =
+      panelElement && isMobile && isPreviewPanelOpen;
+
+    if (shouldAttachListeners) {
+      // wheel 이벤트 리스너 등록
+      panelElement.addEventListener('wheel', handleWheelEventPrevention, {
+        passive: false,
+      });
+
+      // touchmove 이벤트 리스너 등록
+      panelElement.addEventListener('touchmove', handleTouchScrollControl, {
+        passive: false,
+      });
+
+      console.log('🔗 [EVENT_LISTENERS] 스크롤 제어 이벤트 리스너 등록:', {
+        events: ['wheel', 'touchmove'],
+        target: 'panel_element',
+        timestamp: new Date().toISOString(),
+      });
+
+      return () => {
+        panelElement.removeEventListener('wheel', handleWheelEventPrevention);
+        panelElement.removeEventListener('touchmove', handleTouchScrollControl);
+
+        console.log('🔗 [EVENT_LISTENERS] 스크롤 제어 이벤트 리스너 해제');
+      };
+    }
+  }, [
+    isMobile,
+    isPreviewPanelOpen,
+    handleWheelEventPrevention,
+    handleTouchScrollControl,
+  ]);
 
   // 🎯 MobileContentComponent를 위한 픽셀 기반 사이즈 검증 함수
   const setSelectedMobileSize = useCallback(
@@ -159,20 +336,26 @@ function PreviewPanelContainer(): ReactNode {
     });
   }, [isMobile, isPreviewPanelOpen, deviceType]);
 
-  // 디바이스 타입 자동 감지 및 설정
-  useEffect(() => {
-    const newDeviceType = isMobile ? 'mobile' : 'desktop';
-    const shouldUpdateDeviceType = deviceType !== newDeviceType;
+  // 🎯 디바이스 타입 계산 및 자동 동기화 (useMemo 활용)
+  const calculatedDeviceType = useMemo(() => {
+    return isMobile ? 'mobile' : 'desktop';
+  }, [isMobile]);
 
-    if (shouldUpdateDeviceType) {
-      console.log('📱 [DEVICE_TYPE] 디바이스 타입 업데이트:', {
+  // 🎯 디바이스 타입 상태 동기화 (한 번만 실행)
+  useEffect(() => {
+    const isDeviceTypeOutOfSync = deviceType !== calculatedDeviceType;
+
+    if (isDeviceTypeOutOfSync) {
+      console.log('📱 [DEVICE_TYPE] 디바이스 타입 동기화:', {
         from: deviceType,
-        to: newDeviceType,
+        to: calculatedDeviceType,
+        trigger: 'mobile_detection_change',
         timestamp: new Date().toISOString(),
       });
-      setDeviceType(newDeviceType);
+
+      setDeviceType(calculatedDeviceType);
     }
-  }, [isMobile, deviceType, setDeviceType]);
+  }, [calculatedDeviceType]); // ✅ 계산된 값만 의존성으로 사용
 
   // 스토어 데이터 훅 - fallback 처리 추가
   const storeData = useStoreData();
@@ -401,6 +584,35 @@ function PreviewPanelContainer(): ReactNode {
     return transformClass;
   }, [isMobile, isPreviewPanelOpen]);
 
+  // 🎯 패널 스타일 계산 (중복 제거 및 최적화)
+  const panelStyles = useMemo(() => {
+    if (!isMobile) return {};
+
+    return {
+      position: 'fixed' as const,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 50,
+      backgroundColor: 'white',
+      height: MOBILE_PANEL_HEIGHT,
+      transform:
+        panelTransformClass === 'translate-y-full'
+          ? 'translateY(100%)'
+          : 'translateY(0)',
+      transition: 'transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
+    };
+  }, [isMobile, panelTransformClass, MOBILE_PANEL_HEIGHT]);
+
+  // 🎯 패널 클래스명 계산 (중복 제거 및 최적화)
+  const panelClassName = useMemo(() => {
+    const baseClasses = isMobile
+      ? 'bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-700 ease-panel-smooth preview-panel-bottom-sheet rounded-t-3xl'
+      : 'relative preview-panel-desktop';
+
+    return `${baseClasses} ${panelTransformClass}`;
+  }, [isMobile, panelTransformClass]);
+
   // 닫기 버튼 클릭 핸들러
   const handleCloseButtonClickAction = useCallback(() => {
     console.log('❌ [CLOSE_BUTTON] 닫기 버튼 클릭:', {
@@ -447,36 +659,11 @@ function PreviewPanelContainer(): ReactNode {
         />
       ) : null}
 
-      {/* 🎯 메인 패널 - 강제 스타일 추가로 디버깅 */}
+      {/* 🎯 메인 패널 - 중복 제거 및 최적화 */}
       <div
-        className={`
-          ${
-            isMobile
-              ? 'fixed bottom-0 left-0 right-0 bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-700 ease-panel-smooth preview-panel-bottom-sheet rounded-t-3xl'
-              : 'relative preview-panel-desktop'
-          }
-          ${panelTransformClass}
-          ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
-        `}
-        style={{
-          ...(isMobile
-            ? {
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                zIndex: 50,
-                backgroundColor: 'white',
-                height: '85vh',
-                maxHeight: '85vh',
-                transform:
-                  panelTransformClass === 'translate-y-full'
-                    ? 'translateY(100%)'
-                    : 'translateY(0)',
-                transition: 'transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
-              }
-            : {}),
-        }}
+        ref={panelElementRef}
+        className={panelClassName}
+        style={panelStyles}
         onTouchStart={isMobile ? handleTouchStart : undefined}
         onTouchMove={isMobile ? handleTouchMove : undefined}
         onTouchEnd={isMobile ? handleTouchEnd : undefined}
