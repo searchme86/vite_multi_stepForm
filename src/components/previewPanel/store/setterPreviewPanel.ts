@@ -1,6 +1,6 @@
 // src/components/previewPanel/store/setterPreviewPanel.ts
 
-import { type PreviewPanelState } from './initialPreviewPanelState';
+import type { PreviewPanelState } from './initialPreviewPanelState';
 
 export interface PreviewPanelSetters {
   // 미리보기 패널 제어
@@ -52,150 +52,230 @@ export interface PreviewPanelSetters {
 }
 
 export const createPreviewPanelSetters = (
-  set: (updater: (state: PreviewPanelState) => PreviewPanelState) => void,
-  get: () => PreviewPanelState
+  stateUpdater: (
+    updater: (state: PreviewPanelState) => PreviewPanelState
+  ) => void,
+  stateGetter: () => PreviewPanelState
 ): PreviewPanelSetters => ({
   // 미리보기 패널 제어
   openPreviewPanel: () => {
-    set((state) => ({
-      ...state,
+    console.log('🔓 [SETTER] 미리보기 패널 열기 액션 실행:', {
+      action: 'OPEN_PANEL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: true,
     }));
   },
 
   closePreviewPanel: () => {
-    set((state) => ({
-      ...state,
+    console.log('🔒 [SETTER] 미리보기 패널 닫기 액션 실행:', {
+      action: 'CLOSE_PANEL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: false,
     }));
   },
 
   togglePreviewPanel: () => {
-    const currentState = get();
+    const currentState = stateGetter();
     const newState = !currentState.isPreviewPanelOpen;
 
-    set((state) => ({
-      ...state,
+    console.log('🔄 [SETTER] 미리보기 패널 토글 액션:', {
+      from: currentState.isPreviewPanelOpen,
+      to: newState,
+      action: newState ? 'OPEN_PANEL' : 'CLOSE_PANEL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((prevState) => ({
+      ...prevState,
       isPreviewPanelOpen: newState,
     }));
   },
 
   setIsPreviewPanelOpen: (isOpen: boolean) => {
-    set((state) => ({
-      ...state,
+    console.log('⚙️ [SETTER] 미리보기 패널 상태 직접 설정:', {
+      newState: isOpen,
+      action: isOpen ? 'OPEN_PANEL' : 'CLOSE_PANEL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: isOpen,
     }));
   },
 
   // 디바이스 타입 제어
-  setDeviceType: (deviceType: 'mobile' | 'desktop') => {
-    set((state) => ({
-      ...state,
-      deviceType,
+  setDeviceType: (deviceTypeValue: 'mobile' | 'desktop') => {
+    console.log('📱 [SETTER] 디바이스 타입 설정:', {
+      deviceType: deviceTypeValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      deviceType: deviceTypeValue,
     }));
   },
 
-  setSelectedMobileSize: (size: 'xs' | 'sm' | 'md' | 'lg' | 'xl') => {
-    set((state) => ({
-      ...state,
-      selectedMobileSize: size,
+  setSelectedMobileSize: (sizeValue: 'xs' | 'sm' | 'md' | 'lg' | 'xl') => {
+    console.log('📏 [SETTER] 모바일 사이즈 선택:', {
+      size: sizeValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      selectedMobileSize: sizeValue,
     }));
   },
 
   // 모달 제어
   openMobileModal: () => {
-    set((state) => ({
-      ...state,
+    console.log('📱 [SETTER] 모바일 모달 열기:', {
+      action: 'OPEN_MOBILE_MODAL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isMobileModalOpen: true,
     }));
   },
 
   closeMobileModal: () => {
-    set((state) => ({
-      ...state,
+    console.log('📱 [SETTER] 모바일 모달 닫기:', {
+      action: 'CLOSE_MOBILE_MODAL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isMobileModalOpen: false,
     }));
   },
 
   openDesktopModal: () => {
-    set((state) => ({
-      ...state,
+    console.log('🖥️ [SETTER] 데스크탑 모달 열기:', {
+      action: 'OPEN_DESKTOP_MODAL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isDesktopModalOpen: true,
     }));
   },
 
   closeDesktopModal: () => {
-    set((state) => ({
-      ...state,
+    console.log('🖥️ [SETTER] 데스크탑 모달 닫기:', {
+      action: 'CLOSE_DESKTOP_MODAL',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isDesktopModalOpen: false,
     }));
   },
 
   closeAllModals: () => {
-    set((state) => ({
-      ...state,
+    console.log('🔒 [SETTER] 모든 모달 닫기:', {
+      action: 'CLOSE_ALL_MODALS',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isMobileModalOpen: false,
       isDesktopModalOpen: false,
     }));
   },
 
   // 추가 상태 제어
-  setHasTabChanged: (hasChanged: boolean) => {
-    set((state) => ({
-      ...state,
-      hasTabChanged: hasChanged,
+  setHasTabChanged: (hasChangedValue: boolean) => {
+    console.log('🔄 [SETTER] 탭 변경 상태 설정:', {
+      hasChanged: hasChangedValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      hasTabChanged: hasChangedValue,
     }));
   },
 
-  setIsMountedRef: (isMounted: boolean) => {
-    set((state) => ({
-      ...state,
-      isMountedRef: isMounted,
+  setIsMountedRef: (isMountedValue: boolean) => {
+    console.log('🔧 [SETTER] 마운트 상태 설정:', {
+      isMounted: isMountedValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      isMountedRef: isMountedValue,
     }));
   },
 
   // 터치 상태 제어
-  setTouchStartY: (y: number) => {
-    set((state) => ({
-      ...state,
-      touchStartY: y,
+  setTouchStartY: (yValue: number) => {
+    stateUpdater((currentState) => ({
+      ...currentState,
+      touchStartY: yValue,
     }));
   },
 
-  setTouchCurrentY: (y: number) => {
-    set((state) => ({
-      ...state,
-      touchCurrentY: y,
+  setTouchCurrentY: (yValue: number) => {
+    stateUpdater((currentState) => ({
+      ...currentState,
+      touchCurrentY: yValue,
     }));
   },
 
-  setIsDragging: (isDragging: boolean) => {
-    set((state) => ({
-      ...state,
-      isDragging,
+  setIsDragging: (isDraggingValue: boolean) => {
+    stateUpdater((currentState) => ({
+      ...currentState,
+      isDragging: isDraggingValue,
     }));
   },
 
-  updateTouchState: (updates: {
+  updateTouchState: (touchUpdates: {
     startY?: number;
     currentY?: number;
     isDragging?: boolean;
   }) => {
-    set((state) => ({
-      ...state,
-      ...(updates.startY !== undefined && { touchStartY: updates.startY }),
-      ...(updates.currentY !== undefined && {
-        touchCurrentY: updates.currentY,
-      }),
-      ...(updates.isDragging !== undefined && {
-        isDragging: updates.isDragging,
-      }),
+    const { startY, currentY, isDragging } = touchUpdates;
+
+    console.log('👆 [SETTER] 터치 상태 업데이트:', {
+      startY,
+      currentY,
+      isDragging,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      ...(startY !== undefined && { touchStartY: startY }),
+      ...(currentY !== undefined && { touchCurrentY: currentY }),
+      ...(isDragging !== undefined && { isDragging }),
     }));
   },
 
   resetTouchState: () => {
-    set((state) => ({
-      ...state,
+    console.log('🔄 [SETTER] 터치 상태 초기화:', {
+      action: 'RESET_TOUCH_STATE',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       touchStartY: 0,
       touchCurrentY: 0,
       isDragging: false,
@@ -203,49 +283,83 @@ export const createPreviewPanelSetters = (
   },
 
   // localStorage 제어
-  setIsLocalStorageEnabled: (enabled: boolean) => {
-    set((state) => ({
-      ...state,
-      isLocalStorageEnabled: enabled,
+  setIsLocalStorageEnabled: (enabledValue: boolean) => {
+    console.log('💾 [SETTER] localStorage 활성화 설정:', {
+      enabled: enabledValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      isLocalStorageEnabled: enabledValue,
     }));
   },
 
   // 디버그 제어
-  setDebugMode: (enabled: boolean) => {
-    set((state) => ({
-      ...state,
-      debugMode: enabled,
+  setDebugMode: (enabledValue: boolean) => {
+    console.log('🐛 [SETTER] 디버그 모드 설정:', {
+      enabled: enabledValue,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
+      debugMode: enabledValue,
     }));
   },
 
   toggleDebugMode: () => {
-    const currentState = get();
+    const currentState = stateGetter();
     const newDebugMode = !currentState.debugMode;
 
-    set((state) => ({
-      ...state,
+    console.log('🔄 [SETTER] 디버그 모드 토글:', {
+      from: currentState.debugMode,
+      to: newDebugMode,
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((prevState) => ({
+      ...prevState,
       debugMode: newDebugMode,
     }));
   },
 
   // 복합 액션
   handleBackgroundClick: () => {
-    set((state) => ({
-      ...state,
+    console.log('🖱️ [SETTER] 배경 클릭 액션:', {
+      action: 'CLOSE_PANEL',
+      trigger: 'background_click',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: false,
     }));
   },
 
   handleHeaderClick: () => {
-    set((state) => ({
-      ...state,
+    console.log('🖱️ [SETTER] 헤더 클릭 액션:', {
+      action: 'CLOSE_PANEL',
+      trigger: 'header_click',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: false,
     }));
   },
 
   handleCloseButtonClick: () => {
-    set((state) => ({
-      ...state,
+    console.log('❌ [SETTER] 닫기 버튼 클릭 액션:', {
+      action: 'CLOSE_PANEL_AND_MODALS',
+      trigger: 'close_button_click',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: false,
       isMobileModalOpen: false,
       isDesktopModalOpen: false,
@@ -254,8 +368,13 @@ export const createPreviewPanelSetters = (
 
   // 초기화
   resetPreviewPanelState: () => {
-    set((state) => ({
-      ...state,
+    console.log('🔄 [SETTER] 미리보기 패널 상태 전체 초기화:', {
+      action: 'RESET_ALL_STATE',
+      timestamp: new Date().toISOString(),
+    });
+
+    stateUpdater((currentState) => ({
+      ...currentState,
       isPreviewPanelOpen: false,
       isMobileModalOpen: false,
       isDesktopModalOpen: false,

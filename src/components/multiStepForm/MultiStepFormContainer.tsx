@@ -21,7 +21,7 @@ function MultiStepFormContainer(): React.ReactNode {
   const lastLogTimeRef = useRef<number>(0);
   const logIntervalRef = useRef<number>();
 
-  // 기존 멀티스텝 폼 상태 (showPreview 제외)
+  // 기존 멀티스텝 폼 상태 (showPreview 제거)
   const {
     methods,
     handleSubmit,
@@ -37,9 +37,6 @@ function MultiStepFormContainer(): React.ReactNode {
   // Zustand에서 미리보기 패널 상태 구독 (개별 구독으로 최적화)
   const isPreviewPanelOpen = usePreviewPanelStore(
     (state) => state.isPreviewPanelOpen
-  );
-  const togglePreviewPanel = usePreviewPanelStore(
-    (state) => state.togglePreviewPanel
   );
 
   // 폼 데이터 가져오기
@@ -140,11 +137,6 @@ function MultiStepFormContainer(): React.ReactNode {
     [goToStep]
   );
 
-  // Zustand 토글 함수 사용 (useCallback으로 메모이제이션)
-  const handlePreviewToggle = useCallback(() => {
-    togglePreviewPanel();
-  }, [togglePreviewPanel]);
-
   const handleNextStep = React.useCallback(() => {
     goToNextStep();
   }, [goToNextStep]);
@@ -244,12 +236,10 @@ function MultiStepFormContainer(): React.ReactNode {
         </div>
       )}
 
-      <FormHeaderContainer
-        showPreview={isPreviewPanelOpen}
-        onTogglePreview={handlePreviewToggle}
-      />
+      <FormHeaderContainer />
 
-      <DesktopPreviewLayout>
+      {/* 🎯 DesktopPreviewLayout에 isPreviewPanelOpen 전달 */}
+      <DesktopPreviewLayout showPreview={isPreviewPanelOpen}>
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
             {/* 멀티스텝폼의 버튼 헤더 부분 */}
@@ -271,15 +261,13 @@ function MultiStepFormContainer(): React.ReactNode {
           </form>
         </FormProvider>
 
-        {/* 🎯 데스크탑 미리보기 - 조건부 렌더링 복구 */}
-        {isPreviewPanelOpen && (
-          <div className="top-0 hidden md:block lg:sticky h-svh">
-            <PreviewPanelContainer />
-          </div>
-        )}
+        {/* 🎯 데스크탑 미리보기 - DesktopPreviewLayout에서 처리 */}
+        <div className="top-0 hidden md:block lg:sticky h-svh">
+          <PreviewPanelContainer />
+        </div>
       </DesktopPreviewLayout>
 
-      {/* 모바일 미리보기 - 항상 렌더링 (내부에서 상태 제어) */}
+      {/* 🎯 모바일 미리보기 - 항상 렌더링 (바텀 시트 애니메이션) */}
       <div className="md:hidden">
         <PreviewPanelContainer />
       </div>
