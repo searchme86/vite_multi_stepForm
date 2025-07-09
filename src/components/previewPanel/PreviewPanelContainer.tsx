@@ -147,6 +147,18 @@ function PreviewPanelContainer(): ReactNode {
     });
   }, [selectedMobileSize]);
 
+  // 🎯 모바일 감지 및 미리보기 상태 디버깅
+  useEffect(() => {
+    console.log('🔍 [MOBILE_DEBUG] 모바일 미리보기 상태 확인:', {
+      isMobile,
+      isPreviewPanelOpen,
+      deviceType,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      timestamp: new Date().toISOString(),
+    });
+  }, [isMobile, isPreviewPanelOpen, deviceType]);
+
   // 디바이스 타입 자동 감지 및 설정
   useEffect(() => {
     const newDeviceType = isMobile ? 'mobile' : 'desktop';
@@ -357,15 +369,36 @@ function PreviewPanelContainer(): ReactNode {
     return isValidSliderImages ? formData.sliderImages : [];
   }, [formData.sliderImages]);
 
-  // 모바일 오버레이 표시 여부
+  // 🎯 모바일 오버레이 표시 여부 (디버깅 로그 추가)
   const shouldShowMobileOverlay = useMemo(() => {
-    return isMobile && isPreviewPanelOpen;
+    const result = isMobile && isPreviewPanelOpen;
+
+    console.log('🎯 [MOBILE_OVERLAY] 모바일 오버레이 표시 여부:', {
+      isMobile,
+      isPreviewPanelOpen,
+      shouldShow: result,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
   }, [isMobile, isPreviewPanelOpen]);
 
-  // 패널 변환 클래스 계산
+  // 🎯 패널 변환 클래스 계산 (디버깅 로그 추가)
   const panelTransformClass = useMemo(() => {
     const isMobileAndClosed = isMobile && !isPreviewPanelOpen;
-    return isMobileAndClosed ? 'translate-y-full' : 'translate-y-0';
+    const transformClass = isMobileAndClosed
+      ? 'translate-y-full'
+      : 'translate-y-0';
+
+    console.log('🎯 [PANEL_TRANSFORM] 패널 변환 클래스 계산:', {
+      isMobile,
+      isPreviewPanelOpen,
+      isMobileAndClosed,
+      transformClass,
+      timestamp: new Date().toISOString(),
+    });
+
+    return transformClass;
   }, [isMobile, isPreviewPanelOpen]);
 
   // 닫기 버튼 클릭 핸들러
@@ -392,19 +425,29 @@ function PreviewPanelContainer(): ReactNode {
     handleBackgroundClick();
   }, [handleBackgroundClick, isPreviewPanelOpen]);
 
-  console.log('🎯 [PREVIEW_PANEL] 렌더링 완료, JSX 반환');
+  console.log('🎯 [PREVIEW_PANEL] 렌더링 완료, JSX 반환:', {
+    isMobile,
+    isPreviewPanelOpen,
+    shouldShowMobileOverlay,
+    panelTransformClass,
+    timestamp: new Date().toISOString(),
+  });
 
   return (
     <>
-      {/* 모바일 배경 오버레이 - 더 부드러운 애니메이션 */}
+      {/* 🎯 모바일 배경 오버레이 - 디버깅 로그 추가 */}
       {shouldShowMobileOverlay ? (
         <div
           className="fixed inset-0 z-40 transition-opacity duration-700 ease-panel-smooth bg-black/50 md:hidden"
           onClick={handleBackgroundClickAction}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 40,
+          }}
         />
       ) : null}
 
-      {/* 메인 패널 - 애니메이션 속도 조절 (350ms → 700ms) */}
+      {/* 🎯 메인 패널 - 강제 스타일 추가로 디버깅 */}
       <div
         className={`
           ${
@@ -415,6 +458,25 @@ function PreviewPanelContainer(): ReactNode {
           ${panelTransformClass}
           ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
         `}
+        style={{
+          ...(isMobile
+            ? {
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: 50,
+                backgroundColor: 'white',
+                height: '85vh',
+                maxHeight: '85vh',
+                transform:
+                  panelTransformClass === 'translate-y-full'
+                    ? 'translateY(100%)'
+                    : 'translateY(0)',
+                transition: 'transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
+              }
+            : {}),
+        }}
         onTouchStart={isMobile ? handleTouchStart : undefined}
         onTouchMove={isMobile ? handleTouchMove : undefined}
         onTouchEnd={isMobile ? handleTouchEnd : undefined}
