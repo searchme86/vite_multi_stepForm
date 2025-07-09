@@ -1,31 +1,21 @@
+// src/components/multiStepForm/layout/shared/FormHeaderContainer.tsx
+
 import FormTitle from './FormTitle';
 import FormDateDisplay from './FormDateDisplay';
 import PreviewToggleButton from './PreviewToggleButton';
 
-interface FormHeaderContainerProps {
-  showPreview: boolean;
-  onTogglePreview: () => void;
-}
-
-function FormHeaderContainer({
-  showPreview,
-  onTogglePreview,
-}: FormHeaderContainerProps) {
-  console.log('📋 FormHeaderContainer: 폼 헤더 컨테이너 렌더링', {
-    showPreview,
-  });
-
+function FormHeaderContainer() {
   return (
-    <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
+    <header className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
       <FormTitle />
-      <div className="flex items-center w-full gap-2 sm:w-auto">
+      <nav
+        className="flex items-center w-full gap-2 sm:w-auto mb-xs:ml-auto mb-xs:w-auto"
+        aria-label="폼 헤더 네비게이션"
+      >
         <FormDateDisplay />
-        <PreviewToggleButton
-          showPreview={showPreview}
-          onToggle={onTogglePreview}
-        />
-      </div>
-    </div>
+        <PreviewToggleButton />
+      </nav>
+    </header>
   );
 }
 

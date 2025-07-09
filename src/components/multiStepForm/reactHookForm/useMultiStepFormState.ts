@@ -1,32 +1,30 @@
+// src/components/multiStepForm/reactHookForm/useMultiStepFormState.ts
+
 import { useCallback, useMemo } from 'react';
 import { useFormMethods } from './formMethods/useFormMethods';
 import { useValidation } from './validation/useValidation';
 import { useFormSubmit } from './actions/useFormSubmit';
 import { useMultiStepFormStore } from '../store/multiStepForm/multiStepFormStore';
-//====여기부터 수정됨====
 import {
-  getTotalSteps, // ✅ TOTAL_STEPS 대신 함수 사용
-  getMaxStep, // ✅ MAX_STEP 대신 함수 사용
+  getTotalSteps,
+  getMaxStep,
   isValidStepNumber,
 } from '../types/stepTypes.ts';
-//====여기까지 수정됨====
 
 export const useMultiStepFormState = () => {
-  console.log('🎣 useMultiStepFormState 훅 호출됨');
+  console.log('🎣 [USE_MULTI_STEP_FORM_STATE] 훅 호출됨');
 
   const { methods, handleSubmit, errors, trigger } = useFormMethods();
 
+  // showPreview, togglePreview, setShowPreview 제거 - 더 이상 필요없음
   const {
     formValues,
     updateFormValue,
     currentStep,
     progressWidth,
-    showPreview,
     goToNextStep,
     goToPrevStep,
     goToStep,
-    togglePreview,
-    setShowPreview,
     addToast,
     editorCompletedContent,
     isEditorCompleted,
@@ -34,21 +32,22 @@ export const useMultiStepFormState = () => {
     setEditorCompleted,
   } = useMultiStepFormStore();
 
-  //====여기부터 수정됨====
   // 스텝 관련 정보를 useMemo로 최적화
-  // 이유: 함수 호출 결과를 캐싱하여 불필요한 재계산 방지
-  const stepInfo = useMemo(() => {
-    const totalSteps = getTotalSteps(); // 런타임에 안전하게 계산
-    const maxStep = getMaxStep(); // 런타임에 안전하게 계산
+  const stepInformation = useMemo(() => {
+    const totalStepsCount = getTotalSteps();
+    const maxStepNumber = getMaxStep();
 
-    console.log('📊 스텝 정보 계산됨:', { totalSteps, maxStep, currentStep });
+    console.log('📊 [USE_MULTI_STEP_FORM_STATE] 스텝 정보 계산됨:', {
+      totalStepsCount,
+      maxStepNumber,
+      currentStep,
+    });
 
     return {
-      totalSteps,
-      maxStep,
+      totalSteps: totalStepsCount,
+      maxStep: maxStepNumber,
     };
-  }, []); // 빈 의존성 배열: 컴포넌트 마운트 시 한 번만 계산
-  //====여기까지 수정됨====
+  }, [currentStep]);
 
   const { validateCurrentStep } = useValidation({
     trigger,
@@ -62,118 +61,171 @@ export const useMultiStepFormState = () => {
     addToast,
   });
 
-  console.log('validateCurrentStep<----------', validateCurrentStep);
+  console.log(
+    '🔍 [USE_MULTI_STEP_FORM_STATE] validateCurrentStep 함수 준비 완료'
+  );
 
   const { onSubmit } = useFormSubmit({ addToast });
 
-  //====여기부터 수정됨====
-  const enhancedGoToNextStep = useCallback(async () => {
-    console.log('➡️ enhancedGoToNextStep 호출됨, 현재 스텝:', currentStep);
+  const enhancedGoToNextStepHandler = useCallback(async () => {
+    console.log(
+      '➡️ [USE_MULTI_STEP_FORM_STATE] enhancedGoToNextStep 호출됨, 현재 스텝:',
+      currentStep
+    );
 
-    if (!isValidStepNumber(currentStep)) {
-      console.error(`❌ Invalid current step: ${currentStep}`);
+    const isCurrentStepValid = isValidStepNumber(currentStep);
+    if (!isCurrentStepValid) {
+      console.error(
+        `❌ [USE_MULTI_STEP_FORM_STATE] Invalid current step: ${currentStep}`
+      );
       return;
     }
 
-    const isValid = await validateCurrentStep(currentStep);
-    console.log('✅ 현재 스텝 검증 결과:', isValid);
+    const stepValidationResult = await validateCurrentStep(currentStep);
+    console.log(
+      '✅ [USE_MULTI_STEP_FORM_STATE] 현재 스텝 검증 결과:',
+      stepValidationResult
+    );
 
-    // stepInfo.maxStep 사용 (메모이제이션된 값)
-    if (isValid && currentStep < stepInfo.maxStep) {
-      console.log(`➡️ 다음 스텝으로 이동: ${currentStep} → ${currentStep + 1}`);
+    const canMoveToNextStep =
+      stepValidationResult && currentStep < stepInformation.maxStep;
+    if (canMoveToNextStep) {
+      console.log(
+        `➡️ [USE_MULTI_STEP_FORM_STATE] 다음 스텝으로 이동: ${currentStep} → ${
+          currentStep + 1
+        }`
+      );
       goToNextStep();
     } else {
-      console.log('⚠️ 다음 스텝 이동 불가:', {
-        isValid,
+      console.log('⚠️ [USE_MULTI_STEP_FORM_STATE] 다음 스텝 이동 불가:', {
+        stepValidationResult,
         currentStep,
-        maxStep: stepInfo.maxStep,
-        canMove: currentStep < stepInfo.maxStep,
+        maxStep: stepInformation.maxStep,
+        canMove: currentStep < stepInformation.maxStep,
       });
     }
-  }, [validateCurrentStep, currentStep, goToNextStep, stepInfo.maxStep]);
-  //====여기까지 수정됨====
+  }, [validateCurrentStep, currentStep, goToNextStep, stepInformation.maxStep]);
 
-  const enhancedGoToStep = useCallback(
-    async (step: number) => {
-      console.log('🎯 enhancedGoToStep 호출됨:', {
+  const enhancedGoToSpecificStepHandler = useCallback(
+    async (targetStep: number) => {
+      console.log('🎯 [USE_MULTI_STEP_FORM_STATE] enhancedGoToStep 호출됨:', {
         from: currentStep,
-        to: step,
+        to: targetStep,
       });
 
-      if (!isValidStepNumber(step)) {
-        console.error(`❌ Invalid target step: ${step}`);
+      const isTargetStepValid = isValidStepNumber(targetStep);
+      if (!isTargetStepValid) {
+        console.error(
+          `❌ [USE_MULTI_STEP_FORM_STATE] Invalid target step: ${targetStep}`
+        );
         return;
       }
 
-      if (!isValidStepNumber(currentStep)) {
-        console.error(`❌ Invalid current step: ${currentStep}`);
+      const isCurrentStepValid = isValidStepNumber(currentStep);
+      if (!isCurrentStepValid) {
+        console.error(
+          `❌ [USE_MULTI_STEP_FORM_STATE] Invalid current step: ${currentStep}`
+        );
         return;
       }
 
       // 앞으로 이동하는 경우에만 현재 스텝 검증
-      if (step > currentStep) {
-        console.log('🔍 앞으로 이동하므로 현재 스텝 검증 중...');
-        const isValid = await validateCurrentStep(currentStep);
-        if (!isValid) {
-          console.log('❌ 현재 스텝 검증 실패, 이동 취소');
+      const isMovingForward = targetStep > currentStep;
+      if (isMovingForward) {
+        console.log(
+          '🔍 [USE_MULTI_STEP_FORM_STATE] 앞으로 이동하므로 현재 스텝 검증 중...'
+        );
+        const stepValidationResult = await validateCurrentStep(currentStep);
+        const canMoveForward = stepValidationResult;
+
+        if (!canMoveForward) {
+          console.log(
+            '❌ [USE_MULTI_STEP_FORM_STATE] 현재 스텝 검증 실패, 이동 취소'
+          );
           return;
         }
       }
 
-      console.log(`🎯 스텝 이동 실행: ${currentStep} → ${step}`);
-      goToStep(step);
+      console.log(
+        `🎯 [USE_MULTI_STEP_FORM_STATE] 스텝 이동 실행: ${currentStep} → ${targetStep}`
+      );
+      goToStep(targetStep);
     },
     [currentStep, validateCurrentStep, goToStep]
   );
 
-  //====여기부터 수정됨====
-  const getFormAnalytics = useCallback(() => {
-    const analytics = {
+  const getFormAnalyticsData = useCallback(() => {
+    const formAnalyticsInfo = {
       currentStep,
-      totalSteps: stepInfo.totalSteps, // 메모이제이션된 값 사용
+      totalSteps: stepInformation.totalSteps,
       errorCount: Object.keys(errors).length,
       hasUnsavedChanges: false,
       isFormValid: Object.keys(errors).length === 0,
     };
 
-    console.log('📈 폼 분석 정보:', analytics);
-    return analytics;
-  }, [currentStep, errors, stepInfo.totalSteps]);
-  //====여기까지 수정됨====
+    console.log(
+      '📈 [USE_MULTI_STEP_FORM_STATE] 폼 분석 정보:',
+      formAnalyticsInfo
+    );
+    return formAnalyticsInfo;
+  }, [currentStep, errors, stepInformation.totalSteps]);
 
-  // 반환할 객체도 로깅
-  const returnValue = {
+  // 편의 상태 계산
+  const isFirstStepActive = currentStep === 1;
+  const isLastStepActive = currentStep === stepInformation.maxStep;
+  const canNavigateToNextStep = currentStep < stepInformation.maxStep;
+  const canNavigateToPreviousStep = currentStep > 1;
+
+  console.log('🔍 [USE_MULTI_STEP_FORM_STATE] 편의 상태 계산 완료:', {
+    isFirstStepActive,
+    isLastStepActive,
+    canNavigateToNextStep,
+    canNavigateToPreviousStep,
+  });
+
+  // showPreview, togglePreview, setShowPreview 제거 - Zustand로 이동
+  const returnedStateAndActions = {
+    // 폼 메서드들
     methods,
     handleSubmit,
     onSubmit,
+
+    // 폼 데이터
     formValues,
     updateFormValue,
+
+    // 스텝 관련
     currentStep,
     progressWidth,
-    goToNextStep: enhancedGoToNextStep,
+    goToNextStep: enhancedGoToNextStepHandler,
     goToPrevStep,
-    goToStep: enhancedGoToStep,
+    goToStep: enhancedGoToSpecificStepHandler,
+
+    // 검증 관련
     validateCurrentStep,
+
+    // 토스트
     addToast,
-    showPreview,
-    togglePreview,
-    setShowPreview,
+
+    // 에디터 관련
     updateEditorContent,
     setEditorCompleted,
-    getFormAnalytics,
 
-    //====여기부터 추가됨====
-    // 추가적으로 유용한 정보들도 제공
-    stepInfo, // 스텝 관련 정보 (totalSteps, maxStep)
+    // 분석 관련
+    getFormAnalytics: getFormAnalyticsData,
 
-    // 편의 함수들 추가
-    isFirstStep: currentStep === 1, // 첫 번째 스텝인지 확인
-    isLastStep: currentStep === stepInfo.maxStep, // 마지막 스텝인지 확인
-    canGoNext: currentStep < stepInfo.maxStep, // 다음 스텝으로 이동 가능한지
-    canGoPrev: currentStep > 1, // 이전 스텝으로 이동 가능한지
-    //====여기까지 추가됨====
+    // 스텝 정보
+    stepInfo: stepInformation,
+
+    // 편의 상태들
+    isFirstStep: isFirstStepActive,
+    isLastStep: isLastStepActive,
+    canGoNext: canNavigateToNextStep,
+    canGoPrev: canNavigateToPreviousStep,
   };
 
-  console.log('✅ useMultiStepFormState 반환값 준비 완료');
-  return returnValue;
+  console.log(
+    '✅ [USE_MULTI_STEP_FORM_STATE] 반환값 준비 완료 (showPreview 관련 제거됨)'
+  );
+  return returnedStateAndActions;
 };
