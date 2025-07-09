@@ -1,7 +1,6 @@
-// src/components/multiStepForm/steps/stepsSections/blogMediaStep/imageGallery/ImageGalleryContainer.tsx
+// blogMediaStep/imageGallery/ImageGalleryContainer.tsx
 
 import React from 'react';
-import AccordionField from '../../../../../accordion-field';
 import { useViewBuilderState } from './hooks/viewBuilder/useViewBuilderState';
 import { useViewBuilderActions } from './hooks/viewBuilder/useViewBuilderActions';
 import ViewModeSelector from './parts/viewBuilder/ViewModeSelector';
@@ -16,289 +15,344 @@ interface ImageGalleryContainerProps {
 }
 
 function ImageGalleryContainer({
-  mediaFiles,
-  mainImage,
-  sliderImages,
+  mediaFiles: availableMediaFileList,
+  mainImage: selectedMainImageUrl,
+  sliderImages: currentSliderImageList,
 }: ImageGalleryContainerProps): React.ReactNode {
-  console.log('🔧 ImageGalleryContainer 렌더링 시작:', {
-    mediaCount: mediaFiles.length,
-    hasMainImage: !!mainImage,
-    sliderCount: sliderImages.length,
-  });
-
-  // 상태 관리 훅
-  const viewBuilderState = useViewBuilderState();
-  const viewBuilderActions = useViewBuilderActions();
-
-  // 상태 구조분해할당
-  const {
-    mode,
-    view,
-    sortBy,
-    sortOrder,
-    selectedImages,
-    showPreview,
-    previewLayout,
-    safeImageViewConfig,
-    filteredAndSortedImages,
-    isImageSelected,
-    getSelectedCount,
-    getTotalCount,
-    setMode,
-    setSelectedImages,
-    setShowPreview,
-    setPreviewLayout,
-  } = viewBuilderState;
-
-  // 액션 구조분해할당
-  const {
-    handleAddAllImages,
-    handleAddSelectedImages,
-    handleImageSelect,
-    resetSelection,
-  } = viewBuilderActions;
-
-  // 계산된 값들
-  const selectedCount = getSelectedCount();
-  const totalCount = getTotalCount();
-  const columns = safeImageViewConfig.layout.columns;
-
-  console.log('📊 ImageGalleryContainer 상태:', {
-    mode,
-    view,
-    selectedCount,
-    totalCount,
-    showPreview,
+  console.log('🚀 ImageGalleryContainer 렌더링 시작:', {
+    mediaFileCount: availableMediaFileList.length,
+    hasMainImage: selectedMainImageUrl ? true : false,
+    sliderImageCount: currentSliderImageList.length,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 모드 변경 핸들러
-  const handleModeChange = (newMode: 'all' | 'selected') => {
-    console.log('🔧 handleModeChange 호출:', { newMode });
+  const viewBuilderStateHook = useViewBuilderState();
+  const viewBuilderActionsHook = useViewBuilderActions();
 
-    setMode(newMode);
+  console.log('📊 ViewBuilder 훅 초기화 완료:', {
+    hasStateHook: viewBuilderStateHook ? true : false,
+    hasActionsHook: viewBuilderActionsHook ? true : false,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
-    if (newMode === 'all') {
-      setSelectedImages([]);
-      setShowPreview(false);
-    }
+  const {
+    mode: currentViewMode,
+    view: currentViewType,
+    sortBy: currentSortByOption,
+    sortOrder: currentSortOrderDirection,
+    selectedImages: selectedImageUrlList,
+    showPreview: isPreviewVisible,
+    previewLayout: selectedPreviewLayoutType,
+    safeImageViewConfig: imageViewConfigurationData,
+    filteredAndSortedImages: processedImageList,
+    isImageSelected: checkIsImageSelectedFunction,
+    getSelectedCount: getSelectedImageCountFunction,
+    getTotalCount: getTotalImageCountFunction,
+    setMode: updateViewModeFunction,
+    setSelectedImages: updateSelectedImageListFunction,
+    setShowPreview: updatePreviewVisibilityFunction,
+    setPreviewLayout: updatePreviewLayoutFunction,
+  } = viewBuilderStateHook;
 
-    viewBuilderActions.handleModeChange(newMode);
+  const {
+    handleAddAllImages: handleAddAllImagesToGalleryFunction,
+    handleAddSelectedImages: handleAddSelectedImagesToGalleryFunction,
+    handleImageSelect: handleImageSelectionToggleFunction,
+    resetSelection: resetImageSelectionFunction,
+  } = viewBuilderActionsHook;
 
-    console.log('✅ handleModeChange 완료:', { newMode });
-  };
+  const selectedImageCount = getSelectedImageCountFunction();
+  const totalAvailableImageCount = getTotalImageCountFunction();
+  const { layout: layoutConfiguration } = imageViewConfigurationData;
+  const { columns: columnCount } = layoutConfiguration;
 
-  // 이미지 클릭 핸들러 (로컬 상태용)
-  const handleImageClick = (imageUrl: string) => {
-    console.log('🔧 handleImageClick 호출:', {
-      imageUrl: imageUrl.slice(0, 30) + '...',
-      mode,
+  console.log('📊 ImageGalleryContainer 현재 상태:', {
+    currentViewMode,
+    currentViewType,
+    selectedImageCount,
+    totalAvailableImageCount,
+    isPreviewVisible,
+    columnCount,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  const handleViewModeChange = (newViewMode: 'all' | 'selected') => {
+    console.log('🔧 handleViewModeChange 호출:', {
+      newViewMode,
+      previousMode: currentViewMode,
     });
 
-    if (mode === 'all') {
-      console.log('📋 전체 모드에서는 이미지 클릭 불가');
+    updateViewModeFunction(newViewMode);
+
+    if (newViewMode === 'all') {
+      console.log('🔄 전체 모드로 변경 - 선택 및 미리보기 초기화');
+      updateSelectedImageListFunction([]);
+      updatePreviewVisibilityFunction(false);
+    }
+
+    viewBuilderActionsHook.handleModeChange(newViewMode);
+
+    console.log('✅ handleViewModeChange 완료:', {
+      newViewMode,
+      selectionCleared: newViewMode === 'all',
+    });
+  };
+
+  const handleImageClickForSelection = (targetImageUrl: string) => {
+    console.log('🔧 handleImageClickForSelection 호출:', {
+      targetImageUrl: targetImageUrl.slice(0, 30) + '...',
+      currentViewMode,
+    });
+
+    if (currentViewMode === 'all') {
+      console.log('📋 전체 모드에서는 이미지 선택 불가 - 요청 무시');
       return;
     }
 
-    if (mode === 'selected') {
-      const newSelectedImages = handleImageSelect(
-        imageUrl,
-        mode,
-        selectedImages
-      );
-      setSelectedImages(newSelectedImages);
-
-      // 미리보기 상태 업데이트
-      if (newSelectedImages.length > 0) {
-        setShowPreview(true);
-      } else {
-        setShowPreview(false);
-      }
-
-      console.log('✅ handleImageClick 완료:', {
-        newCount: newSelectedImages.length,
-        showPreview: newSelectedImages.length > 0,
-      });
-    }
-  };
-
-  // 뷰 타입 변경 핸들러
-  const handleViewChange = (newView: 'grid' | 'masonry') => {
-    console.log('🔧 handleViewChange 호출:', { newView });
-
-    viewBuilderState.setView(newView);
-
-    // 미리보기 레이아웃도 동기화
-    if (showPreview) {
-      setPreviewLayout(newView);
+    if (currentViewMode !== 'selected') {
+      console.log('❌ 선택 모드가 아님 - 요청 무시');
+      return;
     }
 
-    console.log('✅ handleViewChange 완료:', { newView });
+    const updatedSelectedImageList = handleImageSelectionToggleFunction(
+      targetImageUrl,
+      currentViewMode,
+      selectedImageUrlList
+    );
+
+    updateSelectedImageListFunction(updatedSelectedImageList);
+
+    const { length: newSelectedCount } = updatedSelectedImageList;
+    const shouldShowPreview = newSelectedCount > 0;
+
+    updatePreviewVisibilityFunction(shouldShowPreview);
+
+    console.log('✅ handleImageClickForSelection 완료:', {
+      newSelectedCount,
+      shouldShowPreview,
+      timestamp: new Date().toLocaleTimeString(),
+    });
   };
 
-  // 정렬 변경 핸들러
-  const handleSortChange = (
-    newSortBy: 'index' | 'name' | 'size',
-    newSortOrder: 'asc' | 'desc'
+  const handleViewTypeChange = (newViewType: 'grid' | 'masonry') => {
+    console.log('🔧 handleViewTypeChange 호출:', {
+      newViewType,
+      previousType: currentViewType,
+    });
+
+    viewBuilderStateHook.setView(newViewType);
+
+    if (isPreviewVisible) {
+      console.log('🔄 미리보기 레이아웃 동기화');
+      updatePreviewLayoutFunction(newViewType);
+    }
+
+    console.log('✅ handleViewTypeChange 완료:', {
+      newViewType,
+      previewLayoutSynced: isPreviewVisible,
+    });
+  };
+
+  const handleSortOptionChange = (
+    newSortByOption: 'index' | 'name' | 'size',
+    newSortOrderDirection: 'asc' | 'desc'
   ) => {
-    console.log('🔧 handleSortChange 호출:', { newSortBy, newSortOrder });
-
-    viewBuilderState.setSortBy(newSortBy);
-    viewBuilderState.setSortOrder(newSortOrder);
-
-    console.log('✅ handleSortChange 완료:', { newSortBy, newSortOrder });
-  };
-
-  // 컬럼 변경 핸들러
-  const handleColumnsChange = (newColumns: number) => {
-    console.log('🔧 handleColumnsChange 호출:', { newColumns });
-
-    viewBuilderActions.updateColumns(newColumns);
-
-    console.log('✅ handleColumnsChange 완료:', { newColumns });
-  };
-
-  // 선택 초기화 핸들러
-  const handleResetSelection = () => {
-    console.log('🔧 handleResetSelection 호출');
-
-    setSelectedImages([]);
-    setShowPreview(false);
-    resetSelection();
-
-    console.log('✅ handleResetSelection 완료');
-  };
-
-  // 전체 이미지로 뷰 추가 핸들러
-  const handleAddAllImagesView = () => {
-    console.log('🔧 handleAddAllImagesView 호출:', { view, columns });
-
-    handleAddAllImages(view, columns);
-
-    console.log('✅ handleAddAllImagesView 완료');
-  };
-
-  // 선택된 이미지로 뷰 추가 핸들러
-  const handleAddSelectedImagesView = () => {
-    console.log('🔧 handleAddSelectedImagesView 호출:', {
-      view,
-      columns,
-      selectedCount,
+    console.log('🔧 handleSortOptionChange 호출:', {
+      newSortByOption,
+      newSortOrderDirection,
+      previousSortBy: currentSortByOption,
+      previousSortOrder: currentSortOrderDirection,
     });
 
-    handleAddSelectedImages(view, columns);
+    viewBuilderStateHook.setSortBy(newSortByOption);
+    viewBuilderStateHook.setSortOrder(newSortOrderDirection);
 
-    console.log('✅ handleAddSelectedImagesView 완료');
+    console.log('✅ handleSortOptionChange 완료:', {
+      newSortByOption,
+      newSortOrderDirection,
+    });
   };
 
-  // 미리보기 레이아웃 변경 핸들러
-  const handlePreviewLayoutChange = (layout: 'grid' | 'masonry') => {
-    console.log('🔧 handlePreviewLayoutChange 호출:', { layout });
-
-    setPreviewLayout(layout);
-
-    console.log('✅ handlePreviewLayoutChange 완료:', { layout });
-  };
-
-  // 미리보기 닫기 핸들러
-  const handleClosePreview = () => {
-    console.log('🔧 handleClosePreview 호출');
-
-    setShowPreview(false);
-
-    console.log('✅ handleClosePreview 완료');
-  };
-
-  // 미리보기에서 이미지 제거 핸들러
-  const handleRemoveFromPreview = (imageUrl: string) => {
-    console.log('🔧 handleRemoveFromPreview 호출:', {
-      imageUrl: imageUrl.slice(0, 30) + '...',
+  const handleColumnCountChange = (newColumnCount: number) => {
+    console.log('🔧 handleColumnCountChange 호출:', {
+      newColumnCount,
+      previousColumnCount: columnCount,
     });
 
-    const newSelectedImages = selectedImages.filter((img) => img !== imageUrl);
-    setSelectedImages(newSelectedImages);
+    viewBuilderActionsHook.updateColumns(newColumnCount);
 
-    if (newSelectedImages.length === 0) {
-      setShowPreview(false);
+    console.log('✅ handleColumnCountChange 완료:', { newColumnCount });
+  };
+
+  const handleResetImageSelection = () => {
+    console.log('🔧 handleResetImageSelection 호출');
+
+    updateSelectedImageListFunction([]);
+    updatePreviewVisibilityFunction(false);
+    resetImageSelectionFunction();
+
+    console.log('✅ handleResetImageSelection 완료 - 모든 선택 초기화됨');
+  };
+
+  const handleAddAllImagesToGalleryView = () => {
+    console.log('🔧 handleAddAllImagesToGalleryView 호출:', {
+      currentViewType,
+      columnCount,
+      totalAvailableImageCount,
+    });
+
+    handleAddAllImagesToGalleryFunction(currentViewType, columnCount);
+
+    console.log('✅ handleAddAllImagesToGalleryView 완료');
+  };
+
+  const handleAddSelectedImagesToGalleryView = () => {
+    console.log('🔧 handleAddSelectedImagesToGalleryView 호출:', {
+      currentViewType,
+      columnCount,
+      selectedImageCount,
+    });
+
+    handleAddSelectedImagesToGalleryFunction(currentViewType, columnCount);
+
+    console.log('✅ handleAddSelectedImagesToGalleryView 완료');
+  };
+
+  const handlePreviewLayoutTypeChange = (newLayoutType: 'grid' | 'masonry') => {
+    console.log('🔧 handlePreviewLayoutTypeChange 호출:', {
+      newLayoutType,
+      previousLayoutType: selectedPreviewLayoutType,
+    });
+
+    updatePreviewLayoutFunction(newLayoutType);
+
+    console.log('✅ handlePreviewLayoutTypeChange 완료:', { newLayoutType });
+  };
+
+  const handleClosePreviewModal = () => {
+    console.log('🔧 handleClosePreviewModal 호출');
+
+    updatePreviewVisibilityFunction(false);
+
+    console.log('✅ handleClosePreviewModal 완료 - 미리보기 닫힘');
+  };
+
+  const handleRemoveImageFromPreview = (targetImageUrl: string) => {
+    console.log('🔧 handleRemoveImageFromPreview 호출:', {
+      targetImageUrl: targetImageUrl.slice(0, 30) + '...',
+      currentSelectedCount: selectedImageCount,
+    });
+
+    const filteredSelectedImageList = selectedImageUrlList.filter(
+      (imageUrl) => imageUrl !== targetImageUrl
+    );
+
+    updateSelectedImageListFunction(filteredSelectedImageList);
+
+    const { length: remainingImageCount } = filteredSelectedImageList;
+
+    if (remainingImageCount === 0) {
+      console.log('🔄 선택된 이미지 없음 - 미리보기 닫기');
+      updatePreviewVisibilityFunction(false);
     }
 
-    console.log('✅ handleRemoveFromPreview 완료:', {
-      newCount: newSelectedImages.length,
+    console.log('✅ handleRemoveImageFromPreview 완료:', {
+      remainingImageCount,
+      previewClosed: remainingImageCount === 0,
     });
   };
 
-  const shouldShowGalleryContent = (): boolean => {
-    return filteredAndSortedImages.length > 0;
+  const checkShouldShowGalleryContent = (): boolean => {
+    const { length: processedImageCount } = processedImageList;
+    const hasProcessedImages = processedImageCount > 0;
+
+    console.log('🔍 checkShouldShowGalleryContent:', {
+      processedImageCount,
+      hasProcessedImages,
+    });
+
+    return hasProcessedImages;
   };
 
-  const showGalleryContent = shouldShowGalleryContent();
+  const shouldShowGalleryContent = checkShouldShowGalleryContent();
 
-  console.log('🎨 ImageGalleryContainer 렌더링 준비:', {
-    showGalleryContent,
-    mode,
-    selectedCount,
-    totalCount,
+  console.log('🎨 ImageGalleryContainer 최종 렌더링 준비:', {
+    shouldShowGalleryContent,
+    currentViewMode,
+    selectedImageCount,
+    totalAvailableImageCount,
+    isPreviewVisible,
+    timestamp: new Date().toLocaleTimeString(),
   });
 
   return (
-    <AccordionField
-      title="이미지 갤러리 관리"
-      description="전체 이미지로 자동 갤러리를 만들거나, 개별 이미지를 선택하여 커스텀 갤러리를 만들 수 있습니다."
-      defaultExpanded={true}
-      id="image-gallery-management-section"
+    <section
+      className="space-y-6"
+      role="region"
+      aria-labelledby="image-gallery-section-title"
+      aria-describedby="image-gallery-section-description"
     >
-      <div
-        className="space-y-6"
-        role="region"
-        aria-labelledby="image-gallery-management-title"
-      >
-        {showGalleryContent ? (
+      <header>
+        <h2
+          id="image-gallery-section-title"
+          className="mb-2 text-xl font-semibold text-gray-900"
+        >
+          이미지 갤러리 관리
+        </h2>
+        <p id="image-gallery-section-description" className="text-gray-600">
+          전체 이미지로 자동 갤러리를 만들거나, 개별 이미지를 선택하여 커스텀
+          갤러리를 만들 수 있습니다.
+        </p>
+      </header>
+
+      <main className="space-y-6">
+        {shouldShowGalleryContent ? (
           <>
             <ViewModeSelector
-              currentMode={mode}
-              totalImageCount={totalCount}
-              selectedImageCount={selectedCount}
-              onModeChange={handleModeChange}
+              currentMode={currentViewMode}
+              totalImageCount={totalAvailableImageCount}
+              selectedImageCount={selectedImageCount}
+              onModeChange={handleViewModeChange}
               isDisabled={false}
             />
 
             <ViewBuilderControls
-              mode={mode}
-              view={view}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              columns={columns}
-              selectedCount={selectedCount}
-              availableCount={totalCount}
-              onViewChange={handleViewChange}
-              onSortChange={handleSortChange}
-              onColumnsChange={handleColumnsChange}
-              onResetSelection={handleResetSelection}
-              onAddAllImages={handleAddAllImagesView}
-              onAddSelectedImages={handleAddSelectedImagesView}
+              mode={currentViewMode}
+              view={currentViewType}
+              sortBy={currentSortByOption}
+              sortOrder={currentSortOrderDirection}
+              columns={columnCount}
+              selectedCount={selectedImageCount}
+              availableCount={totalAvailableImageCount}
+              onViewChange={handleViewTypeChange}
+              onSortChange={handleSortOptionChange}
+              onColumnsChange={handleColumnCountChange}
+              onResetSelection={handleResetImageSelection}
+              onAddAllImages={handleAddAllImagesToGalleryView}
+              onAddSelectedImages={handleAddSelectedImagesToGalleryView}
               isDisabled={false}
             />
 
             <AvailableImageGrid
-              filteredAndSortedImages={filteredAndSortedImages}
-              selectedImages={selectedImages}
-              view={view}
-              columns={columns}
-              mode={mode}
-              onImageClick={handleImageClick}
-              isImageSelected={isImageSelected}
+              filteredAndSortedImages={processedImageList}
+              selectedImages={selectedImageUrlList}
+              view={currentViewType}
+              columns={columnCount}
+              mode={currentViewMode}
+              onImageClick={handleImageClickForSelection}
+              isImageSelected={checkIsImageSelectedFunction}
               isDisabled={false}
             />
 
-            {showPreview ? (
+            {isPreviewVisible ? (
               <SelectedImagePreview
-                selectedImages={selectedImages}
-                previewLayout={previewLayout}
-                showPreview={showPreview}
-                columns={columns}
-                onPreviewLayoutChange={handlePreviewLayoutChange}
-                onClosePreview={handleClosePreview}
-                onRemoveImage={handleRemoveFromPreview}
+                selectedImages={selectedImageUrlList}
+                previewLayout={selectedPreviewLayoutType}
+                showPreview={isPreviewVisible}
+                columns={columnCount}
+                onPreviewLayoutChange={handlePreviewLayoutTypeChange}
+                onClosePreview={handleClosePreviewModal}
+                onRemoveImage={handleRemoveImageFromPreview}
               />
             ) : null}
           </>
@@ -341,8 +395,8 @@ function ImageGalleryContainer({
             </div>
           </div>
         )}
-      </div>
-    </AccordionField>
+      </main>
+    </section>
   );
 }
 

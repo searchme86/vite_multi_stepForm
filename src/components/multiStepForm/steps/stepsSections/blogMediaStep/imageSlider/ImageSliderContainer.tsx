@@ -2,7 +2,6 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { Icon } from '@iconify/react';
-import AccordionField from '../../../../../accordion-field';
 import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
 import { useImageSlider } from './hooks/useImageSlider';
 import { useSliderSelection } from './hooks/useSliderSelection';
@@ -13,56 +12,103 @@ import SelectedSliderImages from './parts/SelectedSliderImages';
 import SliderAddButton from './parts/SliderAddButton';
 
 function ImageSliderContainer(): React.ReactNode {
-  const { formValues, addToast } = useBlogMediaStepState();
-  const { media: availableMediaFiles, mainImage: selectedMainImage } =
+  console.log('🚀 ImageSliderContainer 렌더링 시작:', {
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  const blogMediaStepState = useBlogMediaStepState();
+  const { formValues, addToast } = blogMediaStepState;
+  const { media: availableMediaFileList, mainImage: selectedMainImageUrl } =
     formValues;
 
+  console.log('📊 BlogMediaStepState 불러오기 완료:', {
+    availableMediaCount: availableMediaFileList.length,
+    hasMainImage: selectedMainImageUrl ? true : false,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  const imageSliderHook = useImageSlider();
   const {
-    localSliderImages: currentSliderImageList,
-    removeFromSlider: removeImageFromSlider,
-    addSelectedToSlider: addSelectedImagesToSlider,
-    clearSliderImages: clearAllSliderImages,
-    getSliderImageCount: getCurrentSliderImageCount,
-  } = useImageSlider();
+    localSliderImages: currentSliderImageUrlList,
+    removeFromSlider: removeImageFromSliderByUrl,
+    addSelectedToSlider: addSelectedImageListToSlider,
+    clearSliderImages: clearAllSliderImageList,
+    getSliderImageCount: getCurrentSliderImageTotalCount,
+  } = imageSliderHook;
 
+  const sliderSelectionHook = useSliderSelection();
   const {
-    selectedSliderImages: selectedImageIndices,
-    handleSliderImageSelect: handleImageSelectionToggle,
-    setSelectedSliderImages: updateSelectedImageIndices,
-  } = useSliderSelection();
+    selectedSliderImages: selectedImageIndexList,
+    handleSliderImageSelect: handleImageSelectionToggleByIndex,
+    setSelectedSliderImages: updateSelectedImageIndexList,
+  } = sliderSelectionHook;
 
-  const { moveToFirst: moveImageToFirst, moveToLast: moveImageToLast } =
-    useSliderOrder();
+  const sliderOrderHook = useSliderOrder();
+  const {
+    moveToFirst: moveImageToFirstPosition,
+    moveToLast: moveImageToLastPosition,
+  } = sliderOrderHook;
 
-  const getSelectedImageUrlsFromIndices = useCallback(
-    (mediaFileList: string[]) => {
-      return selectedImageIndices
-        .map((imageIndex) => mediaFileList[imageIndex])
-        .filter((imageUrl) => imageUrl !== undefined);
+  console.log('🔧 훅 초기화 완료:', {
+    sliderImageCount: currentSliderImageUrlList.length,
+    selectedImageCount: selectedImageIndexList.length,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  const getSelectedImageUrlListFromIndexList = useCallback(
+    (mediaFileUrlList: string[]) => {
+      console.log('🔄 getSelectedImageUrlListFromIndexList 호출:', {
+        mediaFileCount: mediaFileUrlList.length,
+        selectedIndexCount: selectedImageIndexList.length,
+      });
+
+      const selectedUrlList = selectedImageIndexList
+        .map((imageIndex) => {
+          const imageUrl = mediaFileUrlList[imageIndex];
+          return imageUrl || null;
+        })
+        .filter((imageUrl): imageUrl is string => imageUrl !== null);
+
+      console.log('✅ 선택된 이미지 URL 목록 생성 완료:', {
+        resultCount: selectedUrlList.length,
+      });
+
+      return selectedUrlList;
     },
-    [selectedImageIndices]
+    [selectedImageIndexList]
   );
 
-  const getCurrentSelectedCount = useCallback(() => {
-    return selectedImageIndices.length;
-  }, [selectedImageIndices]);
+  const getCurrentSelectedImageCount = useCallback(() => {
+    const selectedCount = selectedImageIndexList.length;
+    console.log('📊 getCurrentSelectedImageCount:', { selectedCount });
+    return selectedCount;
+  }, [selectedImageIndexList]);
 
-  const clearCurrentSelection = useCallback(() => {
-    updateSelectedImageIndices([]);
-  }, [updateSelectedImageIndices]);
+  const clearCurrentImageSelection = useCallback(() => {
+    console.log('🔄 clearCurrentImageSelection 호출');
+    updateSelectedImageIndexList([]);
+    console.log('✅ 선택 목록 초기화 완료');
+  }, [updateSelectedImageIndexList]);
 
-  const selectedImageUrls = useMemo(
-    () => getSelectedImageUrlsFromIndices(availableMediaFiles),
-    [getSelectedImageUrlsFromIndices, availableMediaFiles]
+  const selectedImageUrlList = useMemo(
+    () => getSelectedImageUrlListFromIndexList(availableMediaFileList),
+    [getSelectedImageUrlListFromIndexList, availableMediaFileList]
   );
 
-  const currentSelectedCount = useMemo(
-    () => getCurrentSelectedCount(),
-    [getCurrentSelectedCount]
+  const currentSelectedImageCount = useMemo(
+    () => getCurrentSelectedImageCount(),
+    [getCurrentSelectedImageCount]
   );
 
-  const handleAddSelectedImagesToSlider = useCallback(() => {
-    if (selectedImageUrls.length === 0) {
+  const handleAddSelectedImageListToSlider = useCallback(() => {
+    console.log('🔧 handleAddSelectedImageListToSlider 호출:', {
+      selectedImageCount: selectedImageUrlList.length,
+    });
+
+    const { length: selectedImageCount } = selectedImageUrlList;
+
+    if (selectedImageCount === 0) {
+      console.log('❌ 선택된 이미지 없음 - 토스트 표시');
       addToast({
         title: '선택된 이미지가 없습니다',
         description: '슬라이더에 추가할 이미지를 먼저 선택해주세요.',
@@ -71,127 +117,180 @@ function ImageSliderContainer(): React.ReactNode {
       return;
     }
 
-    addSelectedImagesToSlider(selectedImageUrls);
-    clearCurrentSelection();
+    addSelectedImageListToSlider(selectedImageUrlList);
+    clearCurrentImageSelection();
+
+    console.log('✅ 슬라이더에 이미지 추가 완료:', {
+      addedImageCount: selectedImageCount,
+    });
   }, [
-    selectedImageUrls,
-    addSelectedImagesToSlider,
-    clearCurrentSelection,
+    selectedImageUrlList,
+    addSelectedImageListToSlider,
+    clearCurrentImageSelection,
     addToast,
   ]);
 
-  const handleRemoveImageFromSlider = useCallback(
+  const handleRemoveImageFromSliderByUrl = useCallback(
     (targetImageUrl: string) => {
-      removeImageFromSlider(targetImageUrl);
+      console.log('🔧 handleRemoveImageFromSliderByUrl 호출:', {
+        targetImageUrl: targetImageUrl.slice(0, 30) + '...',
+      });
+
+      removeImageFromSliderByUrl(targetImageUrl);
       addToast({
         title: '슬라이더에서 제거',
         description: '이미지가 슬라이더에서 제거되었습니다.',
         color: 'success',
       });
+
+      console.log('✅ 슬라이더에서 이미지 제거 완료');
     },
-    [removeImageFromSlider, addToast]
+    [removeImageFromSliderByUrl, addToast]
   );
 
-  const handleMoveImageToFirst = useCallback(
+  const handleMoveImageToFirstPosition = useCallback(
     (targetImageUrl: string) => {
-      moveImageToFirst(targetImageUrl);
+      console.log('🔧 handleMoveImageToFirstPosition 호출:', {
+        targetImageUrl: targetImageUrl.slice(0, 30) + '...',
+      });
+
+      moveImageToFirstPosition(targetImageUrl);
+
+      console.log('✅ 이미지 첫 번째 위치로 이동 완료');
     },
-    [moveImageToFirst]
+    [moveImageToFirstPosition]
   );
 
-  const handleMoveImageToLast = useCallback(
+  const handleMoveImageToLastPosition = useCallback(
     (targetImageUrl: string) => {
-      moveImageToLast(targetImageUrl);
+      console.log('🔧 handleMoveImageToLastPosition 호출:', {
+        targetImageUrl: targetImageUrl.slice(0, 30) + '...',
+      });
+
+      moveImageToLastPosition(targetImageUrl);
+
+      console.log('✅ 이미지 마지막 위치로 이동 완료');
     },
-    [moveImageToLast]
+    [moveImageToLastPosition]
   );
 
-  const handleClearAllSliderImages = useCallback(() => {
-    clearAllSliderImages();
-    clearCurrentSelection();
-  }, [clearAllSliderImages, clearCurrentSelection]);
+  const handleClearAllSliderImageList = useCallback(() => {
+    console.log('🔧 handleClearAllSliderImageList 호출');
 
-  const totalAvailableImages = availableMediaFiles.length;
-  const currentSliderImageCount = getCurrentSliderImageCount();
-  const hasSliderImages = currentSliderImageList.length > 0;
-  const hasAvailableImages = totalAvailableImages > 0;
+    clearAllSliderImageList();
+    clearCurrentImageSelection();
+
+    console.log('✅ 모든 슬라이더 이미지 초기화 완료');
+  }, [clearAllSliderImageList, clearCurrentImageSelection]);
+
+  const totalAvailableImageCount = availableMediaFileList.length;
+  const currentSliderImageTotalCount = getCurrentSliderImageTotalCount();
+  const { length: sliderImageCount } = currentSliderImageUrlList;
+  const hasSelectedSliderImages = sliderImageCount > 0;
+  const hasAvailableImageFiles = totalAvailableImageCount > 0;
+
+  console.log('📊 렌더링 준비 상태:', {
+    totalAvailableImageCount,
+    currentSliderImageTotalCount,
+    sliderImageCount,
+    hasSelectedSliderImages,
+    hasAvailableImageFiles,
+    currentSelectedImageCount,
+  });
 
   return (
-    <AccordionField
-      title="이미지 슬라이더"
-      description="블로그 하단에 표시될 이미지 슬라이더를 위한 이미지들을 선택해주세요."
-      defaultExpanded={true}
+    <section
+      className="space-y-6"
+      role="region"
+      aria-labelledby="image-slider-section-title"
+      aria-describedby="image-slider-section-description"
     >
-      <div
-        className="space-y-4"
-        role="region"
-        aria-labelledby="image-slider-section"
-      >
-        {hasAvailableImages ? (
+      <header>
+        <h2
+          id="image-slider-section-title"
+          className="mb-2 text-xl font-semibold text-gray-900"
+        >
+          이미지 슬라이더
+        </h2>
+        <p id="image-slider-section-description" className="text-gray-600">
+          블로그 하단에 표시될 이미지 슬라이더를 위한 이미지들을 선택해주세요.
+        </p>
+      </header>
+
+      <main className="space-y-4">
+        {hasAvailableImageFiles ? (
           <>
             <div className="flex items-center justify-between mb-4">
               <div
                 className="text-sm text-default-600"
-                id="slider-status"
+                id="slider-status-display"
                 aria-live="polite"
               >
-                사용 가능한 이미지 {totalAvailableImages}개 | 슬라이더{' '}
-                {currentSliderImageCount}개
-                {currentSelectedCount > 0 && (
+                사용 가능한 이미지 {totalAvailableImageCount}개 | 슬라이더{' '}
+                {currentSliderImageTotalCount}개
+                {currentSelectedImageCount > 0 ? (
                   <span className="ml-2 text-primary">
-                    ({currentSelectedCount}개 선택됨)
+                    ({currentSelectedImageCount}개 선택됨)
                   </span>
-                )}
+                ) : null}
               </div>
-              {hasSliderImages && (
+              {hasSelectedSliderImages ? (
                 <button
                   type="button"
-                  onClick={handleClearAllSliderImages}
+                  onClick={handleClearAllSliderImageList}
                   className="text-sm underline rounded text-danger hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2"
-                  aria-label={`슬라이더의 모든 이미지 ${currentSliderImageCount}개 초기화`}
-                  aria-describedby="slider-status"
+                  aria-label={`슬라이더의 모든 이미지 ${currentSliderImageTotalCount}개 초기화`}
+                  aria-describedby="slider-status-display"
                 >
                   모두 초기화
                 </button>
-              )}
+              ) : null}
             </div>
 
-            <div role="group" aria-labelledby="image-selection-heading">
-              <h3 id="image-selection-heading" className="sr-only">
+            <section
+              role="group"
+              aria-labelledby="image-selection-section-title"
+            >
+              <h3 id="image-selection-section-title" className="sr-only">
                 슬라이더에 추가할 이미지 선택
               </h3>
               <SliderImageSelector
-                mediaFiles={availableMediaFiles}
-                mainImage={selectedMainImage}
-                localSliderImages={currentSliderImageList}
-                selectedSliderImages={selectedImageIndices}
-                onSliderImageSelect={handleImageSelectionToggle}
+                mediaFiles={availableMediaFileList}
+                mainImage={selectedMainImageUrl}
+                localSliderImages={currentSliderImageUrlList}
+                selectedSliderImages={selectedImageIndexList}
+                onSliderImageSelect={handleImageSelectionToggleByIndex}
               />
-            </div>
+            </section>
 
             <SliderAddButton
-              selectedCount={currentSelectedCount}
-              onAddToSlider={handleAddSelectedImagesToSlider}
-              isDisabled={!hasAvailableImages || currentSelectedCount === 0}
+              selectedCount={currentSelectedImageCount}
+              onAddToSlider={handleAddSelectedImageListToSlider}
+              isDisabled={
+                !hasAvailableImageFiles || currentSelectedImageCount === 0
+              }
             />
 
-            {hasSliderImages && (
-              <div
+            {hasSelectedSliderImages ? (
+              <section
                 role="group"
-                aria-labelledby="selected-slider-images-heading"
+                aria-labelledby="selected-slider-images-section-title"
               >
-                <h3 id="selected-slider-images-heading" className="sr-only">
+                <h3
+                  id="selected-slider-images-section-title"
+                  className="sr-only"
+                >
                   선택된 슬라이더 이미지 관리
                 </h3>
                 <SelectedSliderImages
-                  localSliderImages={currentSliderImageList}
-                  onRemoveFromSlider={handleRemoveImageFromSlider}
-                  onMoveToFirst={handleMoveImageToFirst}
-                  onMoveToLast={handleMoveImageToLast}
+                  localSliderImages={currentSliderImageUrlList}
+                  onRemoveFromSlider={handleRemoveImageFromSliderByUrl}
+                  onMoveToFirst={handleMoveImageToFirstPosition}
+                  onMoveToLast={handleMoveImageToLastPosition}
                   showOrderControls={true}
                 />
-              </div>
-            )}
+              </section>
+            ) : null}
           </>
         ) : (
           <div
@@ -211,8 +310,8 @@ function ImageSliderContainer(): React.ReactNode {
             </p>
           </div>
         )}
-      </div>
-    </AccordionField>
+      </main>
+    </section>
   );
 }
 
