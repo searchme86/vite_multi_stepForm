@@ -5,17 +5,18 @@ import FormDateDisplay from './FormDateDisplay';
 import PreviewToggleButton from './PreviewToggleButton';
 
 function FormHeaderContainer() {
+  console.log(
+    '📋 FormHeaderContainer: 폼 헤더 컨테이너 렌더링 - Zustand 직접 사용'
+  );
+
   return (
-    <header className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
+    <div className="flex flex-col items-start justify-between gap-3 mb-6 sm:flex-row sm:items-center sm:gap-0">
       <FormTitle />
-      <nav
-        className="flex items-center w-full gap-2 sm:w-auto mb-xs:ml-auto mb-xs:w-auto"
-        aria-label="폼 헤더 네비게이션"
-      >
+      <div className="flex items-center w-full gap-2 sm:w-auto mb-xs:ml-auto mb-xs:w-auto">
         <FormDateDisplay />
         <PreviewToggleButton />
-      </nav>
-    </header>
+      </div>
+    </div>
   );
 }
 

@@ -29,7 +29,7 @@ export interface PreviewPanelState {
 }
 
 export const initialPreviewPanelState: PreviewPanelState = {
-  // 미리보기 패널 기본 상태
+  // 미리보기 패널 기본 상태 - 모바일/데스크탑 모두 비활성화로 시작
   isPreviewPanelOpen: false,
 
   // 디바이스 관련 상태

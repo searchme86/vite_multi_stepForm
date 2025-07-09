@@ -17,13 +17,11 @@ import { StepNumber, renderStepComponent } from './types/stepTypes';
 import { usePreviewPanelStore } from '../previewPanel/store/previewPanelStore';
 
 function MultiStepFormContainer(): React.ReactNode {
-  console.log('🏗️ [MULTI_STEP_FORM_CONTAINER] 컴포넌트 렌더링 시작');
-
-  const [bridgeDebugModeEnabled, setBridgeDebugModeEnabled] = useState(false);
+  const [bridgeDebugEnabled, setBridgeDebugEnabled] = useState(false);
   const lastLogTimeRef = useRef<number>(0);
   const logIntervalRef = useRef<number>();
 
-  // 기존 멀티스텝 폼 상태 (showPreview, togglePreview 제외)
+  // 기존 멀티스텝 폼 상태 (showPreview 제외)
   const {
     methods,
     handleSubmit,
@@ -36,46 +34,32 @@ function MultiStepFormContainer(): React.ReactNode {
     updateFormValue,
   } = useMultiStepFormState();
 
-  // Zustand에서 미리보기 패널 상태 구독 (디버깅 로그 추가)
-  const previewPanelOpenStatus = usePreviewPanelStore((state) => {
-    console.log(
-      '🔍 [MULTI_STEP_FORM_CONTAINER] Zustand 상태 구독 - isPreviewPanelOpen:',
-      state.isPreviewPanelOpen
-    );
-    return state.isPreviewPanelOpen;
-  });
+  // Zustand에서 미리보기 패널 상태 구독 (개별 구독으로 최적화)
+  const isPreviewPanelOpen = usePreviewPanelStore(
+    (state) => state.isPreviewPanelOpen
+  );
+  const togglePreviewPanel = usePreviewPanelStore(
+    (state) => state.togglePreviewPanel
+  );
 
-  // 폼 데이터 가져오기 (구조분해할당 사용)
+  // 폼 데이터 가져오기
   const currentFormValues = methods.getValues();
-  const { editorCompletedContent = '', isEditorCompleted = false } =
-    currentFormValues;
+  const editorCompletedContent = currentFormValues.editorCompletedContent || '';
+  const isEditorCompleted = currentFormValues.isEditorCompleted || false;
 
-  console.log('📊 [MULTI_STEP_FORM_CONTAINER] 현재 폼 상태:', {
-    currentStep,
-    progressWidth,
-    previewPanelOpenStatus,
-    editorCompletedContent: editorCompletedContent.length > 0 ? '있음' : '없음',
-    isEditorCompleted,
-    renderTime: new Date().toLocaleTimeString(),
-  });
-
-  const setEditorCompletedStatus = useCallback(
-    (completedStatus: boolean) => {
-      console.log(
-        '✏️ [MULTI_STEP_FORM_CONTAINER] 에디터 완료 상태 설정:',
-        completedStatus
-      );
-      updateFormValue('isEditorCompleted', completedStatus);
+  const setEditorCompleted = useCallback(
+    (completed: boolean) => {
+      updateFormValue('isEditorCompleted', completed);
     },
     [updateFormValue]
   );
 
-  const bridgeConfigurationSettings = {
+  const bridgeConfig = {
     enableAutoTransfer: false,
     enableValidation: true,
     enableErrorRecovery: true,
     validationMode: 'lenient' as const,
-    debugMode: bridgeDebugModeEnabled,
+    debugMode: bridgeDebugEnabled,
   };
 
   const {
@@ -84,124 +68,104 @@ function MultiStepFormContainer(): React.ReactNode {
     transferErrors,
     transferWarnings,
     checkCanTransfer,
-  } = useBidirectionalBridge(bridgeConfigurationSettings);
+  } = useBidirectionalBridge(bridgeConfig);
 
-  const logWithThrottleControl = useCallback(
+  const logWithThrottle = useCallback(
     (message: string, data?: any) => {
-      const shouldSkipLogging = !bridgeDebugModeEnabled;
-      if (shouldSkipLogging) return;
+      if (!bridgeDebugEnabled) return;
 
-      const currentTime = Date.now();
-      const shouldLogWithThrottle =
-        currentTime - lastLogTimeRef.current > 10000;
-
-      if (shouldLogWithThrottle) {
+      const now = Date.now();
+      if (now - lastLogTimeRef.current > 10000) {
         console.log(message, data);
-        lastLogTimeRef.current = currentTime;
+        lastLogTimeRef.current = now;
       }
     },
-    [bridgeDebugModeEnabled]
+    [bridgeDebugEnabled]
   );
 
   useEffect(() => {
-    const handleKeyboardShortcut = (event: KeyboardEvent) => {
-      const isDebugShortcut =
-        event.ctrlKey && event.shiftKey && event.key === 'D';
-
-      if (isDebugShortcut) {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault();
-        setBridgeDebugModeEnabled((previousMode) => {
-          const newMode = !previousMode;
+        setBridgeDebugEnabled((prev) => {
+          const newMode = !prev;
           console.log(
-            `🔧 [MULTI_STEP_FORM_CONTAINER] 브릿지 디버그 모드: ${
-              newMode ? '활성화' : '비활성화'
-            }`
+            `🔧 [DEBUG] 브릿지 디버그 모드: ${newMode ? '활성화' : '비활성화'}`
           );
           return newMode;
         });
       }
     };
 
-    window.addEventListener('keydown', handleKeyboardShortcut);
-    return () => window.removeEventListener('keydown', handleKeyboardShortcut);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   useEffect(() => {
-    const shouldStartDebugLogging = bridgeDebugModeEnabled;
-
-    if (shouldStartDebugLogging) {
+    if (bridgeDebugEnabled) {
       logIntervalRef.current = setInterval(() => {
-        console.log('📈 [MULTI_STEP_FORM_CONTAINER] 브릿지 상태 요약', {
+        console.log('📈 [BRIDGE_SUMMARY] 브릿지 상태 요약', {
           isActive: checkCanTransfer(),
           lastUpdate: new Date().toLocaleTimeString(),
           status: isTransferInProgress ? 'transferring' : 'idle',
         });
       }, 30000);
     } else {
-      const shouldClearInterval = logIntervalRef.current;
-      if (shouldClearInterval) {
+      if (logIntervalRef.current) {
         clearInterval(logIntervalRef.current);
       }
     }
 
     return () => {
-      const shouldCleanupInterval = logIntervalRef.current;
-      if (shouldCleanupInterval) {
+      if (logIntervalRef.current) {
         clearInterval(logIntervalRef.current);
       }
     };
-  }, [bridgeDebugModeEnabled, checkCanTransfer, isTransferInProgress]);
+  }, [bridgeDebugEnabled, checkCanTransfer, isTransferInProgress]);
 
-  const shouldShowBridgeDebugInfo = bridgeDebugModeEnabled;
-  if (shouldShowBridgeDebugInfo) {
-    logWithThrottleControl(
-      '📊 [MULTI_STEP_FORM_CONTAINER] 멀티스텝 브릿지 실시간 상태',
-      {
-        transferStatus: isTransferInProgress ? 'active' : 'idle',
-        canTransfer: checkCanTransfer(),
-        errorCount: transferErrors?.length || 0,
-        warningCount: transferWarnings?.length || 0,
-        timestamp: new Date().toLocaleTimeString(),
-      }
-    );
+  if (bridgeDebugEnabled) {
+    logWithThrottle('📊 [BRIDGE_DEBUG] 멀티스텝 브릿지 실시간 상태', {
+      transferStatus: isTransferInProgress ? 'active' : 'idle',
+      canTransfer: checkCanTransfer(),
+      errorCount: transferErrors?.length || 0,
+      warningCount: transferWarnings?.length || 0,
+      timestamp: new Date().toLocaleTimeString(),
+    });
   }
 
-  const handleStepChangeNavigation = useCallback(
-    (targetStep: StepNumber) => {
-      console.log('🎯 [MULTI_STEP_FORM_CONTAINER] 스텝 변경 요청:', targetStep);
-      goToStep(targetStep);
+  const handleStepChange = React.useCallback(
+    (step: StepNumber) => {
+      goToStep(step);
     },
     [goToStep]
   );
 
-  const handleNextStepNavigation = useCallback(() => {
-    console.log('➡️ [MULTI_STEP_FORM_CONTAINER] 다음 스텝 이동 요청');
+  // Zustand 토글 함수 사용 (useCallback으로 메모이제이션)
+  const handlePreviewToggle = useCallback(() => {
+    togglePreviewPanel();
+  }, [togglePreviewPanel]);
+
+  const handleNextStep = React.useCallback(() => {
     goToNextStep();
   }, [goToNextStep]);
 
-  const handlePreviousStepNavigation = useCallback(() => {
-    console.log('⬅️ [MULTI_STEP_FORM_CONTAINER] 이전 스텝 이동 요청');
+  const handlePrevStep = React.useCallback(() => {
     goToPrevStep();
   }, [goToPrevStep]);
 
-  const handleBridgeDataReceivedFromTransfer = useCallback(
+  const handleBridgeDataReceived = useCallback(
     (transferredData: any) => {
-      const shouldShowDebugInfo = bridgeDebugModeEnabled;
-
-      if (shouldShowDebugInfo) {
-        console.group(
-          '📋 [MULTI_STEP_FORM_CONTAINER] 브릿지 데이터 수신 상세 분석'
-        );
-        console.log('📊 [MULTI_STEP_FORM_CONTAINER] 수신 데이터 기본 정보:', {
+      if (bridgeDebugEnabled) {
+        console.group('📋 [BRIDGE_DEBUG] 브릿지 데이터 수신 상세 분석');
+        console.log('📊 [BRIDGE_DEBUG] 수신 데이터 기본 정보:', {
           hasData: !!transferredData,
           dataType: typeof transferredData,
           dataKeys: transferredData ? Object.keys(transferredData) : [],
           timestamp: new Date().toISOString(),
         });
 
-        const hasTransferredData = !!transferredData;
-        if (hasTransferredData) {
-          console.log('📈 [MULTI_STEP_FORM_CONTAINER] 변환된 콘텐츠 정보:', {
+        if (transferredData) {
+          console.log('📈 [BRIDGE_DEBUG] 변환된 콘텐츠 정보:', {
             hasTransformedContent: !!transferredData.transformedContent,
             contentLength: transferredData.transformedContent?.length || 0,
             isCompleted: transferredData.transformedIsCompleted || false,
@@ -212,11 +176,9 @@ function MultiStepFormContainer(): React.ReactNode {
         console.groupEnd();
       }
 
-      const hasValidTransformedContent = transferredData?.transformedContent;
-      if (hasValidTransformedContent) {
-        const shouldShowUpdateInfo = bridgeDebugModeEnabled;
-        if (shouldShowUpdateInfo) {
-          console.log('🔄 [MULTI_STEP_FORM_CONTAINER] 폼 데이터 업데이트 시작');
+      if (transferredData?.transformedContent) {
+        if (bridgeDebugEnabled) {
+          console.log('🔄 [BRIDGE_DEBUG] 폼 데이터 업데이트 시작');
         }
 
         updateFormValue(
@@ -226,115 +188,91 @@ function MultiStepFormContainer(): React.ReactNode {
 
         const completionStatus =
           transferredData.transformedIsCompleted || false;
-        setEditorCompletedStatus(completionStatus);
+        setEditorCompleted(completionStatus);
 
-        const shouldGoToNextStep = transferredData.transformedIsCompleted;
-        if (shouldGoToNextStep) {
+        if (transferredData.transformedIsCompleted) {
           goToNextStep();
         }
-      } else {
-        const shouldShowWarning = bridgeDebugModeEnabled;
-        if (shouldShowWarning) {
-          console.warn(
-            '⚠️ [MULTI_STEP_FORM_CONTAINER] 수신된 데이터에 변환된 콘텐츠 없음'
-          );
-        }
+      } else if (bridgeDebugEnabled) {
+        console.warn('⚠️ [BRIDGE_DEBUG] 수신된 데이터에 변환된 콘텐츠 없음');
       }
     },
-    [
-      updateFormValue,
-      setEditorCompletedStatus,
-      goToNextStep,
-      bridgeDebugModeEnabled,
-    ]
+    [updateFormValue, setEditorCompleted, goToNextStep, bridgeDebugEnabled]
   );
 
-  const renderCurrentStepContent = useCallback(() => {
-    console.log(
-      '🎨 [MULTI_STEP_FORM_CONTAINER] 현재 스텝 콘텐츠 렌더링:',
-      currentStep
-    );
+  const renderCurrentStep = React.useCallback(() => {
     return renderStepComponent(currentStep);
   }, [currentStep]);
 
   useEffect(() => {
-    const hasSuccessfulTransferResult =
+    if (
       lastTransferResult?.operationSuccess &&
-      lastTransferResult.transferredData;
-    const hasFailedTransferResult =
-      lastTransferResult && !lastTransferResult.operationSuccess;
-
-    if (hasSuccessfulTransferResult) {
-      handleBridgeDataReceivedFromTransfer(lastTransferResult.transferredData);
-    } else if (hasFailedTransferResult) {
-      const shouldShowErrorInfo = bridgeDebugModeEnabled;
-      if (shouldShowErrorInfo) {
-        console.error(
-          '❌ [MULTI_STEP_FORM_CONTAINER] 브릿지 데이터 수신 실패:',
-          {
-            operationSuccess: lastTransferResult.operationSuccess,
-            errorCount: lastTransferResult.operationErrors.length,
-            errors: lastTransferResult.operationErrors,
-          }
-        );
-      }
+      lastTransferResult.transferredData
+    ) {
+      handleBridgeDataReceived(lastTransferResult.transferredData);
+    } else if (
+      lastTransferResult &&
+      !lastTransferResult.operationSuccess &&
+      bridgeDebugEnabled
+    ) {
+      console.error('❌ [BRIDGE_DEBUG] 브릿지 데이터 수신 실패:', {
+        operationSuccess: lastTransferResult.operationSuccess,
+        errorCount: lastTransferResult.operationErrors.length,
+        errors: lastTransferResult.operationErrors,
+      });
     }
-  }, [
-    lastTransferResult,
-    handleBridgeDataReceivedFromTransfer,
-    bridgeDebugModeEnabled,
-  ]);
+  }, [lastTransferResult, handleBridgeDataReceived, bridgeDebugEnabled]);
 
   useEffect(() => {
-    const hasCompletedEditorContent =
-      bridgeDebugModeEnabled && isEditorCompleted && editorCompletedContent;
-
-    if (hasCompletedEditorContent) {
+    if (bridgeDebugEnabled && isEditorCompleted && editorCompletedContent) {
       console.log(
-        '🎉 [MULTI_STEP_FORM_CONTAINER] 에디터 데이터 완전 수신 완료 - 멀티스텝 폼 준비됨'
+        '🎉 [BRIDGE_DEBUG] 에디터 데이터 완전 수신 완료 - 멀티스텝 폼 준비됨'
       );
     }
   }, [
     editorCompletedContent,
     isEditorCompleted,
     currentStep,
-    bridgeDebugModeEnabled,
+    bridgeDebugEnabled,
   ]);
 
   return (
     <div className="mx-auto max-w-[1200px] sm:p-4 md:p-8 mb-xs:w-[300px] mb-sm:w-[350px] mb-md:w-[400px] mb-lg:w-[400px] mb-xl:w-[450px] tb:w-[1200px]">
-      {bridgeDebugModeEnabled && (
+      {bridgeDebugEnabled && (
         <div className="fixed z-50 px-3 py-1 text-sm text-yellow-700 bg-yellow-100 border border-yellow-400 rounded debug-indicator top-4 right-4">
           🔧 BRIDGE DEBUG MODE
         </div>
       )}
 
-      {/* Props 제거 완료 - 더 이상 showPreview, onTogglePreview 전달 불필요 */}
-      <FormHeaderContainer />
+      <FormHeaderContainer
+        showPreview={isPreviewPanelOpen}
+        onTogglePreview={handlePreviewToggle}
+      />
 
       <DesktopPreviewLayout>
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
+            {/* 멀티스텝폼의 버튼 헤더 부분 */}
             <StepNavigationWrapper
               currentStep={currentStep}
               progressWidth={progressWidth}
-              onStepChange={handleStepChangeNavigation}
+              onStepChange={handleStepChange}
             />
 
             <StepContentContainer currentStep={currentStep}>
-              {renderCurrentStepContent()}
+              {renderCurrentStep()}
             </StepContentContainer>
 
             <NavigationButtons
               currentStep={currentStep}
-              onNext={handleNextStepNavigation}
-              onPrev={handlePreviousStepNavigation}
+              onNext={handleNextStep}
+              onPrev={handlePrevStep}
             />
           </form>
         </FormProvider>
 
-        {/* 데스크탑 미리보기 - 조건부 렌더링 */}
-        {previewPanelOpenStatus && (
+        {/* 🎯 데스크탑 미리보기 - 조건부 렌더링 복구 */}
+        {isPreviewPanelOpen && (
           <div className="top-0 hidden md:block lg:sticky h-svh">
             <PreviewPanelContainer />
           </div>
@@ -346,7 +284,7 @@ function MultiStepFormContainer(): React.ReactNode {
         <PreviewPanelContainer />
       </div>
 
-      {bridgeDebugModeEnabled && (
+      {bridgeDebugEnabled && (
         <div className="fixed z-50 max-w-sm p-4 bg-gray-100 border border-gray-300 rounded debug-panel bottom-4 right-4">
           <h3 className="mb-2 text-sm font-semibold">🌉 Bridge Status</h3>
           <div className="space-y-1 text-xs">
@@ -386,15 +324,15 @@ function MultiStepFormContainer(): React.ReactNode {
               Preview Panel:{' '}
               <span
                 className={
-                  previewPanelOpenStatus ? 'text-green-600' : 'text-red-600'
+                  isPreviewPanelOpen ? 'text-green-600' : 'text-red-600'
                 }
               >
-                {previewPanelOpenStatus ? 'Open' : 'Closed'}
+                {isPreviewPanelOpen ? 'Open' : 'Closed'}
               </span>
             </div>
           </div>
           <button
-            onClick={() => setBridgeDebugModeEnabled(false)}
+            onClick={() => setBridgeDebugEnabled(false)}
             className="px-2 py-1 mt-2 text-xs bg-gray-200 rounded hover:bg-gray-300"
             type="button"
           >

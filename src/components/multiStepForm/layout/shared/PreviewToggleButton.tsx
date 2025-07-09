@@ -5,47 +5,21 @@ import { Icon } from '@iconify/react';
 import { usePreviewPanelStore } from '../../../previewPanel/store/previewPanelStore';
 
 function PreviewToggleButton() {
-  console.log('👁️ [PREVIEW_TOGGLE_BUTTON] 컴포넌트 렌더링 시작');
+  // Zustand에서 미리보기 패널 상태 직접 구독
+  const isPreviewPanelOpen = usePreviewPanelStore(
+    (state) => state.isPreviewPanelOpen
+  );
+  const togglePreviewPanel = usePreviewPanelStore(
+    (state) => state.togglePreviewPanel
+  );
 
-  // Zustand에서 직접 상태 구독 - props 제거
-  const previewPanelOpenStatus = usePreviewPanelStore((state) => {
-    console.log(
-      '🔍 [PREVIEW_TOGGLE_BUTTON] Zustand 상태 구독 - isPreviewPanelOpen:',
-      state.isPreviewPanelOpen
-    );
-    return state.isPreviewPanelOpen;
+  console.log('👁️ PreviewToggleButton: 프리뷰 토글 버튼 렌더링', {
+    isPreviewPanelOpen,
   });
 
-  const togglePreviewPanelAction = usePreviewPanelStore((state) => {
-    console.log(
-      '🔍 [PREVIEW_TOGGLE_BUTTON] Zustand 액션 구독 - togglePreviewPanel 함수 가져옴'
-    );
-    return state.togglePreviewPanel;
-  });
-
-  // 버튼 텍스트 계산 (삼항연산자 사용)
-  const buttonText = previewPanelOpenStatus
-    ? '미리보기 숨기기'
-    : '미리보기 보기';
-  const iconName = previewPanelOpenStatus ? 'lucide:eye-off' : 'lucide:eye';
-
-  console.log('📊 [PREVIEW_TOGGLE_BUTTON] 렌더링 상태:', {
-    previewPanelOpenStatus,
-    buttonText,
-    iconName,
-    renderTime: new Date().toLocaleTimeString(),
-  });
-
-  const handleToggleButtonClick = () => {
-    console.group('🖱️ [PREVIEW_TOGGLE_BUTTON] 버튼 클릭 이벤트');
-    console.log('클릭 시 현재 상태:', previewPanelOpenStatus);
-    console.log('클릭 후 예상 상태:', !previewPanelOpenStatus);
-    console.log('togglePreviewPanel 액션 호출 시작');
-
-    togglePreviewPanelAction();
-
-    console.log('togglePreviewPanel 액션 호출 완료');
-    console.groupEnd();
+  const handleTogglePreview = () => {
+    console.log('🔄 PreviewToggleButton: 미리보기 토글 실행');
+    togglePreviewPanel();
   };
 
   return (
@@ -55,13 +29,14 @@ function PreviewToggleButton() {
         variant="flat"
         size="sm"
         fullWidth
-        startContent={<Icon icon={iconName} />}
-        onPress={handleToggleButtonClick}
+        startContent={
+          <Icon icon={isPreviewPanelOpen ? 'lucide:eye-off' : 'lucide:eye'} />
+        }
+        onPress={handleTogglePreview}
         className="whitespace-nowrap"
         type="button"
-        aria-label={buttonText}
       >
-        {buttonText}
+        {isPreviewPanelOpen ? '미리보기 숨기기' : '미리보기 보기'}
       </Button>
     </div>
   );

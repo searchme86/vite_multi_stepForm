@@ -17,7 +17,7 @@ function PreviewPanelContainer(): ReactNode {
   // 모바일 감지 훅
   const { isMobile } = useMobileDetection();
 
-  // Zustand 상태들을 개별적으로 구독 (shallow 비교 사용)
+  // Zustand 상태들을 개별적으로 구독
   const isPreviewPanelOpen = usePreviewPanelStore(
     (state) => state.isPreviewPanelOpen
   );
@@ -32,6 +32,9 @@ function PreviewPanelContainer(): ReactNode {
     (state) => state.isDesktopModalOpen
   );
   const deviceType = usePreviewPanelStore((state) => state.deviceType);
+  const touchStartY = usePreviewPanelStore((state) => state.touchStartY);
+  const touchCurrentY = usePreviewPanelStore((state) => state.touchCurrentY);
+  const isDragging = usePreviewPanelStore((state) => state.isDragging);
 
   // Zustand 액션들을 개별적으로 구독
   const zustandSetSelectedMobileSize = usePreviewPanelStore(
@@ -62,6 +65,9 @@ function PreviewPanelContainer(): ReactNode {
   const closeDesktopModal = usePreviewPanelStore(
     (state) => state.closeDesktopModal
   );
+  const closePreviewPanel = usePreviewPanelStore(
+    (state) => state.closePreviewPanel
+  );
   const setTouchStartY = usePreviewPanelStore((state) => state.setTouchStartY);
   const setTouchCurrentY = usePreviewPanelStore(
     (state) => state.setTouchCurrentY
@@ -80,14 +86,14 @@ function PreviewPanelContainer(): ReactNode {
       if (isValidSize) {
         zustandSetSelectedMobileSize(size as 'xs' | 'sm' | 'md' | 'lg' | 'xl');
       } else {
-        console.warn('Invalid mobile size:', size);
-        zustandSetSelectedMobileSize('md'); // fallback to default
+        console.warn('⚠️ 유효하지 않은 모바일 사이즈:', size);
+        zustandSetSelectedMobileSize('md');
       }
     },
     [zustandSetSelectedMobileSize]
   );
 
-  // 디바이스 타입 자동 감지 및 설정 (메모이제이션으로 최적화)
+  // 디바이스 타입 자동 감지 및 설정
   useEffect(() => {
     const newDeviceType = isMobile ? 'mobile' : 'desktop';
     if (deviceType !== newDeviceType) {
@@ -95,7 +101,7 @@ function PreviewPanelContainer(): ReactNode {
     }
   }, [isMobile, deviceType, setDeviceType]);
 
-  // 스토어 데이터 훅 (기존 폼 데이터용) - fallback 처리 추가
+  // 스토어 데이터 훅 - fallback 처리 추가
   const storeData = useStoreData();
   const {
     formData: rawFormData,
@@ -129,17 +135,6 @@ function PreviewPanelContainer(): ReactNode {
     }
     return rawFormData;
   }, [rawFormData]);
-
-  // localStorage 기능 - 직접 구현으로 최적화
-  useEffect(() => {
-    if (!isMobile || !isPreviewPanelOpen) return;
-
-    try {
-      localStorage.setItem('previewPanelOpen', 'true');
-    } catch (error) {
-      console.warn('localStorage 저장 실패:', error);
-    }
-  }, [isMobile, isPreviewPanelOpen]);
 
   // 데이터 변환 훅
   const transformedData = useDataTransformers({
@@ -263,11 +258,12 @@ function PreviewPanelContainer(): ReactNode {
     return Array.isArray(formData.sliderImages) ? formData.sliderImages : [];
   }, [formData.sliderImages]);
 
-  // 계산된 값들 (getter 함수 대신 직접 계산)
-  const shouldShowMobileOverlay = useMemo(() => {
-    return isMobile && isPreviewPanelOpen;
-  }, [isMobile, isPreviewPanelOpen]);
+  // 패널 표시 상태 계산 - 모바일과 데스크탑 모두 isPreviewPanelOpen 상태 기반
+  const shouldShowPanel = useMemo(() => {
+    return isPreviewPanelOpen;
+  }, [isPreviewPanelOpen]);
 
+  // 패널 변환 클래스 계산
   const panelTransformClass = useMemo(() => {
     if (isMobile && !isPreviewPanelOpen) {
       return 'translate-y-full';
@@ -275,7 +271,23 @@ function PreviewPanelContainer(): ReactNode {
     return 'translate-y-0';
   }, [isMobile, isPreviewPanelOpen]);
 
-  // 터치 핸들러 함수들 (useCallback으로 메모이제이션)
+  // 드래그 다운 감지 및 패널 닫기 로직
+  const calculateDragDistance = useCallback(() => {
+    if (!isDragging || touchStartY === 0) return 0;
+
+    const dragDistance = touchCurrentY - touchStartY;
+    return dragDistance;
+  }, [isDragging, touchStartY, touchCurrentY]);
+
+  const shouldCloseOnDragDown = useCallback(() => {
+    const dragDistance = calculateDragDistance();
+    const minimumDragDistance = 50; // 50px 이상 드래그해야 닫힘
+    const isDragDown = dragDistance > minimumDragDistance;
+
+    return isDragDown;
+  }, [calculateDragDistance]);
+
+  // 터치 핸들러 함수들 - 드래그 다운 시 패널 닫기 기능 추가
   const handleTouchStart = useCallback(
     (event: React.TouchEvent) => {
       if (!isMobile) return;
@@ -292,7 +304,7 @@ function PreviewPanelContainer(): ReactNode {
 
   const handleTouchMove = useCallback(
     (event: React.TouchEvent) => {
-      if (!isMobile) return;
+      if (!isMobile || !isDragging) return;
 
       const touch = event.touches[0];
       if (!touch) return;
@@ -300,160 +312,250 @@ function PreviewPanelContainer(): ReactNode {
       const currentY = touch.clientY;
       setTouchCurrentY(currentY);
     },
-    [isMobile, setTouchCurrentY]
+    [isMobile, isDragging, setTouchCurrentY]
   );
 
   const handleTouchEnd = useCallback(() => {
     if (!isMobile) return;
 
+    // 드래그 다운 시 패널 닫기 확인
+    const shouldClose = shouldCloseOnDragDown();
+
+    if (shouldClose) {
+      closePreviewPanel();
+    }
+
     resetTouchState();
-  }, [isMobile, resetTouchState]);
+  }, [isMobile, shouldCloseOnDragDown, closePreviewPanel, resetTouchState]);
+
+  // 마우스 드래그 핸들러 - 데스크탑용
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      if (isMobile) return;
+
+      const startY = event.clientY;
+      setTouchStartY(startY);
+      setIsDragging(true);
+    },
+    [isMobile, setTouchStartY, setIsDragging]
+  );
+
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      if (isMobile || !isDragging) return;
+
+      const currentY = event.clientY;
+      setTouchCurrentY(currentY);
+    },
+    [isMobile, isDragging, setTouchCurrentY]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (isMobile) return;
+
+    // 드래그 다운 시 패널 닫기 확인
+    const shouldClose = shouldCloseOnDragDown();
+
+    if (shouldClose) {
+      closePreviewPanel();
+    }
+
+    resetTouchState();
+  }, [isMobile, shouldCloseOnDragDown, closePreviewPanel, resetTouchState]);
+
+  // 헤더 클릭 시 패널 닫기 핸들러
+  const handleHeaderClickClose = useCallback(() => {
+    closePreviewPanel();
+  }, [closePreviewPanel]);
+
+  // 패널이 열려있지 않으면 렌더링하지 않음
+  if (!shouldShowPanel) {
+    return null;
+  }
 
   return (
-    <>
-      {/* 모바일 배경 오버레이 */}
-      {shouldShowMobileOverlay && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => {
-            handleBackgroundClick();
-          }}
-        />
+    <div
+      className={`
+        ${
+          isMobile
+            ? 'fixed bottom-0 left-0 right-0 bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-300 ease-in-out preview-panel-bottom-sheet rounded-t-3xl'
+            : 'relative preview-panel-desktop'
+        }
+        ${panelTransformClass}
+        ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
+      `}
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchMove={isMobile ? handleTouchMove : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      onMouseDown={!isMobile ? handleMouseDown : undefined}
+      onMouseMove={!isMobile ? handleMouseMove : undefined}
+      onMouseUp={!isMobile ? handleMouseUp : undefined}
+    >
+      {/* 모바일 헤더 - 드래그 및 클릭 핸들러 추가 */}
+      {isMobile && (
+        <div className="sticky top-0 z-10 bg-white rounded-t-3xl">
+          <div
+            className="flex justify-center pt-3 pb-2 cursor-pointer header-clickable"
+            onClick={handleHeaderClickClose}
+          >
+            <div className="w-12 h-1 transition-all bg-gray-300 rounded-full hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
+          </div>
+
+          <div
+            className="flex items-center justify-between p-4 transition-colors border-b cursor-pointer header-clickable"
+            onClick={handleHeaderClickClose}
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">미리보기</h2>
+              <span className="text-xs text-gray-400 opacity-75">
+                탭하여 닫기
+              </span>
+            </div>
+
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              onPress={() => {
+                console.log('❌ 닫기 버튼 클릭');
+                handleCloseButtonClick();
+              }}
+              aria-label="패널 닫기"
+              type="button"
+            >
+              <Icon icon="lucide:x" />
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* 메인 패널 */}
-      <div
-        className={`
-          ${
-            isMobile
-              ? 'fixed bottom-0 left-0 right-0 bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-300 ease-in-out preview-panel-bottom-sheet rounded-t-3xl'
-              : 'relative preview-panel-desktop'
-          }
-          ${panelTransformClass}
-          ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
-        `}
-        onTouchStart={isMobile ? handleTouchStart : undefined}
-        onTouchMove={isMobile ? handleTouchMove : undefined}
-        onTouchEnd={isMobile ? handleTouchEnd : undefined}
-      >
-        {/* 모바일 헤더 */}
-        {isMobile && (
-          <div className="sticky top-0 z-10 bg-white rounded-t-3xl">
-            <div
-              className="flex justify-center pt-3 pb-2 cursor-pointer header-clickable"
-              onClick={handleHeaderClick}
-            >
-              <div className="w-12 h-1 transition-all bg-gray-300 rounded-full hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
-            </div>
+      {/* 패널 내용 */}
+      <div className={isMobile ? 'p-4' : ''}>
+        {/* 상태 표시기 */}
+        <StatusIndicatorComponent
+          mainImage={currentFormValues.mainImage}
+          media={safeMedia}
+          sliderImages={safeSliderImages}
+          customGalleryViews={customGalleryViews}
+          editorStatusInfo={editorStatusInfo}
+          displayContent={displayContent}
+          isUsingFallbackImage={isUsingFallbackImage}
+        />
 
-            <div
-              className="flex items-center justify-between p-4 transition-colors border-b cursor-pointer header-clickable"
-              onClick={handleHeaderClick}
+        {/* 데스크탑 뷰 일 경우, 미리보기 섹션 상단 */}
+        {!isMobile && (
+          <div className="flex justify-end gap-2 mb-4">
+            <Button
+              color="secondary"
+              variant="flat"
+              size="sm"
+              onPress={openMobileModal}
+              startContent={<Icon icon="lucide:smartphone" />}
+              className="text-xs shadow-sm sm:text-sm"
+              type="button"
+              isDisabled={isMobileModalOpen}
             >
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold">미리보기</h2>
-                <span className="text-xs text-gray-400 opacity-75">
-                  탭하여 닫기
-                </span>
-              </div>
+              모바일뷰 보기
+            </Button>
 
-              <Button
-                isIconOnly
-                size="sm"
-                variant="light"
-                onPress={() => {
-                  handleCloseButtonClick();
-                }}
-                aria-label="패널 닫기"
-                type="button"
-              >
-                <Icon icon="lucide:x" />
-              </Button>
-            </div>
+            <Button
+              color="primary"
+              variant="flat"
+              size="sm"
+              onPress={openDesktopModal}
+              startContent={<Icon icon="lucide:monitor" />}
+              className="text-xs shadow-sm sm:text-sm"
+              type="button"
+              isDisabled={isDesktopModalOpen}
+            >
+              데스크탑뷰 보기
+            </Button>
           </div>
         )}
 
-        {/* 패널 내용 */}
-        <div className={isMobile ? 'p-4' : ''}>
-          {/* 상태 표시기 */}
-          <StatusIndicatorComponent
-            mainImage={currentFormValues.mainImage}
-            media={safeMedia}
-            sliderImages={safeSliderImages}
-            customGalleryViews={customGalleryViews}
-            editorStatusInfo={editorStatusInfo}
-            displayContent={displayContent}
-            isUsingFallbackImage={isUsingFallbackImage}
-          />
+        {/* 메인 콘텐츠 */}
+        <DesktopContentComponent
+          currentFormValues={currentFormValues}
+          displayContent={displayContent}
+          heroImage={heroImage}
+          tagArray={tagArray}
+          avatarProps={avatarProps}
+          swiperKey={swiperKey}
+          customGalleryViews={customGalleryViews}
+        />
 
-          {/* 데스크탑 뷰 일 경우, 미리보기 섹션 상단 */}
-          {!isMobile && (
-            <div className="flex justify-end gap-2 mb-4">
-              <Button
-                color="secondary"
-                variant="flat"
-                size="sm"
-                onPress={openMobileModal}
-                startContent={<Icon icon="lucide:smartphone" />}
-                className="text-xs shadow-sm sm:text-sm"
-                type="button"
-                isDisabled={isMobileModalOpen}
-              >
-                모바일뷰 보기
-              </Button>
+        {/* 모바일뷰 보기 모달 */}
+        {isMobileModalOpen && (
+          <Modal
+            isOpen={isMobileModalOpen}
+            onClose={closeMobileModal}
+            size="full"
+            scrollBehavior="inside"
+            hideCloseButton={false}
+            backdrop="blur"
+          >
+            <ModalContent>
+              {() => (
+                <ModalBody className="p-0">
+                  <div className="relative h-full">
+                    <Button
+                      isIconOnly
+                      color="default"
+                      variant="flat"
+                      size="sm"
+                      className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                      onPress={closeMobileModal}
+                      type="button"
+                    >
+                      <Icon icon="lucide:x" />
+                    </Button>
+                    <MobileContentComponent
+                      currentFormValues={currentFormValues}
+                      displayContent={displayContent}
+                      heroImage={heroImage}
+                      tagArray={tagArray}
+                      avatarProps={avatarProps}
+                      swiperKey={swiperKey}
+                      customGalleryViews={customGalleryViews}
+                      selectedMobileSize={selectedMobileSize}
+                      setSelectedMobileSize={setSelectedMobileSize}
+                      hasTabChanged={hasTabChanged}
+                      setHasTabChanged={setHasTabChanged}
+                    />
+                  </div>
+                </ModalBody>
+              )}
+            </ModalContent>
+          </Modal>
+        )}
 
-              <Button
-                color="primary"
-                variant="flat"
-                size="sm"
-                onPress={openDesktopModal}
-                startContent={<Icon icon="lucide:monitor" />}
-                className="text-xs shadow-sm sm:text-sm"
-                type="button"
-                isDisabled={isDesktopModalOpen}
-              >
-                데스크탑뷰 보기
-              </Button>
-            </div>
-          )}
-
-          {/* 메인 콘텐츠 */}
-          <DesktopContentComponent
-            currentFormValues={currentFormValues}
-            displayContent={displayContent}
-            heroImage={heroImage}
-            tagArray={tagArray}
-            avatarProps={avatarProps}
-            swiperKey={swiperKey}
-            customGalleryViews={customGalleryViews}
-          />
-
-          {/* 모바일뷰 보기 모달 */}
-          {isMobileModalOpen && (
-            <Modal
-              isOpen={isMobileModalOpen}
-              onClose={closeMobileModal}
-              size="full"
-              scrollBehavior="inside"
-              hideCloseButton={false}
-              backdrop="blur"
-            >
-              <ModalContent>
-                {() => (
-                  <ModalBody className="p-0">
-                    <div className="relative h-full">
-                      <Button
-                        isIconOnly
-                        color="default"
-                        variant="flat"
-                        size="sm"
-                        className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                        onPress={closeMobileModal}
-                        type="button"
-                      >
-                        <Icon icon="lucide:x" />
-                      </Button>
-                      <MobileContentComponent
+        {/* 데스크탑뷰 보기 모달 */}
+        {isDesktopModalOpen && (
+          <Modal
+            isOpen={isDesktopModalOpen}
+            onClose={closeDesktopModal}
+            size="full"
+            scrollBehavior="inside"
+            hideCloseButton={false}
+            backdrop="blur"
+          >
+            <ModalContent>
+              {() => (
+                <ModalBody className="p-0">
+                  <div className="relative">
+                    <Button
+                      isIconOnly
+                      color="default"
+                      variant="flat"
+                      size="sm"
+                      className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                      onPress={closeDesktopModal}
+                      type="button"
+                    >
+                      <Icon icon="lucide:x" />
+                    </Button>
+                    <div className="max-w-4xl mx-auto">
+                      <DesktopContentComponent
                         currentFormValues={currentFormValues}
                         displayContent={displayContent}
                         heroImage={heroImage}
@@ -461,63 +563,16 @@ function PreviewPanelContainer(): ReactNode {
                         avatarProps={avatarProps}
                         swiperKey={swiperKey}
                         customGalleryViews={customGalleryViews}
-                        selectedMobileSize={selectedMobileSize}
-                        setSelectedMobileSize={setSelectedMobileSize}
-                        hasTabChanged={hasTabChanged}
-                        setHasTabChanged={setHasTabChanged}
                       />
                     </div>
-                  </ModalBody>
-                )}
-              </ModalContent>
-            </Modal>
-          )}
-
-          {/* 데스크탑뷰 보기 모달 */}
-          {isDesktopModalOpen && (
-            <Modal
-              isOpen={isDesktopModalOpen}
-              onClose={closeDesktopModal}
-              size="full"
-              scrollBehavior="inside"
-              hideCloseButton={false}
-              backdrop="blur"
-            >
-              <ModalContent>
-                {() => (
-                  <ModalBody className="p-0">
-                    <div className="relative">
-                      <Button
-                        isIconOnly
-                        color="default"
-                        variant="flat"
-                        size="sm"
-                        className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                        onPress={closeDesktopModal}
-                        type="button"
-                      >
-                        <Icon icon="lucide:x" />
-                      </Button>
-                      <div className="max-w-4xl mx-auto">
-                        <DesktopContentComponent
-                          currentFormValues={currentFormValues}
-                          displayContent={displayContent}
-                          heroImage={heroImage}
-                          tagArray={tagArray}
-                          avatarProps={avatarProps}
-                          swiperKey={swiperKey}
-                          customGalleryViews={customGalleryViews}
-                        />
-                      </div>
-                    </div>
-                  </ModalBody>
-                )}
-              </ModalContent>
-            </Modal>
-          )}
-        </div>
+                  </div>
+                </ModalBody>
+              )}
+            </ModalContent>
+          </Modal>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 
