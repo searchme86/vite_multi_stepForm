@@ -3,13 +3,14 @@
 import React from 'react';
 import { Progress } from '@heroui/react';
 import { useImageUploadHandlers } from './hooks/useImageUploadHandlers';
+import { type MainImageHandlers } from './types/imageUploadTypes';
 import FileDropZone from './parts/FileDropZone';
 import FileSelectButton from './parts/FileSelectButton';
 import UploadedImageSection from './parts/UploadedImageSection';
 import MobileTip from './parts/MobileTip';
 
 function ImageUploadContainer(): React.ReactNode {
-  console.log('🚀 ImageUploadContainer 렌더링 시작:', {
+  console.log('🚀 ImageUploadContainer 렌더링 시작 - Phase3 메인이미지연결:', {
     timestamp: new Date().toLocaleTimeString(),
     componentName: 'ImageUploadContainer',
   });
@@ -33,9 +34,25 @@ function ImageUploadContainer(): React.ReactNode {
     currentMediaFilesList: uploadedMediaFileUrlList,
     currentSelectedFileNames: selectedFileNameList,
     isMobileDevice: isMobileUserAgent,
+
+    // ✅ Phase3: 메인 이미지 관련 핸들러들 구조분해할당
+    handleMainImageSet: handleMainImageSetAction,
+    handleMainImageCancel: handleMainImageCancelAction,
+    checkIsMainImage: checkIsMainImageFunction,
+    checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
   } = imageUploadHandlersHook;
 
-  console.log('📊 ImageUploadHandlers 훅 데이터 로드 완료:', {
+  // ✅ Phase3: 메인 이미지 핸들러 타입 체크 (TypeScript 에러 수정)
+  const isMainImageSetHandlerValid =
+    typeof handleMainImageSetAction === 'function';
+  const isMainImageCancelHandlerValid =
+    typeof handleMainImageCancelAction === 'function';
+  const isCheckIsMainHandlerValid =
+    typeof checkIsMainImageFunction === 'function';
+  const isCheckCanSetHandlerValid =
+    typeof checkCanSetAsMainImageFunction === 'function';
+
+  console.log('📊 ImageUploadHandlers 훅 데이터 로드 완료 - Phase3:', {
     uploadProgressMapSize: Object.keys(currentUploadProgressMap).length,
     uploadStatusMapSize: Object.keys(currentUploadStatusMap).length,
     isCurrentlyUploading,
@@ -44,6 +61,39 @@ function ImageUploadContainer(): React.ReactNode {
     isDuplicateMessageVisible: duplicateAlertMessageState.isVisible,
     uploadedMediaFileCount: uploadedMediaFileUrlList.length,
     isMobileUserAgent,
+    isMainImageSetHandlerValid,
+    isMainImageCancelHandlerValid,
+    isCheckIsMainHandlerValid,
+    isCheckCanSetHandlerValid,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  // ✅ Phase3: 메인 이미지 핸들러 객체 구성 (TypeScript 에러 수정)
+  const mainImageHandlersObject: MainImageHandlers | undefined =
+    isMainImageSetHandlerValid &&
+    isMainImageCancelHandlerValid &&
+    isCheckIsMainHandlerValid &&
+    isCheckCanSetHandlerValid
+      ? {
+          onMainImageSet: handleMainImageSetAction,
+          onMainImageCancel: handleMainImageCancelAction,
+          checkIsMainImage: checkIsMainImageFunction,
+          checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
+        }
+      : undefined;
+
+  const hasCompleteMainImageHandlers =
+    typeof mainImageHandlersObject === 'object' &&
+    mainImageHandlersObject !== null;
+
+  console.log('📊 메인 이미지 핸들러 객체 구성 완료 - Phase3:', {
+    hasCompleteMainImageHandlers,
+    handlersValidation: {
+      setHandlerValid: isMainImageSetHandlerValid,
+      cancelHandlerValid: isMainImageCancelHandlerValid,
+      checkIsMainHandlerValid: isCheckIsMainHandlerValid,
+      checkCanSetHandlerValid: isCheckCanSetHandlerValid,
+    },
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -150,10 +200,11 @@ function ImageUploadContainer(): React.ReactNode {
   };
 
   const renderUploadedImageManagementSection = () => {
-    console.log('🔄 renderUploadedImageManagementSection 호출:', {
+    console.log('🔄 renderUploadedImageManagementSection 호출 - Phase3:', {
       uploadedImageCount: uploadedMediaFileUrlList.length,
       selectedFileNameCount: selectedFileNameList.length,
       isMobileUserAgent,
+      hasCompleteMainImageHandlers,
     });
 
     return (
@@ -168,6 +219,8 @@ function ImageUploadContainer(): React.ReactNode {
         onDeleteConfirm={handleDeleteConfirmationSubmit}
         onDeleteCancel={handleDeleteCancellationAction}
         onImageTouch={handleImageTouchInteraction}
+        // ✅ Phase3: 메인 이미지 핸들러 전달
+        mainImageHandlers={mainImageHandlersObject}
       />
     );
   };
@@ -183,12 +236,13 @@ function ImageUploadContainer(): React.ReactNode {
     ) : null;
   };
 
-  console.log('🎨 ImageUploadContainer 최종 렌더링 준비:', {
+  console.log('🎨 ImageUploadContainer 최종 렌더링 준비 - Phase3:', {
     isCurrentlyUploading,
     uploadedImageCount: uploadedMediaFileUrlList.length,
     isMobileUserAgent,
     hasDeleteConfirm: deleteConfirmationModalState.isVisible,
     hasDuplicateMessage: duplicateAlertMessageState.isVisible,
+    hasCompleteMainImageHandlers,
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -203,7 +257,7 @@ function ImageUploadContainer(): React.ReactNode {
         <h2 id="image-upload-main-section-title">이미지 업로드 및 관리 섹션</h2>
         <p id="image-upload-main-section-description">
           드래그 앤 드롭 또는 파일 선택 버튼을 통해 이미지를 업로드하고 관리할
-          수 있습니다.
+          수 있습니다. 업로드된 이미지는 메인 이미지로 설정할 수 있습니다.
         </p>
       </header>
 

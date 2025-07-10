@@ -11,7 +11,7 @@ import ImageGalleryContainer from './imageGallery/ImageGalleryContainer';
 type ActiveSectionType = 'mainImage' | 'imageGallery' | 'imageSlider';
 
 function BlogMediaStepContainer(): React.ReactNode {
-  console.log('🚀 BlogMediaStepContainer 렌더링 시작:', {
+  console.log('🚀 BlogMediaStepContainer 렌더링 시작 - Phase3&4 최종완성:', {
     timestamp: new Date().toLocaleTimeString(),
     componentName: 'BlogMediaStepContainer',
   });
@@ -28,38 +28,16 @@ function BlogMediaStepContainer(): React.ReactNode {
     sliderImages: configuredSliderImageList,
   } = currentFormValuesData;
 
-  console.log('📊 BlogMediaStepState 데이터 로드 완료:', {
+  console.log('📊 BlogMediaStepState 데이터 로드 완료 - Phase3&4:', {
     uploadedMediaFileCount: uploadedMediaFileList.length,
     hasSelectedMainImage: selectedMainImageUrl ? true : false,
     configuredSliderImageCount: configuredSliderImageList.length,
     currentActiveSection: activeSectionType,
+    selectedMainImagePreview: selectedMainImageUrl
+      ? selectedMainImageUrl.slice(0, 30) + '...'
+      : 'none',
     timestamp: new Date().toLocaleTimeString(),
   });
-
-  const getMainImageIndexFromUrl = useCallback((): number => {
-    if (!selectedMainImageUrl) {
-      console.log('🔍 getMainImageIndexFromUrl: 메인 이미지 URL 없음');
-      return -1;
-    }
-
-    const foundImageIndex = uploadedMediaFileList.indexOf(selectedMainImageUrl);
-    console.log('🔍 getMainImageIndexFromUrl 결과:', {
-      selectedMainImageUrl: selectedMainImageUrl.slice(0, 30) + '...',
-      foundImageIndex,
-    });
-
-    return foundImageIndex;
-  }, [selectedMainImageUrl, uploadedMediaFileList]);
-
-  const getMainImageUrlValue = useCallback((): string => {
-    const mainImageUrl = selectedMainImageUrl || '';
-    console.log('🔍 getMainImageUrlValue:', {
-      hasMainImage: mainImageUrl ? true : false,
-      urlPreview: mainImageUrl ? mainImageUrl.slice(0, 30) + '...' : 'empty',
-    });
-
-    return mainImageUrl;
-  }, [selectedMainImageUrl]);
 
   const checkShouldShowImageManagementSections = useCallback((): boolean => {
     const { length: mediaFileCount } = uploadedMediaFileList;
@@ -91,7 +69,7 @@ function BlogMediaStepContainer(): React.ReactNode {
   );
 
   const renderDragAndDropUploadSection = () => {
-    console.log('🔄 renderDragAndDropUploadSection 호출');
+    console.log('🔄 renderDragAndDropUploadSection 호출 - Phase3&4');
 
     return (
       <section
@@ -99,9 +77,13 @@ function BlogMediaStepContainer(): React.ReactNode {
         aria-labelledby="upload-section-title"
         className="mb-6"
       >
-        <div className="sr-only">
+        <header className="sr-only">
           <h2 id="upload-section-title">미디어 파일 업로드</h2>
-        </div>
+          <p>
+            이미지를 업로드하고 메인 이미지로 설정할 수 있습니다. 업로드된
+            이미지에 마우스를 올리면 메인 이미지 설정 버튼이 나타납니다.
+          </p>
+        </header>
         <ImageUploadContainer />
       </section>
     );
@@ -250,7 +232,7 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderActiveMainContent = () => {
-    console.log('🔄 renderActiveMainContent 호출:', {
+    console.log('🔄 renderActiveMainContent 호출 - Phase3&4:', {
       activeSectionType,
       hasImages: checkShouldShowImageManagementSections(),
     });
@@ -269,6 +251,7 @@ function BlogMediaStepContainer(): React.ReactNode {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -283,13 +266,15 @@ function BlogMediaStepContainer(): React.ReactNode {
             </h3>
             <p className="text-gray-600">
               먼저 이미지를 업로드하면 메인 이미지, 갤러리, 슬라이더를 설정할 수
-              있습니다.
+              있습니다. 업로드된 이미지에 마우스를 올리면 🏠 버튼으로 메인
+              이미지를 설정할 수 있습니다.
             </p>
           </div>
         </div>
       );
     }
 
+    // ✅ Phase3&4: MainImageContainer 사용 방식 변경 (단순 미리보기 섹션)
     const contentComponentMap = {
       mainImage: (
         <div className="space-y-6">
@@ -298,13 +283,13 @@ function BlogMediaStepContainer(): React.ReactNode {
               메인 이미지 관리
             </h2>
             <p className="text-gray-600">
-              블로그 대표 이미지를 설정하고 관리해주세요.
+              현재 설정된 메인 이미지를 확인하고 관리할 수 있습니다. 상단 업로드
+              영역에서 이미지에 마우스를 올리고 🏠 버튼을 클릭하여 메인 이미지를
+              변경할 수 있습니다.
             </p>
           </header>
-          <MainImageContainer
-            imageUrl={getMainImageUrlValue()}
-            imageIndex={getMainImageIndexFromUrl()}
-          />
+          {/* ✅ Phase3&4: MainImageContainer를 미리보기 전용으로 사용 */}
+          <MainImageContainer />
         </div>
       ),
       imageGallery: (
@@ -319,9 +304,10 @@ function BlogMediaStepContainer(): React.ReactNode {
 
     const selectedContent = contentComponentMap[activeSectionType];
 
-    console.log('✅ renderActiveMainContent 컴포넌트 선택 완료:', {
+    console.log('✅ renderActiveMainContent 컴포넌트 선택 완료 - Phase3&4:', {
       activeSectionType,
       hasSelectedContent: selectedContent ? true : false,
+      renderingMainImageAsPreview: activeSectionType === 'mainImage',
     });
 
     return <main className="flex-1 p-6">{selectedContent}</main>;
@@ -329,12 +315,15 @@ function BlogMediaStepContainer(): React.ReactNode {
 
   const shouldShowManagementSections = checkShouldShowImageManagementSections();
 
-  console.log('🎨 BlogMediaStepContainer 최종 렌더링 준비:', {
+  console.log('🎨 BlogMediaStepContainer 최종 렌더링 준비 - Phase3&4 완성:', {
     shouldShowManagementSections,
     activeSectionType,
     uploadedImageCount: uploadedMediaFileList.length,
     hasMainImage: selectedMainImageUrl ? true : false,
     sliderImageCount: configuredSliderImageList.length,
+    selectedMainImagePreview: selectedMainImageUrl
+      ? selectedMainImageUrl.slice(0, 30) + '...'
+      : 'none',
     timestamp: new Date().toLocaleTimeString(),
   });
 

@@ -1,7 +1,7 @@
 // blogMediaStep/mainImage/hooks/useMainImageValidation.ts
 
 import { useCallback, useMemo } from 'react';
-import { useBlogMediaStepIntegration } from '../../hooks/useBlogMediaStepIntegration';
+import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
 
 interface MainImageValidationResult {
   validateMainImageSelection: (imageUrl: string) => {
@@ -18,102 +18,167 @@ interface MainImageValidationResult {
 }
 
 export const useMainImageValidation = (): MainImageValidationResult => {
-  console.log('🔧 useMainImageValidation 훅 초기화');
+  console.log('🔧 useMainImageValidation 훅 초기화 - Phase1 데이터흐름통일');
 
-  const { currentFormValues } = useBlogMediaStepIntegration();
-  const { media: mediaFiles, mainImage, sliderImages } = currentFormValues;
+  const { formValues: currentFormValues } = useBlogMediaStepState();
+  const {
+    media: mediaFilesList,
+    mainImage: currentMainImageUrl,
+    sliderImages: sliderImagesList,
+  } = currentFormValues;
 
   const validateMainImageSelection = useCallback(
     (imageUrl: string) => {
+      const imageUrlPreview = imageUrl.slice(0, 30) + '...';
+
       console.log('🔧 validateMainImageSelection 호출:', {
-        imageUrl: imageUrl.slice(0, 30) + '...',
+        imageUrlPreview,
+        timestamp: new Date().toLocaleTimeString(),
       });
 
-      if (!mediaFiles.includes(imageUrl)) {
+      const isImageInMediaList = mediaFilesList.includes(imageUrl);
+      if (!isImageInMediaList) {
         const result = {
           isValid: false,
           message: '선택한 이미지가 미디어 목록에 없습니다.',
         };
-        console.log('❌ 메인 이미지 검증 실패 - 미디어 목록에 없음:', result);
+        console.log('❌ 메인 이미지 검증 실패 - 미디어 목록에 없음:', {
+          imageUrlPreview,
+          result,
+        });
         return result;
       }
 
-      if (mainImage === imageUrl) {
+      const isAlreadyMainImage = currentMainImageUrl === imageUrl;
+      if (isAlreadyMainImage) {
         const result = {
           isValid: false,
           message: '이미 메인 이미지로 설정되어 있습니다.',
         };
-        console.log('⚠️ 메인 이미지 검증 - 이미 설정됨:', result);
+        console.log('⚠️ 메인 이미지 검증 - 이미 설정됨:', {
+          imageUrlPreview,
+          result,
+        });
         return result;
       }
 
-      if (sliderImages.includes(imageUrl)) {
-        console.log('⚠️ 슬라이더에 포함된 이미지를 메인으로 설정하려고 함');
+      const isInSliderImages = sliderImagesList.includes(imageUrl);
+      if (isInSliderImages) {
+        console.log('⚠️ 슬라이더에 포함된 이미지를 메인으로 설정하려고 함:', {
+          imageUrlPreview,
+        });
       }
 
       const result = { isValid: true };
-      console.log('✅ 메인 이미지 검증 성공:', result);
+      console.log('✅ 메인 이미지 검증 성공:', {
+        imageUrlPreview,
+        result,
+      });
       return result;
     },
-    [mediaFiles, mainImage, sliderImages]
+    [mediaFilesList, currentMainImageUrl, sliderImagesList]
   );
 
   const canSetAsMainImage = useCallback(
     (imageUrl: string): boolean => {
+      const imageUrlPreview = imageUrl.slice(0, 30) + '...';
+
       console.log('🔧 canSetAsMainImage 호출:', {
-        imageUrl: imageUrl.slice(0, 30) + '...',
+        imageUrlPreview,
+        timestamp: new Date().toLocaleTimeString(),
       });
 
-      const canSet = mediaFiles.includes(imageUrl) && mainImage !== imageUrl;
-      console.log('✅ canSetAsMainImage 결과:', { canSet });
-      return canSet;
+      const isInMediaList = mediaFilesList.includes(imageUrl);
+      const isNotCurrentMain = currentMainImageUrl !== imageUrl;
+      const canSetImage = isInMediaList && isNotCurrentMain;
+
+      console.log('✅ canSetAsMainImage 결과:', {
+        imageUrlPreview,
+        isInMediaList,
+        isNotCurrentMain,
+        canSetImage,
+      });
+
+      return canSetImage;
     },
-    [mediaFiles, mainImage]
+    [mediaFilesList, currentMainImageUrl]
   );
 
   const getMainImageValidationStatus = useCallback(() => {
     console.log('🔧 getMainImageValidationStatus 호출');
 
-    const hasMainImage = !!mainImage;
-    const isValidMainImage = hasMainImage
-      ? mediaFiles.includes(mainImage)
-      : true;
-    const issues: string[] = [];
+    const hasMainImage = currentMainImageUrl ? true : false;
+    const isValidMainImage =
+      hasMainImage && currentMainImageUrl
+        ? mediaFilesList.includes(currentMainImageUrl)
+        : true;
+    const issuesList: string[] = [];
 
-    if (hasMainImage && !isValidMainImage) {
-      issues.push('메인 이미지가 미디어 목록에 없습니다.');
+    if (hasMainImage && currentMainImageUrl && !isValidMainImage) {
+      issuesList.push('메인 이미지가 미디어 목록에 없습니다.');
     }
 
-    if (hasMainImage && sliderImages.includes(mainImage)) {
-      issues.push('메인 이미지가 슬라이더에도 포함되어 있습니다.');
+    const isMainImageInSlider =
+      hasMainImage &&
+      currentMainImageUrl &&
+      sliderImagesList.includes(currentMainImageUrl);
+    if (isMainImageInSlider) {
+      issuesList.push('메인 이미지가 슬라이더에도 포함되어 있습니다.');
     }
 
-    const status = { hasMainImage, isValidMainImage, issues };
-    console.log('✅ getMainImageValidationStatus 결과:', status);
-    return status;
-  }, [mainImage, mediaFiles, sliderImages]);
+    const validationStatus = {
+      hasMainImage,
+      isValidMainImage,
+      issues: issuesList,
+    };
+
+    console.log('✅ getMainImageValidationStatus 결과:', {
+      validationStatus,
+      currentMainImagePreview:
+        hasMainImage && currentMainImageUrl
+          ? currentMainImageUrl.slice(0, 30) + '...'
+          : 'none',
+    });
+
+    return validationStatus;
+  }, [currentMainImageUrl, mediaFilesList, sliderImagesList]);
 
   const isMainImageInMediaList = useCallback((): boolean => {
-    if (!mainImage) {
+    const hasMainImage = currentMainImageUrl ? true : false;
+
+    if (!hasMainImage || !currentMainImageUrl) {
       console.log('🔧 isMainImageInMediaList - 메인 이미지 없음');
       return true;
     }
 
-    const isInList = mediaFiles.includes(mainImage);
-    console.log('🔧 isMainImageInMediaList:', { isInList });
+    const isInList = mediaFilesList.includes(currentMainImageUrl);
+    console.log('🔧 isMainImageInMediaList:', {
+      isInList,
+      currentMainImagePreview: currentMainImageUrl.slice(0, 30) + '...',
+    });
     return isInList;
-  }, [mainImage, mediaFiles]);
+  }, [currentMainImageUrl, mediaFilesList]);
 
-  const validationSummary = useMemo(() => {
+  const validationSummaryData = useMemo(() => {
+    const hasMainImage = currentMainImageUrl ? true : false;
+    const mainImageCount = hasMainImage ? 1 : 0;
+    const isMainImageValid =
+      hasMainImage && currentMainImageUrl
+        ? mediaFilesList.includes(currentMainImageUrl)
+        : true;
+
     return {
-      hasMainImage: !!mainImage,
-      mainImageCount: mainImage ? 1 : 0,
-      mediaCount: mediaFiles.length,
-      isMainImageValid: !mainImage || mediaFiles.includes(mainImage),
+      hasMainImage,
+      mainImageCount,
+      mediaCount: mediaFilesList.length,
+      isMainImageValid,
     };
-  }, [mainImage, mediaFiles]);
+  }, [currentMainImageUrl, mediaFilesList]);
 
-  console.log('✅ useMainImageValidation 초기화 완료:', validationSummary);
+  console.log('✅ useMainImageValidation 초기화 완료 - Phase1:', {
+    validationSummary: validationSummaryData,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   return {
     validateMainImageSelection,

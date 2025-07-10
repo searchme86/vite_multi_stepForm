@@ -2,6 +2,8 @@
 
 import { useRef, useCallback } from 'react';
 import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
+import { useMainImageManagement } from '../../mainImage/hooks/useMainImageManagement';
+import { useMainImageValidation } from '../../mainImage/hooks/useMainImageValidation';
 import { useFileUploadState } from './useFileUploadState';
 import { useDuplicateFileHandler } from './useDuplicateFileHandler';
 import { useDeleteConfirmation } from './useDeleteConfirmation';
@@ -24,17 +26,86 @@ export const useImageUploadHandlers = () => {
 
   const fileSelectButtonRef = useRef<any>(null);
 
-  console.log('🔧 [MAIN_HANDLERS] useImageUploadHandlers 초기화:', {
+  console.log('🔧 [MAIN_HANDLERS] useImageUploadHandlers 초기화 - Phase1과2:', {
     currentMediaFilesCount: currentMediaFilesList.length,
     currentSelectedFileNamesCount: currentSelectedFileNames.length,
     isMobileDevice,
     timestamp: new Date().toLocaleTimeString(),
   });
 
+  // ✅ Phase1: 메인 이미지 관리 로직 추가
+  const mainImageManagementHook = useMainImageManagement();
+  const mainImageValidationHook = useMainImageValidation();
+
+  const {
+    setAsMainImageDirect: setImageAsMainImageDirectly,
+    cancelMainImage: cancelCurrentMainImage,
+    isMainImage: checkIsMainImageFunction,
+  } = mainImageManagementHook;
+
+  const {
+    canSetAsMainImage: checkCanSetAsMainImageFunction,
+    validateMainImageSelection: validateMainImageSelectionFunction,
+  } = mainImageValidationHook;
+
   const uploadState = useFileUploadState();
   const duplicateHandler = useDuplicateFileHandler();
   const mobileTouchState = useMobileTouchState(isMobileDevice);
 
+  // ✅ Phase2: 메인 이미지 설정 핸들러 추가
+  const handleMainImageSet = useCallback(
+    (imageIndex: number, imageUrl: string) => {
+      const imageUrlPreview = imageUrl.slice(0, 30) + '...';
+
+      console.log('🏠 [MAIN_IMAGE_SET] 메인 이미지 설정 핸들러 호출:', {
+        imageIndex,
+        imageUrlPreview,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      const validationResult = validateMainImageSelectionFunction(imageUrl);
+      const { isValid: isValidSelection, message: validationMessage } =
+        validationResult;
+
+      if (!isValidSelection) {
+        console.log('❌ [MAIN_IMAGE_SET] 메인 이미지 설정 불가능:', {
+          imageIndex,
+          imageUrlPreview,
+          validationMessage,
+        });
+
+        showToastMessage({
+          title: '메인 이미지 설정 불가',
+          description: validationMessage ?? '메인 이미지로 설정할 수 없습니다.',
+          color: 'warning',
+        });
+        return;
+      }
+
+      setImageAsMainImageDirectly(imageIndex);
+
+      console.log('✅ [MAIN_IMAGE_SET] 메인 이미지 설정 완료:', {
+        imageIndex,
+        imageUrlPreview,
+      });
+    },
+    [
+      validateMainImageSelectionFunction,
+      setImageAsMainImageDirectly,
+      showToastMessage,
+    ]
+  );
+
+  // ✅ Phase2: 메인 이미지 해제 핸들러 추가
+  const handleMainImageCancel = useCallback(() => {
+    console.log('❌ [MAIN_IMAGE_CANCEL] 메인 이미지 해제 핸들러 호출');
+
+    cancelCurrentMainImage();
+
+    console.log('✅ [MAIN_IMAGE_CANCEL] 메인 이미지 해제 완료');
+  }, [cancelCurrentMainImage]);
+
+  // ✅ 기존 삭제 액션 핸들러
   const handleDeleteAction = useCallback(
     (imageIndex: number, imageName: string) => {
       console.log('✅ [DELETE_ACTION] 실제 삭제 처리:', {
@@ -129,8 +200,18 @@ export const useImageUploadHandlers = () => {
     }
   }, [uploadState.hasActiveUploads, showToastMessage]);
 
+  console.log(
+    '✅ [MAIN_HANDLERS] useImageUploadHandlers 초기화 완료 - Phase1과2:',
+    {
+      hasMainImageManagement: mainImageManagementHook ? true : false,
+      hasMainImageValidation: mainImageValidationHook ? true : false,
+      uploadingCount: Object.keys(uploadState.uploading).length,
+      timestamp: new Date().toLocaleTimeString(),
+    }
+  );
+
   return {
-    // 상태들
+    // 기존 상태들
     uploading: uploadState.uploading,
     uploadStatus: uploadState.uploadStatus,
     hasActiveUploads: uploadState.hasActiveUploads,
@@ -141,7 +222,7 @@ export const useImageUploadHandlers = () => {
     // Refs
     fileSelectButtonRef,
 
-    // 핸들러들
+    // 기존 핸들러들
     handleFiles: fileProcessing.processFiles,
     handleFilesDropped: fileProcessing.handleFilesDropped,
     handleFileSelectClick,
@@ -150,6 +231,14 @@ export const useImageUploadHandlers = () => {
     handleDeleteConfirm: deleteConfirmation.confirmDelete,
     handleDeleteCancel: deleteConfirmation.cancelDelete,
     handleImageTouch: mobileTouchState.handleImageTouch,
+
+    // ✅ Phase2: 새로 추가된 메인 이미지 관리 핸들러들
+    handleMainImageSet,
+    handleMainImageCancel,
+
+    // ✅ Phase2: 메인 이미지 상태 체크 함수들
+    checkIsMainImage: checkIsMainImageFunction,
+    checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
 
     // 기타 상태
     currentMediaFilesList,

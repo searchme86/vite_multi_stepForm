@@ -29,7 +29,8 @@ function MainImageIndicator({
   const getPositionClasses = () => {
     switch (position) {
       case 'top-left':
-        return '-top-1 -left-1';
+        // ✅ 왕관: 숫자 카운팅과 동일한 위치로 수정
+        return 'top-1.5 left-1.5 sm:top-2 sm:left-2';
       case 'bottom-right':
         return '-bottom-1 -right-1';
       case 'bottom-left':
@@ -48,7 +49,8 @@ function MainImageIndicator({
         return 'w-8 h-8 text-lg';
       case 'md':
       default:
-        return 'w-6 h-6 text-sm';
+        // ✅ 왕관: 숫자 카운팅과 동일한 크기로 수정
+        return 'w-5 h-5 sm:w-6 sm:h-6 text-sm';
     }
   };
 
@@ -60,14 +62,14 @@ function MainImageIndicator({
         return 'text-base';
       case 'md':
       default:
-        return 'text-sm';
+        return 'text-xs sm:text-sm';
     }
   };
 
   const indicatorClasses = `
-    absolute ${getPositionClasses()} ${getSizeClasses()}
+    absolute z-20 ${getPositionClasses()} ${getSizeClasses()}
     flex items-center justify-center
-    bg-primary text-white rounded-full shadow-lg
+    bg-yellow-500 text-white rounded-full shadow-md
     transition-all duration-200 hover:scale-110
     ${className}
   `.trim();
