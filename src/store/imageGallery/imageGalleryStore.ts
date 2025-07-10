@@ -21,32 +21,32 @@ import {
   generateImageGalleryMetadataId,
 } from '../shared/storage/imageGalleryMetadata';
 
-// 🆕 초기화 상태를 포함한 확장된 스토어 타입
+type ReactHookFormSyncCallback = (images: string[]) => void;
+
 type HybridImageGalleryStore = HybridImageGalleryState &
   ImageGalleryGetters &
   ImageGallerySetters & {
-    // 🆕 초기화 상태 추가 (persist됨)
     _isInitialized: boolean;
     _initializationPromise: Promise<void> | null;
-
-    // 🆕 핵심 하이브리드 메서드들
+    _reactHookFormSyncCallback: ReactHookFormSyncCallback | null;
+    _syncToReactHookForm: () => void;
+    _isInternalUpdate: boolean;
+    setReactHookFormSyncCallback: (
+      callback: ReactHookFormSyncCallback | null
+    ) => void;
     saveImageToHybridStorage: (
       files: File[]
     ) => Promise<HybridImageProcessResult>;
     loadStoredImages: () => Promise<void>;
     deleteImageFromHybridStorage: (imageId: string) => Promise<void>;
-
-    // 🆕 동기화된 초기화 메서드들
     initializeStoredImages: () => Promise<void>;
     getIsInitialized: () => boolean;
     _triggerAutoInitialization: () => void;
   };
 
-// 🆕 하이브리드 Zustand 스토어 (리프레시 문제 해결)
 export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
   persist(
     (set, get) => {
-      // 🔧 HybridStorage 인스턴스 관리 (클로저)
       let hybridStorage: ImageGalleryHybridStorage | null = null;
       let currentInitializationPromise: Promise<void> | null = null;
 
@@ -61,6 +61,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           compressionQuality: 0.8,
         };
         hybridStorage = new ImageGalleryHybridStorage(config, options);
+        console.log('🔧 [HYBRID_STORAGE] 하이브리드 스토리지 초기화됨');
         return hybridStorage;
       };
 
@@ -77,7 +78,53 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         }
       };
 
-      // 🆕 내부 이미지 로드 함수 (selectedImages 복원)
+      const syncToReactHookFormInternal = () => {
+        try {
+          const currentState = get();
+          const {
+            _reactHookFormSyncCallback,
+            imageViewConfig,
+            _isInternalUpdate,
+          } = currentState;
+
+          if (!_reactHookFormSyncCallback) {
+            console.log(
+              'ℹ️ [REACT_HOOK_FORM_SYNC] 동기화 콜백이 설정되지 않음'
+            );
+            return;
+          }
+
+          if (_isInternalUpdate) {
+            console.log(
+              '🔄 [REACT_HOOK_FORM_SYNC] 내부 업데이트 중이므로 동기화 생략'
+            );
+            return;
+          }
+
+          const { selectedImages = [] } = imageViewConfig;
+
+          console.log(
+            '🔄 [REACT_HOOK_FORM_SYNC] React Hook Form 동기화 시작:',
+            {
+              selectedImagesCount: selectedImages.length,
+              firstImagePreview:
+                selectedImages.length > 0
+                  ? selectedImages[0]?.slice(0, 30) + '...'
+                  : 'none',
+              timestamp: new Date().toLocaleTimeString(),
+            }
+          );
+
+          _reactHookFormSyncCallback(selectedImages);
+
+          console.log('✅ [REACT_HOOK_FORM_SYNC] React Hook Form 동기화 완료');
+        } catch (syncError) {
+          console.error('❌ [REACT_HOOK_FORM_SYNC] 동기화 실패:', {
+            error: syncError,
+          });
+        }
+      };
+
       const loadStoredImagesInternal = async (): Promise<void> => {
         try {
           const storage = getHybridStorage();
@@ -93,7 +140,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             return;
           }
 
-          // IndexedDB에서 실제 이미지 URL 복원
           const loadPromises = allMetadata.map(async (metadata) => {
             try {
               const imageUrl = await storage.loadImageFromHybridStorage(
@@ -121,10 +167,10 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             );
 
           const restoredImageUrls = successfulResults.map(
-            (item) => item.imageUrl
+            ({ imageUrl }) => imageUrl
           );
           const restoredMetadata = successfulResults.map(
-            (item) => item.metadata
+            ({ metadata }) => metadata
           );
 
           console.log('✅ [LOAD_INTERNAL] 이미지 복원 완료:', {
@@ -132,23 +178,24 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             metadataCount: restoredMetadata.length,
           });
 
-          // 🔧 상태 업데이트 (selectedImages 복원)
           set((state) => ({
+            ...state,
             imageViewConfig: {
               ...state.imageViewConfig,
-              selectedImageIds: restoredMetadata.map((metadata) => metadata.id),
+              selectedImageIds: restoredMetadata.map(({ id }) => id),
               imageMetadata: restoredMetadata,
-              selectedImages: restoredImageUrls, // 🚨 핵심: 실제 이미지 URL 복원
+              selectedImages: restoredImageUrls,
             },
             lastSyncTimestamp: new Date(),
-            _isInitialized: true, // 🆕 초기화 완료 플래그
+            _isInitialized: true,
           }));
+
+          syncToReactHookFormInternal();
         } catch (loadError) {
           console.error('❌ [LOAD_INTERNAL] 이미지 로드 실패:', {
             error: loadError,
           });
 
-          // 실패 시에도 초기화 완료로 표시 (무한 루프 방지)
           set((state) => ({
             ...state,
             _isInitialized: true,
@@ -156,16 +203,16 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         }
       };
 
-      // 🆕 자동 초기화 함수 (Promise 관리)
       const performAutoInitialization = async (): Promise<void> => {
-        const { _isInitialized } = get();
+        const currentState = get();
+        const { _isInitialized } = currentState;
 
         if (_isInitialized) {
           console.log('ℹ️ [AUTO_INIT] 이미 초기화됨');
+          syncToReactHookFormInternal();
           return;
         }
 
-        // 🔧 이미 진행 중인 초기화가 있다면 기다림
         if (currentInitializationPromise) {
           console.log('⏳ [AUTO_INIT] 기존 초기화 대기 중');
           return currentInitializationPromise;
@@ -184,7 +231,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
               error: autoInitError,
             });
 
-            // 실패해도 초기화 완료로 표시
             set((state) => ({
               ...state,
               _isInitialized: true,
@@ -202,16 +248,52 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         return currentInitializationPromise;
       };
 
+      const updateImageViewConfigInternal = (
+        config: Partial<HybridImageViewConfig>,
+        shouldSync: boolean = true
+      ) => {
+        set((state) => ({
+          ...state,
+          imageViewConfig: { ...state.imageViewConfig, ...config },
+        }));
+
+        if (shouldSync) {
+          syncToReactHookFormInternal();
+        }
+      };
+
       return {
         ...createInitialHybridImageGalleryState(),
 
-        // 🔄 기본 속성 getter/setter 메서드들
+        _reactHookFormSyncCallback: null,
+        _syncToReactHookForm: syncToReactHookFormInternal,
+        _isInternalUpdate: false,
+
+        setReactHookFormSyncCallback: (
+          callback: ReactHookFormSyncCallback | null
+        ) => {
+          console.log('🔧 [CALLBACK_SET] React Hook Form 동기화 콜백 설정:', {
+            hasCallback: callback !== null,
+          });
+
+          set((state) => ({
+            ...state,
+            _reactHookFormSyncCallback: callback,
+          }));
+
+          if (callback) {
+            syncToReactHookFormInternal();
+          }
+        },
+
         getImageViewConfig: () => get().imageViewConfig,
+
         setImageViewConfig: (imageViewConfig: HybridImageViewConfig) => {
-          set({ imageViewConfig });
+          updateImageViewConfigInternal(imageViewConfig, true);
         },
 
         getCustomGalleryViews: () => get().customGalleryViews,
+
         setCustomGalleryViews: (
           customGalleryViews: HybridCustomGalleryView[]
         ) => {
@@ -229,7 +311,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         setLastSyncTimestamp: (timestamp: Date | null) =>
           set({ lastSyncTimestamp: timestamp }),
 
-        // 🆕 초기화 관련 getter/setter 메서드들
         getIsInitialized: () => get()._isInitialized,
         setIsInitialized: (isInitialized: boolean) =>
           set({ _isInitialized: isInitialized }),
@@ -238,7 +319,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         setInitializationPromise: (promise: Promise<void> | null) =>
           set({ _initializationPromise: promise }),
 
-        // 🆕 내부 속성 getter/setter 메서드들 (DynamicStoreMethods 호환)
         get_isInitialized: () => get()._isInitialized,
         set_isInitialized: (isInitialized: boolean) =>
           set({ _isInitialized: isInitialized }),
@@ -247,9 +327,10 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         set_initializationPromise: (promise: Promise<void> | null) =>
           set({ _initializationPromise: promise }),
 
-        // 🔄 기존 핵심 메서드들
-        getCustomGalleryViewById: (id: string) =>
-          get().customGalleryViews.find((view) => view.id === id),
+        getCustomGalleryViewById: (id: string) => {
+          const { customGalleryViews } = get();
+          return customGalleryViews.find(({ id: viewId }) => viewId === id);
+        },
 
         getSelectedImagesCount: () => {
           const { imageViewConfig } = get();
@@ -262,20 +343,23 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           const { selectedImages = [], clickOrder = [] } = imageViewConfig;
           return clickOrder
             .map((index) => selectedImages[index])
-            .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+            .filter(
+              (imageUrl): imageUrl is string =>
+                imageUrl !== undefined &&
+                imageUrl !== null &&
+                imageUrl.length > 0
+            );
         },
 
-        // 🆕 개선된 getter 메서드들 (자동 초기화 트리거)
         getSelectedImageIds: () => {
           const state = get();
 
-          // 🔧 초기화되지 않았으면 트리거 (비동기)
           if (!state._isInitialized) {
-            // 비동기 초기화를 트리거하지만 즉시 반환
             state._triggerAutoInitialization();
           }
 
-          return state.imageViewConfig.selectedImageIds || [];
+          const { selectedImageIds = [] } = state.imageViewConfig;
+          return selectedImageIds;
         },
 
         getImageMetadata: () => {
@@ -285,7 +369,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             state._triggerAutoInitialization();
           }
 
-          return state.imageViewConfig.imageMetadata || [];
+          const { imageMetadata = [] } = state.imageViewConfig;
+          return imageMetadata;
         },
 
         getImageMetadataById: (imageId: string) => {
@@ -296,7 +381,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           }
 
           const { imageMetadata = [] } = state.imageViewConfig;
-          return imageMetadata.find((metadata) => metadata.id === imageId);
+          return imageMetadata.find(({ id }) => id === imageId);
         },
 
         getHybridImageViewConfig: () => {
@@ -309,9 +394,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           return state.imageViewConfig;
         },
 
-        // 🆕 자동 초기화 트리거 메서드
         _triggerAutoInitialization: () => {
-          // 🔧 별도 태스크로 초기화 실행 (getter 블로킹 방지)
           Promise.resolve().then(() => {
             performAutoInitialization();
           });
@@ -321,31 +404,36 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           return performAutoInitialization();
         },
 
-        // 🔄 커스텀뷰 메서드들 (간소화)
         addCustomGalleryView: (view: HybridCustomGalleryView) =>
           set((state) => {
-            const exists = state.customGalleryViews.some(
-              (v) => v.id === view.id
-            );
+            const { customGalleryViews } = state;
+            const exists = customGalleryViews.some(({ id }) => id === view.id);
+
             if (exists) {
               throw new Error(
                 `Custom gallery view with id ${view.id} already exists`
               );
             }
+
             return {
-              customGalleryViews: [...state.customGalleryViews, view],
+              customGalleryViews: [...customGalleryViews, view],
             };
           }),
 
         removeCustomGalleryView: (id: string) =>
           set((state) => {
-            const exists = state.customGalleryViews.some((v) => v.id === id);
+            const { customGalleryViews } = state;
+            const exists = customGalleryViews.some(
+              ({ id: viewId }) => viewId === id
+            );
+
             if (!exists) {
               throw new Error(`Custom gallery view with id ${id} not found`);
             }
+
             return {
-              customGalleryViews: state.customGalleryViews.filter(
-                (view) => view.id !== id
+              customGalleryViews: customGalleryViews.filter(
+                ({ id: viewId }) => viewId !== id
               ),
             };
           }),
@@ -355,14 +443,18 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           updates: Partial<HybridCustomGalleryView>
         ) =>
           set((state) => {
-            const viewIndex = state.customGalleryViews.findIndex(
-              (v) => v.id === id
+            const { customGalleryViews } = state;
+            const viewIndex = customGalleryViews.findIndex(
+              ({ id: viewId }) => viewId === id
             );
+
             if (viewIndex === -1) {
               throw new Error(`Custom gallery view with id ${id} not found`);
             }
-            const newViews = [...state.customGalleryViews];
+
+            const newViews = [...customGalleryViews];
             newViews[viewIndex] = { ...newViews[viewIndex], ...updates };
+
             return {
               customGalleryViews: newViews,
             };
@@ -370,42 +462,49 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         clearCustomGalleryViews: () => set({ customGalleryViews: [] }),
 
-        updateImageViewConfig: (config: Partial<HybridImageViewConfig>) =>
-          set((state) => ({
-            imageViewConfig: { ...state.imageViewConfig, ...config },
-          })),
+        updateImageViewConfig: (config: Partial<HybridImageViewConfig>) => {
+          updateImageViewConfigInternal(config, true);
+        },
 
         togglePreviewPanel: () =>
           set((state) => ({
             isPreviewPanelOpen: !state.isPreviewPanelOpen,
           })),
 
-        resetImageGalleryState: () =>
+        resetImageGalleryState: () => {
           set({
             ...createInitialHybridImageGalleryState(),
             _isInitialized: false,
             _initializationPromise: null,
-          }),
+          });
 
-        // 🆕 하이브리드 setter 메서드들
-        setSelectedImageIds: (imageIds: string[]) =>
+          syncToReactHookFormInternal();
+        },
+
+        setSelectedImageIds: (imageIds: string[]) => {
           set((state) => ({
+            ...state,
             imageViewConfig: {
               ...state.imageViewConfig,
               selectedImageIds: imageIds,
             },
-          })),
+          }));
+        },
 
         addSelectedImageId: (imageId: string) =>
           set((state) => {
-            const { selectedImageIds = [] } = state.imageViewConfig;
+            const { imageViewConfig } = state;
+            const { selectedImageIds = [] } = imageViewConfig;
             const isDuplicate = selectedImageIds.includes(imageId);
+
             if (isDuplicate) {
               return state;
             }
+
             return {
+              ...state,
               imageViewConfig: {
-                ...state.imageViewConfig,
+                ...imageViewConfig,
                 selectedImageIds: [...selectedImageIds, imageId],
               },
             };
@@ -413,10 +512,13 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         removeSelectedImageId: (imageId: string) =>
           set((state) => {
-            const { selectedImageIds = [] } = state.imageViewConfig;
+            const { imageViewConfig } = state;
+            const { selectedImageIds = [] } = imageViewConfig;
+
             return {
+              ...state,
               imageViewConfig: {
-                ...state.imageViewConfig,
+                ...imageViewConfig,
                 selectedImageIds: selectedImageIds.filter(
                   (id) => id !== imageId
                 ),
@@ -426,6 +528,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         setImageMetadata: (metadata: ImageGalleryMetadata[]) =>
           set((state) => ({
+            ...state,
             imageViewConfig: {
               ...state.imageViewConfig,
               imageMetadata: metadata,
@@ -434,14 +537,20 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         addImageMetadata: (metadata: ImageGalleryMetadata) =>
           set((state) => {
-            const { imageMetadata = [] } = state.imageViewConfig;
-            const isDuplicate = imageMetadata.some((m) => m.id === metadata.id);
+            const { imageViewConfig } = state;
+            const { imageMetadata = [] } = imageViewConfig;
+            const isDuplicate = imageMetadata.some(
+              ({ id }) => id === metadata.id
+            );
+
             if (isDuplicate) {
               return state;
             }
+
             return {
+              ...state,
               imageViewConfig: {
-                ...state.imageViewConfig,
+                ...imageViewConfig,
                 imageMetadata: [...imageMetadata, metadata],
               },
             };
@@ -449,16 +558,18 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         removeImageMetadata: (imageId: string) =>
           set((state) => {
-            const { imageMetadata = [] } = state.imageViewConfig;
+            const { imageViewConfig } = state;
+            const { imageMetadata = [] } = imageViewConfig;
+
             return {
+              ...state,
               imageViewConfig: {
-                ...state.imageViewConfig,
-                imageMetadata: imageMetadata.filter((m) => m.id !== imageId),
+                ...imageViewConfig,
+                imageMetadata: imageMetadata.filter(({ id }) => id !== imageId),
               },
             };
           }),
 
-        // 🆕 하이브리드 핵심 메서드들
         saveImageToHybridStorage: async (
           files: File[]
         ): Promise<HybridImageProcessResult> => {
@@ -513,7 +624,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
               }
             });
 
-            // 🔧 성공한 이미지들을 상태에 추가
             const hasSuccessfulResults = successful.length > 0;
             if (hasSuccessfulResults) {
               set((state) => {
@@ -526,20 +636,21 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
                 const newSelectedImageIds = [
                   ...selectedImageIds,
-                  ...successful.map((data) => data.metadata.id),
+                  ...successful.map(({ metadata }) => metadata.id),
                 ];
 
                 const newImageMetadata = [
                   ...imageMetadata,
-                  ...successful.map((data) => data.metadata),
+                  ...successful.map(({ metadata }) => metadata),
                 ];
 
                 const newSelectedImages = [
                   ...selectedImages,
-                  ...successful.map((data) => data.imageUrl),
+                  ...successful.map(({ imageUrl }) => imageUrl),
                 ];
 
                 return {
+                  ...state,
                   imageViewConfig: {
                     ...imageViewConfig,
                     selectedImageIds: newSelectedImageIds,
@@ -547,9 +658,11 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
                     selectedImages: newSelectedImages,
                   },
                   lastSyncTimestamp: new Date(),
-                  _isInitialized: true, // 저장 후 초기화 완료
+                  _isInitialized: true,
                 };
               });
+
+              syncToReactHookFormInternal();
             }
 
             const result: HybridImageProcessResult = {
@@ -598,7 +711,6 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             const storage = getHybridStorage();
             await storage.deleteImageFromHybridStorage(imageId);
 
-            // 상태에서도 제거
             set((state) => {
               const { imageViewConfig } = state;
               const {
@@ -613,7 +725,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
                 (id) => id !== imageId
               );
               const updatedImageMetadata = imageMetadata.filter(
-                (metadata) => metadata.id !== imageId
+                ({ id }) => id !== imageId
               );
 
               const updatedSelectedImages = selectedImages.filter(
@@ -621,6 +733,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
               );
 
               return {
+                ...state,
                 imageViewConfig: {
                   ...imageViewConfig,
                   selectedImageIds: updatedSelectedImageIds,
@@ -630,6 +743,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
                 lastSyncTimestamp: new Date(),
               };
             });
+
+            syncToReactHookFormInternal();
 
             console.log('✅ [HYBRID_DELETE] 이미지 삭제 완료:', { imageId });
           } catch (deleteError) {
@@ -645,19 +760,17 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
     {
       ...createHybridPersistConfig('image-gallery-hybrid', 'local'),
 
-      // 🆕 모든 필요한 속성들을 persist에 포함
       partialize: (state) => ({
         imageViewConfig: state.imageViewConfig,
         customGalleryViews: state.customGalleryViews,
         isPreviewPanelOpen: state.isPreviewPanelOpen,
         isHybridMode: state.isHybridMode,
         lastSyncTimestamp: state.lastSyncTimestamp,
-        _isInitialized: state._isInitialized, // 🚨 초기화 상태도 저장
+        _isInitialized: state._isInitialized,
       }),
     }
   )
 );
 
-// 🔄 하위 호환성을 위한 기존 스토어 export
 export const useImageGalleryStore = useHybridImageGalleryStore;
 export default useHybridImageGalleryStore;

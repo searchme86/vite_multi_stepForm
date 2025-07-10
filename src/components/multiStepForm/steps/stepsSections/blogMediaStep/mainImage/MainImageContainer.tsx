@@ -16,11 +16,22 @@ function MainImageContainer({
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  const { formValues: currentFormValues } = useBlogMediaStepState();
-  const { media: mediaFilesList, mainImage: currentMainImageUrl } =
-    currentFormValues;
+  const blogMediaStepState = useBlogMediaStepState();
+  const { formValues: currentFormValues } = blogMediaStepState ?? {};
+  const safeFormValues = currentFormValues ?? {};
+  const { media: mediaFilesList = [], mainImage: currentMainImageUrl = '' } =
+    safeFormValues;
 
-  const mainImageValidationHook = useMainImageValidation();
+  console.log('🔧 MainImageContainer 상태 확인:', {
+    hasFormValues: currentFormValues ? true : false,
+    mediaFilesCount: mediaFilesList.length,
+    hasMainImage: currentMainImageUrl ? true : false,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  const mainImageValidationHook = useMainImageValidation({
+    formValues: currentFormValues ?? {},
+  });
   const { getMainImageValidationStatus } = mainImageValidationHook;
 
   const hasMainImage = currentMainImageUrl ? true : false;

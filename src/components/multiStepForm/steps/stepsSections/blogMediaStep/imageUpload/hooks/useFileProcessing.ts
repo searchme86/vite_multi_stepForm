@@ -1,4 +1,4 @@
-// blogMediaStep/imageUpload/hooks/useFileProcessing.ts
+// 📁 blogMediaStep/imageUpload/hooks/useFileProcessing.ts
 
 import { useRef, useCallback, useEffect } from 'react';
 import { validateFile } from '../../utils/fileValidationUtils';
@@ -8,7 +8,6 @@ import {
   createFileReader,
   convertFilesToFileList,
 } from '../utils/fileProcessingUtils';
-import type { ImageViewConfig } from '../../../../../../../store/shared/commonTypes';
 
 interface FileProcessingCallbacks {
   updateMediaValue: (files: string[]) => void;
@@ -20,8 +19,8 @@ interface FileProcessingCallbacks {
   completeFileUpload: (fileId: string, fileName: string) => void;
   failFileUpload: (fileId: string, fileName: string) => void;
 
-  // ✅ 추가: Zustand 스토어 업데이트 콜백
-  updateImageGalleryStore?: (config: Partial<ImageViewConfig>) => void;
+  // 🔧 Zustand 동기화 콜백 제거 (React Hook Form 중심으로 변경)
+  // updateImageGalleryStore?: (config: Partial<ImageViewConfig>) => void;
 }
 
 export const useFileProcessing = (
@@ -41,56 +40,18 @@ export const useFileProcessing = (
     };
   }, [currentMediaFilesList, currentSelectedFileNames]);
 
-  console.log('🔧 [FILE_PROCESSING] useFileProcessing 초기화 - Zustand연동:', {
-    currentMediaFilesCount: currentMediaFilesList.length,
-    currentSelectedFileNamesCount: currentSelectedFileNames.length,
-    hasImageGalleryStoreCallback: callbacks.updateImageGalleryStore
-      ? true
-      : false,
-    timestamp: new Date().toLocaleTimeString(),
-  });
-
-  // ✅ 새로 추가: Zustand 스토어 동기화 함수
-  const syncToImageGalleryStore = useCallback(
-    (updatedMediaFiles: string[]) => {
-      const { updateImageGalleryStore } = callbacks;
-
-      if (!updateImageGalleryStore) {
-        console.log('⚠️ [ZUSTAND_SYNC] updateImageGalleryStore 콜백이 없음');
-        return;
-      }
-
-      try {
-        // 업데이트된 이미지 배열을 갤러리 스토어에 동기화
-        const updatedImageViewConfig: Partial<ImageViewConfig> = {
-          selectedImages: updatedMediaFiles,
-          clickOrder: updatedMediaFiles.map((_, imageIndex) => imageIndex),
-        };
-
-        updateImageGalleryStore(updatedImageViewConfig);
-
-        console.log('✅ [ZUSTAND_SYNC] 갤러리 스토어 동기화 완료:', {
-          selectedImagesCount: updatedMediaFiles.length,
-          clickOrderLength: updatedImageViewConfig.clickOrder?.length || 0,
-          firstImagePreview: updatedMediaFiles[0]
-            ? updatedMediaFiles[0].slice(0, 30) + '...'
-            : 'none',
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      } catch (syncError) {
-        console.error('❌ [ZUSTAND_SYNC] 갤러리 스토어 동기화 실패:', {
-          error: syncError,
-          mediaFilesCount: updatedMediaFiles.length,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      }
-    },
-    [callbacks]
+  console.log(
+    '🔧 [FILE_PROCESSING] useFileProcessing 초기화 - React Hook Form 중심:',
+    {
+      currentMediaFilesCount: currentMediaFilesList.length,
+      currentSelectedFileNamesCount: currentSelectedFileNames.length,
+      timestamp: new Date().toLocaleTimeString(),
+    }
   );
 
   const processFiles = useCallback(
     (files: FileList) => {
-      console.log('🚨 [FILES] processFiles 시작 - Zustand연동:', {
+      console.log('🚨 [FILES] processFiles 시작 - React Hook Form 중심:', {
         fileCount: files.length,
         timestamp: new Date().toLocaleTimeString(),
       });
@@ -139,12 +100,15 @@ export const useFileProcessing = (
       const fileId = generateSecureFileId(file.name);
       const { name: fileName } = file;
 
-      console.log('📁 [FILE_PROCESS] 개별 파일 처리 시작 - Zustand연동:', {
-        fileName,
-        fileId,
-        fileSize: file.size,
-        timestamp: new Date().toLocaleTimeString(),
-      });
+      console.log(
+        '📁 [FILE_PROCESS] 개별 파일 처리 시작 - React Hook Form 중심:',
+        {
+          fileName,
+          fileId,
+          fileSize: file.size,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
 
       const validationResult = validateFile(file);
       const { isValid: fileIsValid, errorMessage: validationError } =
@@ -175,17 +139,20 @@ export const useFileProcessing = (
 
       const handleSuccess = (result: string) => {
         setTimeout(() => {
-          console.log('⏰ [TIMEOUT] setTimeout 콜백 실행 - Zustand연동:', {
-            fileName,
-            fileId,
-            timestamp: new Date().toLocaleTimeString(),
-          });
+          console.log(
+            '⏰ [TIMEOUT] setTimeout 콜백 실행 - React Hook Form 중심:',
+            {
+              fileName,
+              fileId,
+              timestamp: new Date().toLocaleTimeString(),
+            }
+          );
 
           try {
             const latestMediaFiles = currentStateRef.current.mediaFiles;
             const latestFileNames = currentStateRef.current.fileNames;
 
-            // ✅ 기존 로직: React Hook Form 업데이트
+            // 🔧 React Hook Form만 업데이트 (Zustand는 자동 동기화됨)
             const updatedMediaFiles = [...latestMediaFiles, result];
             const updatedFileNames = [...latestFileNames, fileName];
 
@@ -193,8 +160,8 @@ export const useFileProcessing = (
             callbacks.updateSelectedFileNames(updatedFileNames);
             callbacks.completeFileUpload(fileId, fileName);
 
-            // ✅ 새로 추가: Zustand 스토어 동기화
-            syncToImageGalleryStore(updatedMediaFiles);
+            // 🔧 Zustand 수동 동기화 제거 (React Hook Form 변경 감지로 자동 동기화됨)
+            // syncToImageGalleryStore(updatedMediaFiles);
 
             callbacks.showToastMessage({
               title: '업로드 완료',
@@ -202,11 +169,12 @@ export const useFileProcessing = (
               color: 'success',
             });
 
-            console.log('✅ [SUCCESS] 파일 업로드 및 Zustand 동기화 완료:', {
+            console.log('✅ [SUCCESS] 파일 업로드 완료 (자동 동기화 대기):', {
               fileName,
               fileId,
               totalMediaCount: updatedMediaFiles.length,
-              zustandSyncCompleted: true,
+              reactHookFormUpdated: true,
+              zustandAutoSyncPending: true, // 자동으로 동기화될 예정
             });
           } catch (uploadError) {
             console.error('❌ [ERROR] 업로드 처리 중 오류:', {
@@ -248,12 +216,12 @@ export const useFileProcessing = (
         handleError
       );
     },
-    [callbacks, syncToImageGalleryStore]
+    [callbacks] // syncToImageGalleryStore 의존성 제거
   );
 
   const handleFilesDropped = useCallback(
     (droppedFilesList: File[]) => {
-      console.log('🚨 [DROP] handleFilesDropped - Zustand연동:', {
+      console.log('🚨 [DROP] handleFilesDropped - React Hook Form 중심:', {
         fileCount: droppedFilesList.length,
         fileNames: droppedFilesList.map((f) => f.name),
         timestamp: new Date().toLocaleTimeString(),
@@ -273,7 +241,7 @@ export const useFileProcessing = (
 
   const handleFileChange = useCallback(
     (changedFileList: FileList) => {
-      console.log('🚨 [CHANGE] handleFileChange - Zustand연동:', {
+      console.log('🚨 [CHANGE] handleFileChange - React Hook Form 중심:', {
         fileCount: changedFileList.length,
         timestamp: new Date().toLocaleTimeString(),
       });

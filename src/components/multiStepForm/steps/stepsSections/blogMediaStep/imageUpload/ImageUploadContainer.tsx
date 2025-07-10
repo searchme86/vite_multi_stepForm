@@ -1,7 +1,8 @@
-// blogMediaStep/imageUpload/ImageUploadContainer.tsx
+// 📁 blogMediaStep/imageUpload/ImageUploadContainer.tsx
 
 import React from 'react';
 import { Progress } from '@heroui/react';
+import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
 import { useImageUploadHandlers } from './hooks/useImageUploadHandlers';
 import { type MainImageHandlers } from './types/imageUploadTypes';
 import FileDropZone from './parts/FileDropZone';
@@ -10,12 +11,36 @@ import UploadedImageSection from './parts/UploadedImageSection';
 import MobileTip from './parts/MobileTip';
 
 function ImageUploadContainer(): React.ReactNode {
-  console.log('🚀 ImageUploadContainer 렌더링 시작 - Phase3 메인이미지연결:', {
+  console.log('🚀 ImageUploadContainer 렌더링 시작 - Props전달구조변경:', {
     timestamp: new Date().toLocaleTimeString(),
     componentName: 'ImageUploadContainer',
   });
 
-  const imageUploadHandlersHook = useImageUploadHandlers();
+  // 🔧 핵심 수정: useBlogMediaStepState를 한 곳에서만 호출
+  const blogMediaStepStateHook = useBlogMediaStepState();
+  const {
+    formValues: currentFormValuesData,
+    uiState: currentUiState,
+    selectionState: currentSelectionState,
+    setMediaValue: updateMediaValue,
+    setMainImageValue: updateMainImageValue,
+    setSelectedFileNames: updateSelectedFileNames,
+    addToast: showToastMessage,
+    imageGalleryStore: galleryStoreInstance,
+  } = blogMediaStepStateHook;
+
+  // 🔧 Props로 전달하여 중복 훅 호출 방지
+  const imageUploadHandlersHook = useImageUploadHandlers({
+    formValues: currentFormValuesData,
+    uiState: currentUiState,
+    selectionState: currentSelectionState,
+    updateMediaValue,
+    setMainImageValue: updateMainImageValue,
+    updateSelectedFileNames,
+    showToastMessage,
+    imageGalleryStore: galleryStoreInstance,
+  });
+
   const {
     uploading: currentUploadProgressMap,
     uploadStatus: currentUploadStatusMap,
@@ -35,14 +60,14 @@ function ImageUploadContainer(): React.ReactNode {
     currentSelectedFileNames: selectedFileNameList,
     isMobileDevice: isMobileUserAgent,
 
-    // ✅ Phase3: 메인 이미지 관련 핸들러들 구조분해할당
+    // 메인 이미지 관련 핸들러들
     handleMainImageSet: handleMainImageSetAction,
     handleMainImageCancel: handleMainImageCancelAction,
     checkIsMainImage: checkIsMainImageFunction,
     checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
   } = imageUploadHandlersHook;
 
-  // ✅ Phase3: 메인 이미지 핸들러 타입 체크 (TypeScript 에러 수정)
+  // 메인 이미지 핸들러 타입 체크
   const isMainImageSetHandlerValid =
     typeof handleMainImageSetAction === 'function';
   const isMainImageCancelHandlerValid =
@@ -52,23 +77,26 @@ function ImageUploadContainer(): React.ReactNode {
   const isCheckCanSetHandlerValid =
     typeof checkCanSetAsMainImageFunction === 'function';
 
-  console.log('📊 ImageUploadHandlers 훅 데이터 로드 완료 - Phase3:', {
-    uploadProgressMapSize: Object.keys(currentUploadProgressMap).length,
-    uploadStatusMapSize: Object.keys(currentUploadStatusMap).length,
-    isCurrentlyUploading,
-    isDeleteConfirmVisible: deleteConfirmationModalState.isVisible,
-    touchActiveImageCount: touchActivatedImageSet.size,
-    isDuplicateMessageVisible: duplicateAlertMessageState.isVisible,
-    uploadedMediaFileCount: uploadedMediaFileUrlList.length,
-    isMobileUserAgent,
-    isMainImageSetHandlerValid,
-    isMainImageCancelHandlerValid,
-    isCheckIsMainHandlerValid,
-    isCheckCanSetHandlerValid,
-    timestamp: new Date().toLocaleTimeString(),
-  });
+  console.log(
+    '📊 ImageUploadHandlers 훅 데이터 로드 완료 - Props전달구조변경:',
+    {
+      uploadProgressMapSize: Object.keys(currentUploadProgressMap).length,
+      uploadStatusMapSize: Object.keys(currentUploadStatusMap).length,
+      isCurrentlyUploading,
+      isDeleteConfirmVisible: deleteConfirmationModalState.isVisible,
+      touchActiveImageCount: touchActivatedImageSet.size,
+      isDuplicateMessageVisible: duplicateAlertMessageState.isVisible,
+      uploadedMediaFileCount: uploadedMediaFileUrlList.length,
+      isMobileUserAgent,
+      isMainImageSetHandlerValid,
+      isMainImageCancelHandlerValid,
+      isCheckIsMainHandlerValid,
+      isCheckCanSetHandlerValid,
+      timestamp: new Date().toLocaleTimeString(),
+    }
+  );
 
-  // ✅ Phase3: 메인 이미지 핸들러 객체 구성 (TypeScript 에러 수정)
+  // 메인 이미지 핸들러 객체 구성
   const mainImageHandlersObject: MainImageHandlers | undefined =
     isMainImageSetHandlerValid &&
     isMainImageCancelHandlerValid &&
@@ -86,7 +114,7 @@ function ImageUploadContainer(): React.ReactNode {
     typeof mainImageHandlersObject === 'object' &&
     mainImageHandlersObject !== null;
 
-  console.log('📊 메인 이미지 핸들러 객체 구성 완료 - Phase3:', {
+  console.log('📊 메인 이미지 핸들러 객체 구성 완료 - Props전달구조변경:', {
     hasCompleteMainImageHandlers,
     handlersValidation: {
       setHandlerValid: isMainImageSetHandlerValid,
@@ -186,7 +214,8 @@ function ImageUploadContainer(): React.ReactNode {
   const renderFileSelectButtonSection = () => {
     console.log('🔄 renderFileSelectButtonSection 호출:', {
       isCurrentlyUploading,
-      hasFileInputRef: fileInputElementRef ? true : false,
+      hasFileInputRef:
+        fileInputElementRef !== null && fileInputElementRef !== undefined,
     });
 
     return (
@@ -200,12 +229,15 @@ function ImageUploadContainer(): React.ReactNode {
   };
 
   const renderUploadedImageManagementSection = () => {
-    console.log('🔄 renderUploadedImageManagementSection 호출 - Phase3:', {
-      uploadedImageCount: uploadedMediaFileUrlList.length,
-      selectedFileNameCount: selectedFileNameList.length,
-      isMobileUserAgent,
-      hasCompleteMainImageHandlers,
-    });
+    console.log(
+      '🔄 renderUploadedImageManagementSection 호출 - Props전달구조변경:',
+      {
+        uploadedImageCount: uploadedMediaFileUrlList.length,
+        selectedFileNameCount: selectedFileNameList.length,
+        isMobileUserAgent,
+        hasCompleteMainImageHandlers,
+      }
+    );
 
     return (
       <UploadedImageSection
@@ -219,7 +251,7 @@ function ImageUploadContainer(): React.ReactNode {
         onDeleteConfirm={handleDeleteConfirmationSubmit}
         onDeleteCancel={handleDeleteCancellationAction}
         onImageTouch={handleImageTouchInteraction}
-        // ✅ Phase3: 메인 이미지 핸들러 전달
+        // 메인 이미지 핸들러 전달
         mainImageHandlers={mainImageHandlersObject}
       />
     );
@@ -236,7 +268,7 @@ function ImageUploadContainer(): React.ReactNode {
     ) : null;
   };
 
-  console.log('🎨 ImageUploadContainer 최종 렌더링 준비 - Phase3:', {
+  console.log('🎨 ImageUploadContainer 최종 렌더링 준비 - Props전달구조변경:', {
     isCurrentlyUploading,
     uploadedImageCount: uploadedMediaFileUrlList.length,
     isMobileUserAgent,

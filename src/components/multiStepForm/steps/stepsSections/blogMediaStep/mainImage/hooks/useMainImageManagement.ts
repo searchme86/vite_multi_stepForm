@@ -1,7 +1,16 @@
-// blogMediaStep/mainImage/hooks/useMainImageManagement.ts
+// 📁 blogMediaStep/mainImage/hooks/useMainImageManagement.ts
 
 import { useCallback } from 'react';
-import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
+import type {
+  FormValues,
+  ToastItem,
+} from '../../../../../../../store/shared/commonTypes';
+
+interface MainImageManagementProps {
+  formValues: FormValues;
+  setMainImageValue: (imageUrl: string) => void;
+  addToast: (toast: Omit<ToastItem, 'id' | 'createdAt'>) => void;
+}
 
 interface MainImageManagementResult {
   setAsMainImageDirect: (index: number) => void;
@@ -10,22 +19,28 @@ interface MainImageManagementResult {
   isMainImage: (imageUrl: string) => boolean;
 }
 
-export const useMainImageManagement = (): MainImageManagementResult => {
-  console.log('🔧 useMainImageManagement 훅 초기화 - Phase1 데이터흐름통일');
+export const useMainImageManagement = ({
+  formValues: currentFormValues,
+  setMainImageValue,
+  addToast,
+}: MainImageManagementProps): MainImageManagementResult => {
+  console.log('🔧 useMainImageManagement 훅 초기화 - 에러수정수정');
 
-  const {
-    formValues: currentFormValues,
-    setMainImageValue,
-    addToast,
-  } = useBlogMediaStepState();
+  // 🔧 구조분해할당 + fallback 패턴으로 undefined 방지
+  const safeFormValues = currentFormValues ?? {};
+  const { media: rawMediaFilesList, mainImage: rawMainImageUrl } =
+    safeFormValues;
 
-  const { media: mediaFilesList, mainImage: currentMainImageUrl } =
-    currentFormValues;
+  const mediaFilesList = rawMediaFilesList ?? [];
+  const currentMainImageUrl = rawMainImageUrl ?? '';
 
   const setAsMainImageDirect = useCallback(
     (imageIndex: number) => {
       const selectedImageUrl = mediaFilesList[imageIndex];
-      const hasSelectedImage = selectedImageUrl ? true : false;
+      const hasSelectedImage =
+        selectedImageUrl !== null &&
+        selectedImageUrl !== undefined &&
+        selectedImageUrl !== '';
 
       console.log('🔧 setAsMainImageDirect 호출:', {
         imageIndex,
@@ -77,7 +92,10 @@ export const useMainImageManagement = (): MainImageManagementResult => {
   const updateMainImage = useCallback(
     (imageIndex: number) => {
       const selectedImageUrl = mediaFilesList[imageIndex];
-      const hasSelectedImage = selectedImageUrl ? true : false;
+      const hasSelectedImage =
+        selectedImageUrl !== null &&
+        selectedImageUrl !== undefined &&
+        selectedImageUrl !== '';
 
       console.log('🔧 updateMainImage 호출:', {
         imageIndex,
@@ -130,9 +148,12 @@ export const useMainImageManagement = (): MainImageManagementResult => {
     [currentMainImageUrl]
   );
 
-  const hasMainImage = currentMainImageUrl ? true : false;
+  const hasMainImage =
+    currentMainImageUrl !== null &&
+    currentMainImageUrl !== undefined &&
+    currentMainImageUrl !== '';
 
-  console.log('✅ useMainImageManagement 초기화 완료 - Phase1:', {
+  console.log('✅ useMainImageManagement 초기화 완료 - 에러수정수정:', {
     hasMainImage,
     mediaFileCount: mediaFilesList.length,
     currentMainImagePreview:

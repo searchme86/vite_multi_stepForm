@@ -1,7 +1,11 @@
-// blogMediaStep/mainImage/hooks/useMainImageValidation.ts
+// 📁 blogMediaStep/mainImage/hooks/useMainImageValidation.ts
 
 import { useCallback, useMemo } from 'react';
-import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
+import type { FormValues } from '../../../../../../../store/shared/commonTypes';
+
+interface MainImageValidationProps {
+  formValues: FormValues;
+}
 
 interface MainImageValidationResult {
   validateMainImageSelection: (imageUrl: string) => {
@@ -17,15 +21,22 @@ interface MainImageValidationResult {
   isMainImageInMediaList: () => boolean;
 }
 
-export const useMainImageValidation = (): MainImageValidationResult => {
-  console.log('🔧 useMainImageValidation 훅 초기화 - Phase1 데이터흐름통일');
+export const useMainImageValidation = ({
+  formValues: currentFormValues,
+}: MainImageValidationProps): MainImageValidationResult => {
+  console.log('🔧 useMainImageValidation 훅 초기화 - 에러수정수정');
 
-  const { formValues: currentFormValues } = useBlogMediaStepState();
+  // 🔧 구조분해할당 + fallback 패턴으로 undefined 방지
+  const safeFormValues = currentFormValues ?? {};
   const {
-    media: mediaFilesList,
-    mainImage: currentMainImageUrl,
-    sliderImages: sliderImagesList,
-  } = currentFormValues;
+    media: rawMediaFilesList,
+    mainImage: rawMainImageUrl,
+    sliderImages: rawSliderImagesList,
+  } = safeFormValues;
+
+  const mediaFilesList = rawMediaFilesList ?? [];
+  const currentMainImageUrl = rawMainImageUrl ?? '';
+  const sliderImagesList = rawSliderImagesList ?? [];
 
   const validateMainImageSelection = useCallback(
     (imageUrl: string) => {
@@ -107,7 +118,10 @@ export const useMainImageValidation = (): MainImageValidationResult => {
   const getMainImageValidationStatus = useCallback(() => {
     console.log('🔧 getMainImageValidationStatus 호출');
 
-    const hasMainImage = currentMainImageUrl ? true : false;
+    const hasMainImage =
+      currentMainImageUrl !== null &&
+      currentMainImageUrl !== undefined &&
+      currentMainImageUrl !== '';
     const isValidMainImage =
       hasMainImage && currentMainImageUrl
         ? mediaFilesList.includes(currentMainImageUrl)
@@ -144,7 +158,10 @@ export const useMainImageValidation = (): MainImageValidationResult => {
   }, [currentMainImageUrl, mediaFilesList, sliderImagesList]);
 
   const isMainImageInMediaList = useCallback((): boolean => {
-    const hasMainImage = currentMainImageUrl ? true : false;
+    const hasMainImage =
+      currentMainImageUrl !== null &&
+      currentMainImageUrl !== undefined &&
+      currentMainImageUrl !== '';
 
     if (!hasMainImage || !currentMainImageUrl) {
       console.log('🔧 isMainImageInMediaList - 메인 이미지 없음');
@@ -160,7 +177,10 @@ export const useMainImageValidation = (): MainImageValidationResult => {
   }, [currentMainImageUrl, mediaFilesList]);
 
   const validationSummaryData = useMemo(() => {
-    const hasMainImage = currentMainImageUrl ? true : false;
+    const hasMainImage =
+      currentMainImageUrl !== null &&
+      currentMainImageUrl !== undefined &&
+      currentMainImageUrl !== '';
     const mainImageCount = hasMainImage ? 1 : 0;
     const isMainImageValid =
       hasMainImage && currentMainImageUrl
@@ -175,7 +195,7 @@ export const useMainImageValidation = (): MainImageValidationResult => {
     };
   }, [currentMainImageUrl, mediaFilesList]);
 
-  console.log('✅ useMainImageValidation 초기화 완료 - Phase1:', {
+  console.log('✅ useMainImageValidation 초기화 완료 - 에러수정수정:', {
     validationSummary: validationSummaryData,
     timestamp: new Date().toLocaleTimeString(),
   });

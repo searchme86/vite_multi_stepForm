@@ -6,7 +6,7 @@ import type {
 } from '../shared/commonTypes';
 import { createDefaultHybridImageViewConfig } from '../shared/commonTypes';
 
-// 🆕 초기화 상태를 포함한 하이브리드 이미지 갤러리 상태
+// 🆕 React Hook Form 동기화를 포함한 하이브리드 이미지 갤러리 상태
 export interface HybridImageGalleryState {
   imageViewConfig: HybridImageViewConfig;
   customGalleryViews: HybridCustomGalleryView[];
@@ -14,16 +14,18 @@ export interface HybridImageGalleryState {
   isHybridMode: boolean;
   lastSyncTimestamp: Date | null;
 
-  // 🆕 초기화 관련 상태 추가
+  // 초기화 관련 상태
   _isInitialized: boolean;
   _initializationPromise: Promise<void> | null;
+
+  // 🆕 React Hook Form 동기화 관련 상태 추가
+  _reactHookFormSyncCallback: ((images: string[]) => void) | null;
 }
 
-// 🆕 하이브리드 초기 상태 생성 함수 (초기화 플래그 포함)
 export const createInitialHybridImageGalleryState =
   (): HybridImageGalleryState => {
     console.log(
-      '🔧 [INITIAL_STATE] 하이브리드 이미지 갤러리 초기 상태 생성 (초기화플래그포함)'
+      '🔧 [INITIAL_STATE] 하이브리드 이미지 갤러리 초기 상태 생성 (React Hook Form 동기화 포함)'
     );
 
     const hybridImageViewConfig = createDefaultHybridImageViewConfig();
@@ -35,15 +37,17 @@ export const createInitialHybridImageGalleryState =
       isHybridMode: true,
       lastSyncTimestamp: null,
 
-      // 🆕 초기화 상태 기본값
+      // 초기화 상태 기본값
       _isInitialized: false,
       _initializationPromise: null,
+
+      // 🆕 React Hook Form 동기화 상태 기본값
+      _reactHookFormSyncCallback: null,
     };
 
     return hybridInitialState;
   };
 
-// 🆕 개선된 상태 검증 함수 (초기화 플래그 포함)
 export const validateHybridImageGalleryState = (
   state: unknown
 ): state is HybridImageGalleryState => {
@@ -52,30 +56,40 @@ export const validateHybridImageGalleryState = (
     return false;
   }
 
-  // Reflect.get을 사용한 타입 안전한 속성 확인
   const imageViewConfig = Reflect.get(state, 'imageViewConfig');
   const customGalleryViews = Reflect.get(state, 'customGalleryViews');
   const isPreviewPanelOpen = Reflect.get(state, 'isPreviewPanelOpen');
   const isHybridMode = Reflect.get(state, 'isHybridMode');
   const _isInitialized = Reflect.get(state, '_isInitialized');
 
-  // 핵심 속성들 검증
+  // 🆕 React Hook Form 동기화 상태 검증 (선택적)
+  const _reactHookFormSyncCallback = Reflect.get(
+    state,
+    '_reactHookFormSyncCallback'
+  );
+
   const hasImageViewConfig =
     imageViewConfig !== null && imageViewConfig !== undefined;
   const hasCustomGalleryViews = Array.isArray(customGalleryViews);
   const hasIsPreviewPanelOpen = typeof isPreviewPanelOpen === 'boolean';
   const hasIsHybridMode = typeof isHybridMode === 'boolean';
 
-  // 🆕 초기화 플래그 검증 (선택적)
   const hasValidInitializationFlag =
     _isInitialized === undefined || typeof _isInitialized === 'boolean';
+
+  // 🆕 React Hook Form 동기화 콜백 검증 (선택적)
+  const hasValidSyncCallback =
+    _reactHookFormSyncCallback === null ||
+    _reactHookFormSyncCallback === undefined ||
+    typeof _reactHookFormSyncCallback === 'function';
 
   const isValidBasicState =
     hasImageViewConfig &&
     hasCustomGalleryViews &&
     hasIsPreviewPanelOpen &&
     hasIsHybridMode &&
-    hasValidInitializationFlag;
+    hasValidInitializationFlag &&
+    hasValidSyncCallback; // 🆕 추가
 
   if (!isValidBasicState) {
     console.warn('⚠️ [VALIDATE] 기본 하이브리드 상태 검증 실패:', {
@@ -84,12 +98,12 @@ export const validateHybridImageGalleryState = (
       hasIsPreviewPanelOpen,
       hasIsHybridMode,
       hasValidInitializationFlag,
+      hasValidSyncCallback, // 🆕 추가
       _isInitialized,
     });
     return false;
   }
 
-  // imageViewConfig 내부 검증
   const isImageConfigObject =
     typeof imageViewConfig === 'object' && imageViewConfig !== null;
   if (!isImageConfigObject) {
@@ -99,21 +113,30 @@ export const validateHybridImageGalleryState = (
 
   const selectedImageIds = Reflect.get(imageViewConfig, 'selectedImageIds');
   const imageMetadata = Reflect.get(imageViewConfig, 'imageMetadata');
+  const selectedImages = Reflect.get(imageViewConfig, 'selectedImages'); // 🆕 추가 검증
 
   const hasSelectedImageIds = Array.isArray(selectedImageIds);
   const hasImageMetadata = Array.isArray(imageMetadata);
+  const hasSelectedImages = Array.isArray(selectedImages); // 🆕 추가 검증
 
-  const isValidImageConfig = hasSelectedImageIds && hasImageMetadata;
+  const isValidImageConfig =
+    hasSelectedImageIds && hasImageMetadata && hasSelectedImages; // 🆕 조건 추가
   if (!isValidImageConfig) {
     console.warn('⚠️ [VALIDATE] imageViewConfig 내부 검증 실패:', {
       hasSelectedImageIds,
       hasImageMetadata,
+      hasSelectedImages, // 🆕 추가
     });
     return false;
   }
 
-  console.log('✅ [VALIDATE] 하이브리드 상태 검증 완료 (초기화플래그포함):', {
-    _isInitialized,
-  });
+  console.log(
+    '✅ [VALIDATE] 하이브리드 상태 검증 완료 (React Hook Form 동기화 포함):',
+    {
+      _isInitialized,
+      hasReactHookFormSyncCallback: hasValidSyncCallback,
+      selectedImagesCount: selectedImages?.length || 0, // 🆕 추가
+    }
+  );
   return true;
 };

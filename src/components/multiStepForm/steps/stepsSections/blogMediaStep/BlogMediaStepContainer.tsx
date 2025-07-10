@@ -1,4 +1,4 @@
-// blogMediaStep/BlogMediaStepContainer.tsx
+// 📁 blogMediaStep/BlogMediaStepContainer.tsx
 
 import React, { useState, useCallback } from 'react';
 import { useBlogMediaStepState } from './hooks/useBlogMediaStepState';
@@ -22,15 +22,21 @@ function BlogMediaStepContainer(): React.ReactNode {
   const blogMediaStepStateHook = useBlogMediaStepState();
   const { formValues: currentFormValuesData } = blogMediaStepStateHook;
 
+  const safeFormValues = currentFormValuesData ?? {};
   const {
-    media: uploadedMediaFileList,
-    mainImage: selectedMainImageUrl,
-    sliderImages: configuredSliderImageList,
-  } = currentFormValuesData;
+    media: rawUploadedMediaFileList,
+    mainImage: rawSelectedMainImageUrl,
+    sliderImages: rawConfiguredSliderImageList,
+  } = safeFormValues;
+
+  const uploadedMediaFileList = rawUploadedMediaFileList ?? [];
+  const selectedMainImageUrl = rawSelectedMainImageUrl ?? null;
+  const configuredSliderImageList = rawConfiguredSliderImageList ?? [];
 
   console.log('📊 BlogMediaStepState 데이터 로드 완료 - Phase3&4:', {
     uploadedMediaFileCount: uploadedMediaFileList.length,
-    hasSelectedMainImage: selectedMainImageUrl ? true : false,
+    hasSelectedMainImage:
+      selectedMainImageUrl !== null && selectedMainImageUrl !== '',
     configuredSliderImageCount: configuredSliderImageList.length,
     currentActiveSection: activeSectionType,
     selectedMainImagePreview: selectedMainImageUrl
@@ -40,7 +46,7 @@ function BlogMediaStepContainer(): React.ReactNode {
   });
 
   const checkShouldShowImageManagementSections = useCallback((): boolean => {
-    const { length: mediaFileCount } = uploadedMediaFileList;
+    const mediaFileCount = uploadedMediaFileList.length;
     const hasMediaFiles = mediaFileCount > 0;
 
     console.log('🔍 checkShouldShowImageManagementSections:', {
@@ -100,7 +106,10 @@ function BlogMediaStepContainer(): React.ReactNode {
         displayLabel: '메인 이미지',
         iconEmoji: '🖼️',
         iconBackgroundColor: 'bg-orange-500',
-        statusType: selectedMainImageUrl ? 'complete' : 'pending',
+        statusType:
+          selectedMainImageUrl !== null && selectedMainImageUrl !== ''
+            ? 'complete'
+            : 'pending',
       },
       {
         sectionType: 'imageGallery' as ActiveSectionType,
@@ -319,7 +328,7 @@ function BlogMediaStepContainer(): React.ReactNode {
     shouldShowManagementSections,
     activeSectionType,
     uploadedImageCount: uploadedMediaFileList.length,
-    hasMainImage: selectedMainImageUrl ? true : false,
+    hasMainImage: selectedMainImageUrl !== null && selectedMainImageUrl !== '',
     sliderImageCount: configuredSliderImageList.length,
     selectedMainImagePreview: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'

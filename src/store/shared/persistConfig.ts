@@ -10,14 +10,12 @@ export interface PersistConfig<T> {
   skipHydration?: boolean;
 }
 
-// 🆕 초기화 플래그를 포함한 하이브리드 persist 설정
 export interface HybridPersistConfig<T> extends PersistConfig<T> {
   onRehydrateStorage?: () => (state?: T) => void | Promise<void>;
   serialize?: (state: Partial<T>) => string;
   deserialize?: (str: string) => Partial<T>;
 }
 
-// 🔄 기존 persist 설정 (하위 호환성 유지)
 export const createPersistConfig = <T>(
   name: string,
   storageType: 'local' | 'session' = 'local'
@@ -65,7 +63,6 @@ export const createPersistConfig = <T>(
   }
 };
 
-// 🆕 하이브리드 스토리지 어댑터
 export const createHybridStorageAdapter = () => {
   return {
     getItem: (storageKey: string): string | null => {
@@ -135,7 +132,7 @@ export const createHybridStorageAdapter = () => {
   };
 };
 
-// 🆕 개선된 직렬화 함수 (모든 상태 속성 포함)
+// 🆕 개선된 직렬화 함수 (selectedImages도 저장)
 export const hybridSerializeImageGalleryState = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -161,7 +158,6 @@ export const hybridSerializeImageGalleryState = <
     const hasImageViewConfig =
       imageViewConfig !== null && imageViewConfig !== undefined;
 
-    // 🆕 모든 상태를 포함한 직렬화 데이터
     const persistData: any = {
       _isInitialized: _isInitialized ?? false,
       isPreviewPanelOpen: isPreviewPanelOpen ?? false,
@@ -171,21 +167,23 @@ export const hybridSerializeImageGalleryState = <
     };
 
     if (hasImageViewConfig) {
-      // 메타데이터와 ID만 저장, selectedImages는 제외
       const {
         selectedImageIds = [],
         imageMetadata = [],
         clickOrder = [],
         layout = { columns: 3, gridType: 'grid' },
         filter = 'all',
+        selectedImages = [], // 🔧 selectedImages도 포함
       } = imageViewConfig;
 
+      // 🔧 selectedImages를 저장에 포함 (리프레시 문제 해결)
       persistData.imageViewConfig = {
         selectedImageIds,
         imageMetadata,
         clickOrder,
         layout,
         filter,
+        selectedImages, // 🚨 핵심: selectedImages도 persist에 저장
       };
     }
 
@@ -194,9 +192,11 @@ export const hybridSerializeImageGalleryState = <
       ...persistData,
     });
 
-    console.log('💾 [SERIALIZE] 하이브리드 직렬화 완료:', {
+    console.log('💾 [SERIALIZE] 하이브리드 직렬화 완료 (selectedImages포함):', {
       imageCount: persistData.imageViewConfig?.selectedImageIds?.length || 0,
       metadataCount: persistData.imageViewConfig?.imageMetadata?.length || 0,
+      selectedImagesCount:
+        persistData.imageViewConfig?.selectedImages?.length || 0, // 🆕 추가
       isInitialized: persistData._isInitialized,
       isPreviewPanelOpen: persistData.isPreviewPanelOpen,
       isHybridMode: persistData.isHybridMode,
@@ -209,7 +209,7 @@ export const hybridSerializeImageGalleryState = <
   }
 };
 
-// 🆕 개선된 역직렬화 함수 (모든 상태 속성 포함)
+// 🆕 개선된 역직렬화 함수 (selectedImages 복원)
 export const hybridDeserializeImageGalleryState = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -244,7 +244,7 @@ export const hybridDeserializeImageGalleryState = <
 
     const restoredState: any = {
       ...parsedData,
-      _isInitialized: _isInitialized ?? false, // 🆕 초기화 플래그 복원
+      _isInitialized: _isInitialized ?? false,
       isPreviewPanelOpen: isPreviewPanelOpen ?? false,
       isHybridMode: isHybridMode ?? true,
       lastSyncTimestamp: lastSyncTimestamp ?? null,
@@ -252,23 +252,42 @@ export const hybridDeserializeImageGalleryState = <
     };
 
     if (hasImageViewConfig) {
-      // selectedImages는 빈 배열로 초기화 (IndexedDB에서 복원 예정)
+      // 🔧 selectedImages도 복원 (저장된 값 우선 사용)
+      const {
+        selectedImageIds = [],
+        imageMetadata = [],
+        clickOrder = [],
+        layout = { columns: 3, gridType: 'grid' },
+        filter = 'all',
+        selectedImages = [], // 🚨 핵심: persist된 selectedImages 복원
+      } = imageViewConfig;
+
       const restoredConfig: HybridImageViewConfig = {
-        ...imageViewConfig,
-        selectedImages: [], // 🔄 런타임에서 복원됨
+        selectedImageIds,
+        imageMetadata,
+        clickOrder,
+        layout,
+        filter,
+        selectedImages, // 🔧 저장된 selectedImages 사용 (빈 배열 아님)
       };
 
       restoredState.imageViewConfig = restoredConfig;
     }
 
-    console.log('📁 [DESERIALIZE] 하이브리드 역직렬화 완료:', {
-      imageIdsCount:
-        restoredState.imageViewConfig?.selectedImageIds?.length || 0,
-      metadataCount: restoredState.imageViewConfig?.imageMetadata?.length || 0,
-      isInitialized: restoredState._isInitialized,
-      isPreviewPanelOpen: restoredState.isPreviewPanelOpen,
-      isHybridMode: restoredState.isHybridMode,
-    });
+    console.log(
+      '📁 [DESERIALIZE] 하이브리드 역직렬화 완료 (selectedImages포함):',
+      {
+        imageIdsCount:
+          restoredState.imageViewConfig?.selectedImageIds?.length || 0,
+        metadataCount:
+          restoredState.imageViewConfig?.imageMetadata?.length || 0,
+        selectedImagesCount:
+          restoredState.imageViewConfig?.selectedImages?.length || 0, // 🆕 추가
+        isInitialized: restoredState._isInitialized,
+        isPreviewPanelOpen: restoredState.isPreviewPanelOpen,
+        isHybridMode: restoredState.isHybridMode,
+      }
+    );
 
     return restoredState;
   } catch (deserializeError) {
@@ -277,7 +296,6 @@ export const hybridDeserializeImageGalleryState = <
   }
 };
 
-// 🆕 개선된 partialize 함수 (더 넓은 타입 지원)
 export const hybridPartializeImageGalleryState = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -292,13 +310,11 @@ export const hybridPartializeImageGalleryState = <
 ): Partial<T> => {
   const partializedState: Partial<T> = {};
 
-  // imageViewConfig 추가
   const hasImageViewConfig = state.imageViewConfig !== undefined;
   if (hasImageViewConfig) {
     Reflect.set(partializedState, 'imageViewConfig', state.imageViewConfig);
   }
 
-  // customGalleryViews 추가
   const hasCustomGalleryViews = state.customGalleryViews !== undefined;
   if (hasCustomGalleryViews) {
     Reflect.set(
@@ -308,7 +324,6 @@ export const hybridPartializeImageGalleryState = <
     );
   }
 
-  // 🆕 모든 추가 속성들 포함
   const hasInitializationFlag = state._isInitialized !== undefined;
   if (hasInitializationFlag) {
     Reflect.set(partializedState, '_isInitialized', state._isInitialized);
@@ -333,22 +348,29 @@ export const hybridPartializeImageGalleryState = <
     Reflect.set(partializedState, 'lastSyncTimestamp', state.lastSyncTimestamp);
   }
 
-  console.log('📦 [PARTIALIZE] 하이브리드 부분 저장 완료:', {
-    hasImageViewConfig,
-    hasCustomGalleryViews,
-    hasInitializationFlag,
-    hasIsPreviewPanelOpen,
-    hasIsHybridMode,
-    hasLastSyncTimestamp,
-    isInitialized: state._isInitialized,
-  });
+  console.log(
+    '📦 [PARTIALIZE] 하이브리드 부분 저장 완료 (selectedImages포함):',
+    {
+      hasImageViewConfig,
+      hasCustomGalleryViews,
+      hasInitializationFlag,
+      hasIsPreviewPanelOpen,
+      hasIsHybridMode,
+      hasLastSyncTimestamp,
+      isInitialized: state._isInitialized,
+      selectedImagesCount: state.imageViewConfig?.selectedImages?.length || 0, // 🆕 추가
+    }
+  );
 
   return partializedState;
 };
 
-// 🆕 onRehydrateStorage 콜백 추가
+// 🆕 React Hook Form 동기화 콜백 추가
 export const createOnRehydrateStorageCallback = <
-  T extends { _triggerAutoInitialization?: () => void }
+  T extends {
+    _triggerAutoInitialization?: () => void;
+    _syncToReactHookForm?: () => void; // 🆕 React Hook Form 동기화 함수 추가
+  }
 >() => {
   return () => (state?: T) => {
     if (!state) {
@@ -356,23 +378,32 @@ export const createOnRehydrateStorageCallback = <
       return;
     }
 
-    console.log('🔄 [REHYDRATE] 상태 복원 완료, 자동 초기화 트리거:', {
+    console.log('🔄 [REHYDRATE] 상태 복원 완료, 동기화 트리거:', {
       hasState: true,
       isInitialized: Reflect.get(state, '_isInitialized') ?? false,
+      hasReactHookFormSync: Reflect.get(state, '_syncToReactHookForm')
+        ? true
+        : false, // 🆕 추가
     });
 
-    // 🔧 복원 후 자동 초기화 트리거 (비동기)
+    // 🔧 복원 후 자동 초기화 트리거
     const triggerAutoInit = Reflect.get(state, '_triggerAutoInitialization');
     if (typeof triggerAutoInit === 'function') {
-      // 다음 틱에서 실행하여 즉시 초기화
       setTimeout(() => {
         triggerAutoInit();
       }, 0);
     }
+
+    // 🆕 React Hook Form 동기화 트리거 추가
+    const syncToReactHookForm = Reflect.get(state, '_syncToReactHookForm');
+    if (typeof syncToReactHookForm === 'function') {
+      setTimeout(() => {
+        syncToReactHookForm();
+      }, 100); // 초기화 후 동기화
+    }
   };
 };
 
-// 🆕 하이브리드 persist 설정 생성 함수 (확장된 타입 지원)
 export const createHybridPersistConfig = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -382,6 +413,7 @@ export const createHybridPersistConfig = <
     isHybridMode?: boolean;
     lastSyncTimestamp?: Date | null;
     _triggerAutoInitialization?: () => void;
+    _syncToReactHookForm?: () => void; // 🆕 React Hook Form 동기화 함수 추가
   }
 >(
   configName: string,
@@ -397,15 +429,19 @@ export const createHybridPersistConfig = <
       serialize: hybridSerializeImageGalleryState,
       deserialize: hybridDeserializeImageGalleryState,
       partialize: hybridPartializeImageGalleryState,
-      onRehydrateStorage: createOnRehydrateStorageCallback<T>(), // 🆕 복원 후 콜백
+      onRehydrateStorage: createOnRehydrateStorageCallback<T>(),
       skipHydration: false,
     };
 
-    console.log('🔧 [HYBRID_PERSIST] 개선된 하이브리드 설정 생성 완료:', {
-      configName,
-      storageType,
-      hasRehydrateCallback: true,
-    });
+    console.log(
+      '🔧 [HYBRID_PERSIST] 개선된 하이브리드 설정 생성 완료 (React Hook Form 동기화 포함):',
+      {
+        configName,
+        storageType,
+        hasRehydrateCallback: true,
+        includesSelectedImages: true, // 🆕 추가
+      }
+    );
 
     return hybridPersistConfig;
   } catch (hybridConfigError) {
@@ -420,7 +456,6 @@ export const createHybridPersistConfig = <
   }
 };
 
-// 🔄 기존 헬퍼 함수들 유지 (하위 호환성)
 export const createLocalPersistConfig = <T>(configName: string) =>
   createPersistConfig<T>(configName, 'local');
 
