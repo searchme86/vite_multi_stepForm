@@ -5,15 +5,9 @@ import type {
   HybridCustomGalleryView,
   ImageGalleryMetadata,
 } from '../shared/commonTypes';
-import type { HybridImageGalleryState } from './initialImageGalleryState';
-import {
-  createDynamicMethods,
-  type DynamicStoreMethods,
-} from '../shared/dynamicTypeFactory';
 
-// 🆕 통합된 ImageGallerySetters 인터페이스 (중복 제거)
-export interface ImageGallerySetters
-  extends DynamicStoreMethods<HybridImageGalleryState> {
+// 🆕 중복 제거된 ImageGallerySetters 인터페이스
+export interface ImageGallerySetters {
   // 🔄 기존 핵심 메서드들
   addCustomGalleryView: (view: HybridCustomGalleryView) => void;
   removeCustomGalleryView: (id: string) => void;
@@ -26,49 +20,37 @@ export interface ImageGallerySetters
   togglePreviewPanel: () => void;
   resetImageGalleryState: () => void;
 
-  // 🆕 간소화된 하이브리드 setter 메서드들
+  // 🆕 하이브리드 setter 메서드들
   setSelectedImageIds: (imageIds: string[]) => void;
   addSelectedImageId: (imageId: string) => void;
   removeSelectedImageId: (imageId: string) => void;
   setImageMetadata: (metadata: ImageGalleryMetadata[]) => void;
   addImageMetadata: (metadata: ImageGalleryMetadata) => void;
   removeImageMetadata: (imageId: string) => void;
+
+  // 🆕 기본 속성 setter 메서드들
+  setImageViewConfig: (imageViewConfig: HybridImageViewConfig) => void;
+  setCustomGalleryViews: (
+    customGalleryViews: HybridCustomGalleryView[]
+  ) => void;
+  setIsPreviewPanelOpen: (isPreviewPanelOpen: boolean) => void;
   setIsHybridMode: (isHybridMode: boolean) => void;
   setLastSyncTimestamp: (timestamp: Date | null) => void;
+
+  // 🆕 초기화 관련 setter 메서드들
+  setIsInitialized: (isInitialized: boolean) => void;
+  setInitializationPromise: (promise: Promise<void> | null) => void;
+
+  // 🆕 내부 속성 setter 메서드들 (DynamicStoreMethods 호환)
+  set_isInitialized: (isInitialized: boolean) => void;
+  set_initializationPromise: (promise: Promise<void> | null) => void;
 }
 
-// 🔧 초기 하이브리드 상태 생성 (DynamicStoreMethods용)
-const createInitialHybridState = (): HybridImageGalleryState => {
-  return {
-    imageViewConfig: {
-      clickOrder: [],
-      selectedImageIds: [],
-      selectedImages: [],
-      imageMetadata: [],
-      layout: {
-        columns: 3,
-        gridType: 'grid',
-      },
-      filter: 'all',
-    },
-    customGalleryViews: [],
-    isPreviewPanelOpen: false,
-    isHybridMode: true,
-    lastSyncTimestamp: null,
-  };
-};
-
-// 🆕 통합된 ImageGallerySetters 생성 함수 (간소화)
+// 🆕 ImageGallerySetters 생성 함수 (중복 제거 완료)
 export const createImageGallerySetters = (): ImageGallerySetters => {
-  console.log('🔧 [SETTERS] 간소화된 이미지 갤러리 setters 생성');
-
-  const initialHybridState = createInitialHybridState();
-  const dynamicMethods = createDynamicMethods(initialHybridState);
+  console.log('🔧 [SETTERS] 중복 제거된 이미지 갤러리 setters 생성');
 
   return {
-    // 🔧 DynamicStoreMethods 포함
-    ...dynamicMethods,
-
     // 🔄 기존 핵심 메서드들
     addCustomGalleryView: () => {
       throw new Error('addCustomGalleryView must be implemented in store');
@@ -98,7 +80,7 @@ export const createImageGallerySetters = (): ImageGallerySetters => {
       throw new Error('resetImageGalleryState must be implemented in store');
     },
 
-    // 🆕 간소화된 하이브리드 setter 메서드들
+    // 🆕 하이브리드 setter 메서드들
     setSelectedImageIds: () => {
       throw new Error('setSelectedImageIds must be implemented in store');
     },
@@ -123,12 +105,43 @@ export const createImageGallerySetters = (): ImageGallerySetters => {
       throw new Error('removeImageMetadata must be implemented in store');
     },
 
+    // 🆕 기본 속성 setter 메서드들
+    setImageViewConfig: () => {
+      throw new Error('setImageViewConfig must be implemented in store');
+    },
+
+    setCustomGalleryViews: () => {
+      throw new Error('setCustomGalleryViews must be implemented in store');
+    },
+
+    setIsPreviewPanelOpen: () => {
+      throw new Error('setIsPreviewPanelOpen must be implemented in store');
+    },
+
     setIsHybridMode: () => {
       throw new Error('setIsHybridMode must be implemented in store');
     },
 
     setLastSyncTimestamp: () => {
       throw new Error('setLastSyncTimestamp must be implemented in store');
+    },
+
+    // 🆕 초기화 관련 setter 메서드들
+    setIsInitialized: () => {
+      throw new Error('setIsInitialized must be implemented in store');
+    },
+
+    setInitializationPromise: () => {
+      throw new Error('setInitializationPromise must be implemented in store');
+    },
+
+    // 🆕 내부 속성 setter 메서드들 (DynamicStoreMethods 호환)
+    set_isInitialized: () => {
+      throw new Error('set_isInitialized must be implemented in store');
+    },
+
+    set_initializationPromise: () => {
+      throw new Error('set_initializationPromise must be implemented in store');
     },
   };
 };

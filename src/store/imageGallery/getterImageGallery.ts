@@ -5,61 +5,41 @@ import type {
   ImageGalleryMetadata,
   HybridImageViewConfig,
 } from '../shared/commonTypes';
-import type { HybridImageGalleryState } from './initialImageGalleryState';
-import {
-  createDynamicMethods,
-  type DynamicStoreMethods,
-} from '../shared/dynamicTypeFactory';
 
-// 🆕 통합된 ImageGalleryGetters 인터페이스 (중복 제거)
-export interface ImageGalleryGetters
-  extends DynamicStoreMethods<HybridImageGalleryState> {
+// 🆕 완전히 중복 제거된 ImageGalleryGetters 인터페이스
+export interface ImageGalleryGetters {
   // 🔄 기존 핵심 메서드들
   getCustomGalleryViewById: (id: string) => HybridCustomGalleryView | undefined;
   getSelectedImagesCount: () => number;
   getClickOrderedImages: () => string[];
 
-  // 🆕 간소화된 하이브리드 getter 메서드들
+  // 🆕 하이브리드 getter 메서드들
   getSelectedImageIds: () => string[];
   getImageMetadata: () => ImageGalleryMetadata[];
   getImageMetadataById: (imageId: string) => ImageGalleryMetadata | undefined;
   getHybridImageViewConfig: () => HybridImageViewConfig;
+
+  // 🆕 기본 속성 getter 메서드들
+  getImageViewConfig: () => HybridImageViewConfig;
+  getCustomGalleryViews: () => HybridCustomGalleryView[];
+  getIsPreviewPanelOpen: () => boolean;
   getIsHybridMode: () => boolean;
   getLastSyncTimestamp: () => Date | null;
+
+  // 🆕 초기화 관련 getter 메서드들
+  getIsInitialized: () => boolean;
+  getInitializationPromise: () => Promise<void> | null;
+
+  // 🆕 내부 속성 getter 메서드들 (DynamicStoreMethods 호환용)
+  get_isInitialized: () => boolean;
+  get_initializationPromise: () => Promise<void> | null;
 }
 
-// 🔧 초기 하이브리드 상태 생성 (DynamicStoreMethods용)
-const createInitialHybridState = (): HybridImageGalleryState => {
-  return {
-    imageViewConfig: {
-      clickOrder: [],
-      selectedImageIds: [],
-      selectedImages: [],
-      imageMetadata: [],
-      layout: {
-        columns: 3,
-        gridType: 'grid',
-      },
-      filter: 'all',
-    },
-    customGalleryViews: [],
-    isPreviewPanelOpen: false,
-    isHybridMode: true,
-    lastSyncTimestamp: null,
-  };
-};
-
-// 🆕 통합된 ImageGalleryGetters 생성 함수 (간소화)
+// 🆕 ImageGalleryGetters 생성 함수
 export const createImageGalleryGetters = (): ImageGalleryGetters => {
-  console.log('🔧 [GETTERS] 간소화된 이미지 갤러리 getters 생성');
-
-  const initialHybridState = createInitialHybridState();
-  const dynamicMethods = createDynamicMethods(initialHybridState);
+  console.log('🔧 [GETTERS] 완전히 중복 제거된 이미지 갤러리 getters 생성');
 
   return {
-    // 🔧 DynamicStoreMethods 포함
-    ...dynamicMethods,
-
     // 🔄 기존 핵심 메서드들
     getCustomGalleryViewById: () => {
       throw new Error('getCustomGalleryViewById must be implemented in store');
@@ -73,7 +53,7 @@ export const createImageGalleryGetters = (): ImageGalleryGetters => {
       throw new Error('getClickOrderedImages must be implemented in store');
     },
 
-    // 🆕 간소화된 하이브리드 getter 메서드들
+    // 🆕 하이브리드 getter 메서드들
     getSelectedImageIds: () => {
       throw new Error('getSelectedImageIds must be implemented in store');
     },
@@ -90,12 +70,43 @@ export const createImageGalleryGetters = (): ImageGalleryGetters => {
       throw new Error('getHybridImageViewConfig must be implemented in store');
     },
 
+    // 🆕 기본 속성 getter 메서드들
+    getImageViewConfig: () => {
+      throw new Error('getImageViewConfig must be implemented in store');
+    },
+
+    getCustomGalleryViews: () => {
+      throw new Error('getCustomGalleryViews must be implemented in store');
+    },
+
+    getIsPreviewPanelOpen: () => {
+      throw new Error('getIsPreviewPanelOpen must be implemented in store');
+    },
+
     getIsHybridMode: () => {
       throw new Error('getIsHybridMode must be implemented in store');
     },
 
     getLastSyncTimestamp: () => {
       throw new Error('getLastSyncTimestamp must be implemented in store');
+    },
+
+    // 🆕 초기화 관련 getter 메서드들
+    getIsInitialized: () => {
+      throw new Error('getIsInitialized must be implemented in store');
+    },
+
+    getInitializationPromise: () => {
+      throw new Error('getInitializationPromise must be implemented in store');
+    },
+
+    // 🆕 내부 속성 getter 메서드들 (DynamicStoreMethods 호환용)
+    get_isInitialized: () => {
+      throw new Error('get_isInitialized must be implemented in store');
+    },
+
+    get_initializationPromise: () => {
+      throw new Error('get_initializationPromise must be implemented in store');
     },
   };
 };
