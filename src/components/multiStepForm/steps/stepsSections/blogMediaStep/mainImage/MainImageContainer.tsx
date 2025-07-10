@@ -2,9 +2,7 @@
 
 import React from 'react';
 import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
-import { useMainImageManagement } from './hooks/useMainImageManagement';
 import { useMainImageValidation } from './hooks/useMainImageValidation';
-import MainImageCancelButton from './parts/MainImageCancelButton';
 
 interface MainImageContainerProps {
   className?: string;
@@ -13,7 +11,7 @@ interface MainImageContainerProps {
 function MainImageContainer({
   className: additionalCssClasses = '',
 }: MainImageContainerProps): React.ReactNode {
-  console.log('🚀 MainImageContainer 렌더링 시작 - Phase2 미리보기섹션:', {
+  console.log('🚀 MainImageContainer 렌더링 시작 - 미리보기 전용:', {
     hasAdditionalClasses: additionalCssClasses ? true : false,
     timestamp: new Date().toLocaleTimeString(),
   });
@@ -22,57 +20,31 @@ function MainImageContainer({
   const { media: mediaFilesList, mainImage: currentMainImageUrl } =
     currentFormValues;
 
-  const mainImageManagementHook = useMainImageManagement();
-  const { cancelMainImage: cancelCurrentMainImage } = mainImageManagementHook;
-
   const mainImageValidationHook = useMainImageValidation();
   const { getMainImageValidationStatus } = mainImageValidationHook;
-
-  console.log('📊 MainImageContainer 훅 초기화 완료 - Phase2:', {
-    hasManagementHook: mainImageManagementHook ? true : false,
-    hasValidationHook: mainImageValidationHook ? true : false,
-    timestamp: new Date().toLocaleTimeString(),
-  });
 
   const hasMainImage = currentMainImageUrl ? true : false;
   const hasMediaFiles = mediaFilesList.length > 0;
   const validationStatus = getMainImageValidationStatus();
-  const { isValidMainImage, issues: validationIssues } = validationStatus;
+  const { isValidMainImage, issues: validationIssueList } = validationStatus;
 
-  console.log('📊 MainImageContainer 현재 상태 - Phase2:', {
+  console.log('📊 MainImageContainer 현재 상태:', {
     hasMainImage,
     hasMediaFiles,
     isValidMainImage,
-    validationIssuesCount: validationIssues.length,
-    currentMainImagePreview:
-      hasMainImage && currentMainImageUrl
-        ? currentMainImageUrl.slice(0, 30) + '...'
-        : 'none',
+    validationIssuesCount: validationIssueList.length,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  const handleCancelCurrentMainImage = () => {
-    console.log('🔧 handleCancelCurrentMainImage 호출 - Phase2:', {
-      currentMainImagePreview:
-        hasMainImage && currentMainImageUrl
-          ? currentMainImageUrl.slice(0, 30) + '...'
-          : 'none',
-    });
-
-    cancelCurrentMainImage();
-
-    console.log('✅ 메인 이미지 취소 완료 - Phase2');
-  };
-
-  const getMainImageSizeInKB = (imageUrl: string): number => {
+  const calculateMainImageSizeInKB = (imageUrl: string): number => {
     return Math.round(imageUrl.length / 1024);
   };
 
   const renderEmptyMainImageState = () => {
-    console.log('🔄 renderEmptyMainImageState 호출 - Phase2');
+    console.log('🔄 renderEmptyMainImageState 호출');
 
-    const showUploadGuide = !hasMediaFiles;
-    const showSelectionGuide = hasMediaFiles && !hasMainImage;
+    const shouldShowUploadGuide = !hasMediaFiles;
+    const shouldShowSelectionGuide = hasMediaFiles && !hasMainImage;
 
     return (
       <div className="flex items-center justify-center p-8 border-2 border-gray-300 border-dashed rounded-lg bg-gray-50">
@@ -94,7 +66,7 @@ function MainImageContainer({
             </svg>
           </div>
 
-          {showUploadGuide ? (
+          {shouldShowUploadGuide ? (
             <>
               <h3 className="mb-2 text-lg font-medium text-gray-900">
                 메인 이미지 없음
@@ -103,7 +75,7 @@ function MainImageContainer({
                 먼저 이미지를 업로드한 후 메인 이미지를 선택해주세요.
               </p>
             </>
-          ) : showSelectionGuide ? (
+          ) : shouldShowSelectionGuide ? (
             <>
               <h3 className="mb-2 text-lg font-medium text-gray-900">
                 메인 이미지를 선택해주세요
@@ -125,65 +97,58 @@ function MainImageContainer({
       return null;
     }
 
-    console.log('🔄 renderMainImagePreview 호출 - Phase2:', {
+    console.log('🔄 renderMainImagePreview 호출:', {
       currentMainImagePreview: currentMainImageUrl.slice(0, 30) + '...',
       isValidMainImage,
     });
 
-    const mainImageSizeKB = getMainImageSizeInKB(currentMainImageUrl);
+    const mainImageSizeKB = calculateMainImageSizeInKB(currentMainImageUrl);
 
     return (
       <div className="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm">
-        {/* 헤더 영역 */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-blue-50">
-          <div className="flex items-center gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-900">
-                현재 메인 이미지
-              </h3>
-              <p className="text-sm text-blue-700">
-                블로그에 표시될 대표 이미지입니다
-              </p>
-            </div>
+        {/* 헤더 영역 - 해제 버튼 제거됨 */}
+        <header className="p-4 border-b border-gray-200 bg-blue-50">
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-blue-900">
+              현재 메인 이미지
+            </h3>
+            <p className="text-sm text-blue-700">
+              블로그에 표시될 대표 이미지입니다
+            </p>
+            <p className="mt-1 text-xs text-blue-600">
+              💡 다른 이미지로 변경하려면 상단 업로드 영역에서 🏠 버튼을
+              클릭하세요
+            </p>
           </div>
-
-          <MainImageCancelButton
-            onCancelMainImage={handleCancelCurrentMainImage}
-            tooltipText="메인 이미지 해제"
-            confirmBeforeCancel={true}
-            size="sm"
-            variant="light"
-            color="warning"
-          />
-        </div>
+        </header>
 
         {/* 이미지 미리보기 영역 */}
-        <div className="p-4">
+        <main className="p-4">
           <div className="relative overflow-hidden bg-gray-100 rounded-lg aspect-video">
             <img
               src={currentMainImageUrl}
               alt="현재 메인 이미지 미리보기"
               className="object-cover w-full h-full"
-              onLoad={(event) => {
-                const { currentTarget: loadedImage } = event;
-                const { naturalWidth, naturalHeight } = loadedImage;
+              onLoad={(loadEvent) => {
+                const { currentTarget: loadedImageElement } = loadEvent;
+                const { naturalWidth, naturalHeight } = loadedImageElement;
                 console.log('🖼️ [MAIN_IMAGE_PREVIEW] 메인 이미지 로드 완료:', {
                   naturalWidth,
                   naturalHeight,
                 });
               }}
-              onError={(event) => {
+              onError={(errorEvent) => {
                 console.error(
                   '❌ [MAIN_IMAGE_PREVIEW] 메인 이미지 로드 실패:',
                   {
-                    event,
+                    errorEvent,
                   }
                 );
               }}
             />
           </div>
 
-          {/* 이미지 정보 */}
+          {/* 이미지 정보 표시 */}
           <div className="mt-3 text-sm text-gray-600">
             <div className="flex items-center justify-between">
               <span>파일 크기: {mainImageSizeKB} KB</span>
@@ -196,15 +161,15 @@ function MainImageContainer({
           </div>
 
           {/* 검증 이슈 표시 */}
-          {validationIssues.length > 0 && (
+          {validationIssueList.length > 0 && (
             <div className="p-3 mt-3 border border-red-200 rounded-lg bg-red-50">
               <h4 className="mb-1 text-sm font-medium text-red-800">
                 검증 오류
               </h4>
               <ul className="space-y-1 text-sm text-red-700">
-                {validationIssues.map((issueMessage, issueIndex) => (
+                {validationIssueList.map((issueMessage, issueIndex) => (
                   <li
-                    key={`issue-${issueIndex}`}
+                    key={`validation-issue-${issueIndex}`}
                     className="flex items-start gap-1"
                   >
                     <span className="text-red-500">•</span>
@@ -214,15 +179,15 @@ function MainImageContainer({
               </ul>
             </div>
           )}
-        </div>
+        </main>
       </div>
     );
   };
 
-  const combinedCssClasses = `space-y-4 ${additionalCssClasses}`.trim();
+  const finalCssClasses = `space-y-4 ${additionalCssClasses}`.trim();
 
-  console.log('🎨 MainImageContainer 최종 렌더링 준비 - Phase2:', {
-    combinedCssClasses,
+  console.log('🎨 MainImageContainer 최종 렌더링 준비:', {
+    finalCssClasses,
     hasMainImage,
     hasMediaFiles,
     isValidMainImage,
@@ -232,7 +197,7 @@ function MainImageContainer({
 
   return (
     <section
-      className={combinedCssClasses}
+      className={finalCssClasses}
       role="region"
       aria-labelledby="main-image-preview-section-title"
       aria-describedby="main-image-preview-section-description"
@@ -240,7 +205,8 @@ function MainImageContainer({
       <header className="sr-only">
         <h2 id="main-image-preview-section-title">메인 이미지 미리보기 섹션</h2>
         <p id="main-image-preview-section-description">
-          현재 선택된 메인 이미지를 미리보기로 확인하고 관리할 수 있습니다.
+          현재 선택된 메인 이미지를 미리보기로 확인할 수 있습니다. 이미지 변경은
+          상단 업로드 영역에서 가능합니다.
         </p>
       </header>
 
