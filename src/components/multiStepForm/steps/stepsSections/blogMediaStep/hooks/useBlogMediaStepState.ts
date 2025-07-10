@@ -4,12 +4,14 @@
  * BlogMediaStep 컴포넌트 - 전체 상태 관리 통합 훅
  * 모든 로컬 상태와 글로벌 상태를 중앙에서 관리
  * 각 기능별 컨테이너에서 필요한 상태와 함수들을 제공
+ * ✅ Zustand ImageGallery 스토어와 자동 동기화 기능 추가
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useBlogMediaStepIntegration } from './useBlogMediaStepIntegration';
 import { useBlogMediaStepOrchestrator } from './useBlogMediaStepOrchestrator';
 import { useImageGalleryStore } from '../../../../../../store/imageGallery/imageGalleryStore';
+import type { ImageViewConfig } from '../../../../../../store/shared/commonTypes';
 
 // ✅ 업로드 상태 타입
 interface UploadState {
@@ -98,9 +100,10 @@ interface BlogMediaStepStateResult {
 /**
  * BlogMediaStep 전체 상태 관리 훅
  * 모든 상태를 중앙에서 관리하고 각 컨테이너에 필요한 상태를 제공
+ * ✅ Zustand ImageGallery 스토어와 자동 동기화 기능 포함
  */
 export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
-  console.log('🔧 useBlogMediaStepState 훅 초기화'); // 디버깅용
+  console.log('🔧 useBlogMediaStepState 훅 초기화 - Zustand연동'); // 디버깅용
 
   // ✅ 통합 훅들
   const integration = useBlogMediaStepIntegration();
@@ -138,10 +141,78 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
   // ✅ 초기화 ref
   const initializationRef = useRef(false);
+  const previousSyncDataRef = useRef({
+    media: [] as string[],
+    mainImage: null as string | null,
+  });
 
-  // ✅ 폼 값과 로컬 상태 동기화
+  // ✅ 새로 추가: 양방향 Zustand 동기화 함수
+  const syncFormToImageGalleryStore = useCallback(
+    (mediaFiles: string[], mainImageUrl: string | null) => {
+      if (!imageGalleryStore) {
+        console.log('⚠️ [ZUSTAND_SYNC] imageGalleryStore가 없음');
+        return;
+      }
+
+      try {
+        const { updateImageViewConfig } = imageGalleryStore;
+
+        if (typeof updateImageViewConfig !== 'function') {
+          console.error(
+            '❌ [ZUSTAND_SYNC] updateImageViewConfig가 함수가 아님'
+          );
+          return;
+        }
+
+        // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
+        let clickOrderArray = mediaFiles.map((_, imageIndex) => imageIndex);
+
+        if (mainImageUrl) {
+          const mainImageIndex = mediaFiles.indexOf(mainImageUrl);
+          if (mainImageIndex >= 0) {
+            clickOrderArray = [
+              mainImageIndex,
+              ...clickOrderArray.filter((index) => index !== mainImageIndex),
+            ];
+          }
+        }
+
+        const galleryConfig: Partial<ImageViewConfig> = {
+          selectedImages: mediaFiles,
+          clickOrder: clickOrderArray,
+          layout: {
+            columns: 3,
+            gridType: 'grid',
+          },
+          filter: 'all',
+        };
+
+        updateImageViewConfig(galleryConfig);
+
+        console.log('✅ [ZUSTAND_SYNC] 폼 → 갤러리 스토어 동기화 완료:', {
+          selectedImagesCount: mediaFiles.length,
+          mainImageIndex: mainImageUrl ? mediaFiles.indexOf(mainImageUrl) : -1,
+          clickOrderLength: clickOrderArray.length,
+          firstImagePreview: mediaFiles[0]
+            ? mediaFiles[0].slice(0, 30) + '...'
+            : 'none',
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      } catch (syncError) {
+        console.error('❌ [ZUSTAND_SYNC] 폼 → 갤러리 스토어 동기화 실패:', {
+          error: syncError,
+          mediaFilesCount: mediaFiles.length,
+          hasMainImage: mainImageUrl ? true : false,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
+    },
+    [imageGalleryStore]
+  );
+
+  // ✅ 폼 값과 로컬 상태 동기화 + Zustand 동기화 추가
   useEffect(() => {
-    const { sliderImages, media } = integration.currentFormValues;
+    const { sliderImages, media, mainImage } = integration.currentFormValues;
 
     // 슬라이더 이미지 동기화
     if (JSON.stringify(localSliderImages) !== JSON.stringify(sliderImages)) {
@@ -164,7 +235,62 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
       setLocalMediaFiles(media);
     }
-  }, [integration.currentFormValues, localSliderImages, localMediaFiles]);
+
+    // ✅ 새로 추가: Zustand 갤러리 스토어 동기화
+    const previousData = previousSyncDataRef.current;
+    const hasMediaChanged =
+      JSON.stringify(previousData.media) !== JSON.stringify(media);
+    const hasMainImageChanged = previousData.mainImage !== mainImage;
+    const shouldSyncToStore = hasMediaChanged || hasMainImageChanged;
+
+    if (shouldSyncToStore) {
+      console.log(
+        '🔄 [ZUSTAND_SYNC] 폼 변경 감지로 갤러리 스토어 동기화 시작:',
+        {
+          hasMediaChanged,
+          hasMainImageChanged,
+          mediaCount: media.length,
+          hasMainImage: mainImage ? true : false,
+          mainImagePreview: mainImage ? mainImage.slice(0, 30) + '...' : 'none',
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
+
+      syncFormToImageGalleryStore(media, mainImage);
+
+      // 이전 데이터 업데이트
+      previousSyncDataRef.current = {
+        media: [...media],
+        mainImage,
+      };
+    }
+  }, [
+    integration.currentFormValues,
+    localSliderImages,
+    localMediaFiles,
+    syncFormToImageGalleryStore,
+  ]);
+
+  // ✅ 새로 추가: 초기 로드 시 Zustand 동기화
+  useEffect(() => {
+    const { media, mainImage } = integration.currentFormValues;
+    const hasInitialData = media.length > 0;
+
+    if (hasInitialData && !initializationRef.current) {
+      console.log('🚀 [ZUSTAND_SYNC] 초기 로드 시 갤러리 스토어 동기화:', {
+        initialMediaCount: media.length,
+        hasInitialMainImage: mainImage ? true : false,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      syncFormToImageGalleryStore(media, mainImage);
+
+      previousSyncDataRef.current = {
+        media: [...media],
+        mainImage,
+      };
+    }
+  }, [integration.currentFormValues, syncFormToImageGalleryStore]);
 
   // ✅ 모바일 감지
   useEffect(() => {
@@ -243,11 +369,12 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
   // ✅ 초기화 로그 (한 번만)
   useEffect(() => {
     if (!initializationRef.current) {
-      console.log('✅ useBlogMediaStepState 초기화 완료:', {
+      console.log('✅ useBlogMediaStepState 초기화 완료 - Zustand연동:', {
         hasIntegration: !!integration,
         hasOrchestrator: !!orchestrator,
         hasImageGalleryStore: !!imageGalleryStore,
         initialFormValues: integration.currentFormValues,
+        zustandSyncEnabled: true,
         timestamp: new Date().toLocaleTimeString(),
       }); // 디버깅용
 
