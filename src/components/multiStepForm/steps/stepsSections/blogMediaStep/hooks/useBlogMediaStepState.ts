@@ -5,6 +5,7 @@
  * 모든 로컬 상태와 글로벌 상태를 중앙에서 관리
  * 각 기능별 컨테이너에서 필요한 상태와 함수들을 제공
  * ✅ Zustand ImageGallery 스토어와 자동 동기화 기능 추가
+ * ✅ 타입 단언 제거 및 구체 타입 사용
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -12,6 +13,12 @@ import { useBlogMediaStepIntegration } from './useBlogMediaStepIntegration';
 import { useBlogMediaStepOrchestrator } from './useBlogMediaStepOrchestrator';
 import { useImageGalleryStore } from '../../../../../../store/imageGallery/imageGalleryStore';
 import type { ImageViewConfig } from '../../../../../../store/shared/commonTypes';
+
+// ✅ 구체적인 동기화 데이터 타입 정의
+interface PreviousSyncData {
+  media: string[];
+  mainImage: string | null;
+}
 
 // ✅ 업로드 상태 타입
 interface UploadState {
@@ -97,13 +104,39 @@ interface BlogMediaStepStateResult {
   imageGalleryStore: ReturnType<typeof useImageGalleryStore>;
 }
 
+// ✅ 초기 동기화 데이터 팩토리 함수
+const createInitialSyncData = (): PreviousSyncData => {
+  const emptyMediaArray: string[] = [];
+  const nullMainImage: string | null = null;
+
+  return {
+    media: emptyMediaArray,
+    mainImage: nullMainImage,
+  };
+};
+
+// ✅ 미디어 배열 안전 복사 함수
+const createSafeMediaArray = (mediaSource: string[]): string[] => {
+  const safeMediaArray = Array.isArray(mediaSource) ? mediaSource : [];
+  return [...safeMediaArray];
+};
+
+// ✅ 메인 이미지 안전 추출 함수
+const extractSafeMainImage = (mainImageSource: unknown): string | null => {
+  if (typeof mainImageSource === 'string' && mainImageSource.length > 0) {
+    return mainImageSource;
+  }
+  return null;
+};
+
 /**
  * BlogMediaStep 전체 상태 관리 훅
  * 모든 상태를 중앙에서 관리하고 각 컨테이너에 필요한 상태를 제공
  * ✅ Zustand ImageGallery 스토어와 자동 동기화 기능 포함
+ * ✅ 타입 단언 완전 제거
  */
 export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
-  console.log('🔧 useBlogMediaStepState 훅 초기화 - Zustand연동'); // 디버깅용
+  console.log('🔧 useBlogMediaStepState 훅 초기화 - 타입단언제거'); // 디버깅용
 
   // ✅ 통합 훅들
   const integration = useBlogMediaStepIntegration();
@@ -117,10 +150,10 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
   >({});
 
   // ✅ UI 상태
-  const [isMobile, setIsMobile] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [visibleFilesCount, setVisibleFilesCount] = useState(5); // INITIAL_VISIBLE_FILES
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [dragActive, setDragActive] = useState<boolean>(false);
+  const [visibleFilesCount, setVisibleFilesCount] = useState<number>(5); // INITIAL_VISIBLE_FILES
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'index' | 'name' | 'size'>('index');
 
   // ✅ 선택 상태
@@ -139,14 +172,13 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
   const [localSliderImages, setLocalSliderImages] = useState<string[]>([]);
   const [localMediaFiles, setLocalMediaFiles] = useState<string[]>([]);
 
-  // ✅ 초기화 ref
-  const initializationRef = useRef(false);
-  const previousSyncDataRef = useRef({
-    media: [] as string[],
-    mainImage: null as string | null,
-  });
+  // ✅ 초기화 ref - 타입 단언 제거
+  const initializationRef = useRef<boolean>(false);
 
-  // ✅ 새로 추가: 양방향 Zustand 동기화 함수
+  // ✅ 타입 단언 완전 제거 - 구체적인 팩토리 함수 사용
+  const previousSyncDataRef = useRef<PreviousSyncData>(createInitialSyncData());
+
+  // ✅ 새로 추가: 양방향 Zustand 동기화 함수 - 구조분해할당 + fallback 적용
   const syncFormToImageGalleryStore = useCallback(
     (mediaFiles: string[], mainImageUrl: string | null) => {
       if (!imageGalleryStore) {
@@ -155,30 +187,42 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
       }
 
       try {
-        const { updateImageViewConfig } = imageGalleryStore;
+        // ✅ 구조분해할당 + fallback으로 안전한 메서드 추출
+        const updateImageViewConfig = Reflect.get(
+          imageGalleryStore,
+          'updateImageViewConfig'
+        );
 
-        if (typeof updateImageViewConfig !== 'function') {
+        const isValidUpdateFunction =
+          typeof updateImageViewConfig === 'function';
+        if (!isValidUpdateFunction) {
           console.error(
             '❌ [ZUSTAND_SYNC] updateImageViewConfig가 함수가 아님'
           );
           return;
         }
 
-        // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
-        let clickOrderArray = mediaFiles.map((_, imageIndex) => imageIndex);
+        // ✅ 안전한 미디어 배열 처리
+        const safeMediaFiles = createSafeMediaArray(mediaFiles);
+        const safeMainImageUrl = extractSafeMainImage(mainImageUrl);
 
-        if (mainImageUrl) {
-          const mainImageIndex = mediaFiles.indexOf(mainImageUrl);
-          if (mainImageIndex >= 0) {
-            clickOrderArray = [
-              mainImageIndex,
-              ...clickOrderArray.filter((index) => index !== mainImageIndex),
-            ];
+        // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
+        let clickOrderArray = safeMediaFiles.map((_, imageIndex) => imageIndex);
+
+        if (safeMainImageUrl) {
+          const mainImageIndex = safeMediaFiles.indexOf(safeMainImageUrl);
+          const isValidMainImageIndex = mainImageIndex >= 0;
+
+          if (isValidMainImageIndex) {
+            const remainingIndices = clickOrderArray.filter(
+              (index) => index !== mainImageIndex
+            );
+            clickOrderArray = [mainImageIndex, ...remainingIndices];
           }
         }
 
         const galleryConfig: Partial<ImageViewConfig> = {
-          selectedImages: mediaFiles,
+          selectedImages: safeMediaFiles,
           clickOrder: clickOrderArray,
           layout: {
             columns: 3,
@@ -189,20 +233,31 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
         updateImageViewConfig(galleryConfig);
 
+        const { length: mediaFilesCount } = safeMediaFiles;
+        const mainImageIndex = safeMainImageUrl
+          ? safeMediaFiles.indexOf(safeMainImageUrl)
+          : -1;
+        const { length: clickOrderLength } = clickOrderArray;
+        const firstImagePreview = safeMediaFiles[0]
+          ? safeMediaFiles[0].slice(0, 30) + '...'
+          : 'none';
+
         console.log('✅ [ZUSTAND_SYNC] 폼 → 갤러리 스토어 동기화 완료:', {
-          selectedImagesCount: mediaFiles.length,
-          mainImageIndex: mainImageUrl ? mediaFiles.indexOf(mainImageUrl) : -1,
-          clickOrderLength: clickOrderArray.length,
-          firstImagePreview: mediaFiles[0]
-            ? mediaFiles[0].slice(0, 30) + '...'
-            : 'none',
+          selectedImagesCount: mediaFilesCount,
+          mainImageIndex,
+          clickOrderLength,
+          firstImagePreview,
           timestamp: new Date().toLocaleTimeString(),
         });
       } catch (syncError) {
+        const { length: mediaFilesCount } = mediaFiles || [];
+        const hasMainImage =
+          mainImageUrl !== null && mainImageUrl !== undefined;
+
         console.error('❌ [ZUSTAND_SYNC] 폼 → 갤러리 스토어 동기화 실패:', {
           error: syncError,
-          mediaFilesCount: mediaFiles.length,
-          hasMainImage: mainImageUrl ? true : false,
+          mediaFilesCount,
+          hasMainImage,
           timestamp: new Date().toLocaleTimeString(),
         });
       }
@@ -210,15 +265,27 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
     [imageGalleryStore]
   );
 
-  // ✅ 폼 값과 로컬 상태 동기화 + Zustand 동기화 추가
+  // ✅ 폼 값과 로컬 상태 동기화 + Zustand 동기화 추가 - 구조분해할당 + fallback
   useEffect(() => {
-    const { sliderImages, media, mainImage } = integration.currentFormValues;
+    const { currentFormValues: formValues } = integration;
+    const {
+      sliderImages = [],
+      media = [],
+      mainImage = null,
+    } = formValues || {};
 
     // 슬라이더 이미지 동기화
-    if (JSON.stringify(localSliderImages) !== JSON.stringify(sliderImages)) {
+    const localSliderImagesJson = JSON.stringify(localSliderImages);
+    const sliderImagesJson = JSON.stringify(sliderImages);
+    const hasSliderImagesChanged = localSliderImagesJson !== sliderImagesJson;
+
+    if (hasSliderImagesChanged) {
+      const { length: beforeCount } = localSliderImages;
+      const { length: afterCount } = sliderImages;
+
       console.log('🔄 로컬 슬라이더 이미지 동기화:', {
-        before: localSliderImages.length,
-        after: sliderImages.length,
+        before: beforeCount,
+        after: afterCount,
         timestamp: new Date().toLocaleTimeString(),
       }); // 디버깅용
 
@@ -226,43 +293,61 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
     }
 
     // 미디어 파일 동기화
-    if (JSON.stringify(localMediaFiles) !== JSON.stringify(media)) {
+    const localMediaFilesJson = JSON.stringify(localMediaFiles);
+    const mediaJson = JSON.stringify(media);
+    const hasMediaFilesChanged = localMediaFilesJson !== mediaJson;
+
+    if (hasMediaFilesChanged) {
+      const { length: beforeCount } = localMediaFiles;
+      const { length: afterCount } = media;
+
       console.log('🔄 로컬 미디어 파일 동기화:', {
-        before: localMediaFiles.length,
-        after: media.length,
+        before: beforeCount,
+        after: afterCount,
         timestamp: new Date().toLocaleTimeString(),
       }); // 디버깅용
 
       setLocalMediaFiles(media);
     }
 
-    // ✅ 새로 추가: Zustand 갤러리 스토어 동기화
-    const previousData = previousSyncDataRef.current;
-    const hasMediaChanged =
-      JSON.stringify(previousData.media) !== JSON.stringify(media);
-    const hasMainImageChanged = previousData.mainImage !== mainImage;
+    // ✅ 새로 추가: Zustand 갤러리 스토어 동기화 - 구조분해할당 + fallback
+    const { current: previousData } = previousSyncDataRef;
+    const { media: previousMedia = [], mainImage: previousMainImage = null } =
+      previousData || {};
+
+    const previousMediaJson = JSON.stringify(previousMedia);
+    const currentMediaJson = JSON.stringify(media);
+    const hasMediaChanged = previousMediaJson !== currentMediaJson;
+    const hasMainImageChanged = previousMainImage !== mainImage;
     const shouldSyncToStore = hasMediaChanged || hasMainImageChanged;
 
     if (shouldSyncToStore) {
+      const { length: mediaCount } = media;
+      const hasMainImage = mainImage !== null && mainImage !== undefined;
+      const mainImagePreview = mainImage
+        ? mainImage.slice(0, 30) + '...'
+        : 'none';
+
       console.log(
         '🔄 [ZUSTAND_SYNC] 폼 변경 감지로 갤러리 스토어 동기화 시작:',
         {
           hasMediaChanged,
           hasMainImageChanged,
-          mediaCount: media.length,
-          hasMainImage: mainImage ? true : false,
-          mainImagePreview: mainImage ? mainImage.slice(0, 30) + '...' : 'none',
+          mediaCount,
+          hasMainImage,
+          mainImagePreview,
           timestamp: new Date().toLocaleTimeString(),
         }
       );
 
       syncFormToImageGalleryStore(media, mainImage);
 
-      // 이전 데이터 업데이트
-      previousSyncDataRef.current = {
-        media: [...media],
-        mainImage,
+      // 이전 데이터 업데이트 - 타입 단언 없이 안전한 복사
+      const updatedSyncData: PreviousSyncData = {
+        media: createSafeMediaArray(media),
+        mainImage: extractSafeMainImage(mainImage),
       };
+      previousSyncDataRef.current = updatedSyncData;
     }
   }, [
     integration.currentFormValues,
@@ -271,31 +356,42 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
     syncFormToImageGalleryStore,
   ]);
 
-  // ✅ 새로 추가: 초기 로드 시 Zustand 동기화
+  // ✅ 새로 추가: 초기 로드 시 Zustand 동기화 - 구조분해할당 + fallback
   useEffect(() => {
-    const { media, mainImage } = integration.currentFormValues;
-    const hasInitialData = media.length > 0;
+    const { currentFormValues: formValues } = integration;
+    const { media = [], mainImage = null } = formValues || {};
+    const { length: mediaCount } = media;
+    const hasInitialData = mediaCount > 0;
+    const { current: isInitialized } = initializationRef;
 
-    if (hasInitialData && !initializationRef.current) {
+    const shouldPerformInitialSync = hasInitialData && !isInitialized;
+
+    if (shouldPerformInitialSync) {
+      const hasInitialMainImage = mainImage !== null && mainImage !== undefined;
+
       console.log('🚀 [ZUSTAND_SYNC] 초기 로드 시 갤러리 스토어 동기화:', {
-        initialMediaCount: media.length,
-        hasInitialMainImage: mainImage ? true : false,
+        initialMediaCount: mediaCount,
+        hasInitialMainImage,
         timestamp: new Date().toLocaleTimeString(),
       });
 
       syncFormToImageGalleryStore(media, mainImage);
 
-      previousSyncDataRef.current = {
-        media: [...media],
-        mainImage,
+      const initialSyncData: PreviousSyncData = {
+        media: createSafeMediaArray(media),
+        mainImage: extractSafeMainImage(mainImage),
       };
+      previousSyncDataRef.current = initialSyncData;
     }
   }, [integration.currentFormValues, syncFormToImageGalleryStore]);
 
-  // ✅ 모바일 감지
+  // ✅ 모바일 감지 - 실무형 방법 사용
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
+      const currentWindowWidth = window.innerWidth;
+      const mobileBreakpoint = 768;
+      const mobile = currentWindowWidth < mobileBreakpoint;
+
       if (mobile !== isMobile) {
         console.log('📱 모바일 상태 변경:', { isMobile: mobile }); // 디버깅용
         setIsMobile(mobile);
@@ -313,8 +409,9 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
   // ✅ 업로드 상태 관리 함수들 (useCallback으로 안정화)
   const handleSetUploading = useCallback(
     (newUploading: Record<string, number>) => {
+      const { length: activeUploadsCount } = Object.keys(newUploading);
       console.log('🔄 업로드 진행률 업데이트:', {
-        activeUploads: Object.keys(newUploading).length,
+        activeUploads: activeUploadsCount,
       }); // 디버깅용
       setUploading(newUploading);
     },
@@ -323,8 +420,9 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
   const handleSetUploadStatus = useCallback(
     (newStatus: Record<string, 'uploading' | 'success' | 'error'>) => {
+      const { length: statusCount } = Object.keys(newStatus);
       console.log('🔄 업로드 상태 업데이트:', {
-        statusCount: Object.keys(newStatus).length,
+        statusCount,
       }); // 디버깅용
       setUploadStatus(newStatus);
     },
@@ -333,34 +431,39 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
   // ✅ 선택 상태 관리 함수들
   const handleSetSelectedFiles = useCallback((files: number[]) => {
-    console.log('🔄 선택된 파일 업데이트:', { count: files.length }); // 디버깅용
+    const { length: fileCount } = files;
+    console.log('🔄 선택된 파일 업데이트:', { count: fileCount }); // 디버깅용
     setSelectedFiles(files);
   }, []);
 
   const handleSetSelectedSliderImages = useCallback((images: number[]) => {
+    const { length: imageCount } = images;
     console.log('🔄 선택된 슬라이더 이미지 업데이트:', {
-      count: images.length,
+      count: imageCount,
     }); // 디버깅용
     setSelectedSliderImages(images);
   }, []);
 
   const handleSetSelectedFileNames = useCallback((names: string[]) => {
-    console.log('🔄 선택된 파일명 업데이트:', { count: names.length }); // 디버깅용
+    const { length: nameCount } = names;
+    console.log('🔄 선택된 파일명 업데이트:', { count: nameCount }); // 디버깅용
     setSelectedFileNames(names);
   }, []);
 
   // ✅ 로컬 상태 관리 함수들
   const handleSetLocalSliderImages = useCallback((images: string[]) => {
+    const { length: imageCount } = images;
     console.log('🔄 로컬 슬라이더 이미지 직접 업데이트:', {
-      count: images.length,
+      count: imageCount,
       timestamp: new Date().toLocaleTimeString(),
     }); // 디버깅용
     setLocalSliderImages(images);
   }, []);
 
   const handleSetLocalMediaFiles = useCallback((files: string[]) => {
+    const { length: fileCount } = files;
     console.log('🔄 로컬 미디어 파일 직접 업데이트:', {
-      count: files.length,
+      count: fileCount,
       timestamp: new Date().toLocaleTimeString(),
     }); // 디버깅용
     setLocalMediaFiles(files);
@@ -368,11 +471,19 @@ export const useBlogMediaStepState = (): BlogMediaStepStateResult => {
 
   // ✅ 초기화 로그 (한 번만)
   useEffect(() => {
-    if (!initializationRef.current) {
-      console.log('✅ useBlogMediaStepState 초기화 완료 - Zustand연동:', {
-        hasIntegration: !!integration,
-        hasOrchestrator: !!orchestrator,
-        hasImageGalleryStore: !!imageGalleryStore,
+    const { current: isInitialized } = initializationRef;
+
+    if (!isInitialized) {
+      const hasIntegration = integration !== null && integration !== undefined;
+      const hasOrchestrator =
+        orchestrator !== null && orchestrator !== undefined;
+      const hasImageGalleryStore =
+        imageGalleryStore !== null && imageGalleryStore !== undefined;
+
+      console.log('✅ useBlogMediaStepState 초기화 완료 - 타입단언제거:', {
+        hasIntegration,
+        hasOrchestrator,
+        hasImageGalleryStore,
         initialFormValues: integration.currentFormValues,
         zustandSyncEnabled: true,
         timestamp: new Date().toLocaleTimeString(),
