@@ -1,5 +1,6 @@
 // 📁 store/shared/storage/imageGalleryMetadata.ts
 
+// 🔧 확장된 ImageGalleryMetadata 타입 (모든 필드 포함)
 export interface ImageGalleryMetadata {
   readonly id: string;
   readonly originalFileName: string;
@@ -7,6 +8,17 @@ export interface ImageGalleryMetadata {
   readonly originalDataUrl: string;
   readonly fileSize: number;
   readonly createdAt: Date;
+
+  // 🆕 추가 필드들 (createImageMetadata에서 사용)
+  readonly thumbnailDataUrl?: string;
+  readonly compressedSize?: number;
+  readonly dimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly mimeType?: string;
+  readonly quality?: number;
+  readonly isCompressed?: boolean;
 }
 
 export interface ImageGalleryHybridData {
@@ -22,6 +34,7 @@ export interface ImageGalleryCompressionOptions {
   readonly maxHeight: number;
   readonly format: 'webp' | 'jpeg' | 'png';
   readonly enableThumbnail: boolean;
+  readonly thumbnailSize?: number;
 }
 
 // 🔧 간소화된 스토리지 설정 (핵심 기능만)
@@ -45,7 +58,8 @@ export const createDefaultImageGalleryStorageConfig =
         maxWidth: 1920,
         maxHeight: 1080,
         format: 'webp',
-        enableThumbnail: false, // 간소화: 썸네일 비활성화
+        enableThumbnail: true,
+        thumbnailSize: 150,
       },
     };
   };

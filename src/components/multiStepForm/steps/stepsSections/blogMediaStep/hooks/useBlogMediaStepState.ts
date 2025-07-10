@@ -17,7 +17,7 @@ interface SelectionState {
 }
 
 export const useBlogMediaStepState = () => {
-  const { watch, setValue, getValues } = useFormContext<FormValues>();
+  const { watch, setValue, getValues, trigger } = useFormContext<FormValues>();
   const galleryStore = useHybridImageGalleryStore();
 
   const [syncInitialized, setSyncInitialized] = useState(false);
@@ -38,7 +38,7 @@ export const useBlogMediaStepState = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   console.log(
-    '🔧 [BLOG_MEDIA_STATE] useBlogMediaStepState 초기화 - 에러수정수정:',
+    '🔧 [BLOG_MEDIA_STATE] useBlogMediaStepState 초기화 - 실제수정버전:',
     {
       currentMediaFilesCount: currentMediaFiles.length,
       syncInitialized,
@@ -46,6 +46,45 @@ export const useBlogMediaStepState = () => {
       timestamp: new Date().toLocaleTimeString(),
     }
   );
+
+  // 🚨 핵심 추가: watch() 변경사항 감지 디버깅
+  useEffect(() => {
+    console.log('🔍 [FORM_WATCH] React Hook Form watch() 변경 감지:', {
+      mediaFilesCount: currentMediaFiles.length,
+      mediaFilesPreview: currentMediaFiles.map((url, index) => ({
+        index,
+        preview: url.slice(0, 30) + '...',
+      })),
+      formValuesKeys: Object.keys(formValues),
+      hasMediaField: 'media' in formValues,
+      mediaFieldType: typeof formValues.media,
+      mediaFieldValue: formValues.media,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+  }, [currentMediaFiles, formValues]);
+
+  // 🚨 핵심 추가: getValues로 실제 값 확인
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const realFormValues = getValues();
+      const realMediaValue = realFormValues.media ?? [];
+
+      console.log('🔍 [REAL_VALUES] getValues() 실제 값 확인:', {
+        watchMediaCount: currentMediaFiles.length,
+        realMediaCount: realMediaValue.length,
+        isMatching: currentMediaFiles.length === realMediaValue.length,
+        watchPreview: currentMediaFiles
+          .slice(0, 1)
+          .map((url) => url.slice(0, 30) + '...'),
+        realPreview: realMediaValue
+          .slice(0, 1)
+          .map((url) => url.slice(0, 30) + '...'),
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [currentMediaFiles, getValues]);
 
   const syncFromGalleryToFormCallback = useCallback(
     (galleryImages: string[]) => {
@@ -238,16 +277,61 @@ export const useBlogMediaStepState = () => {
     return () => window.removeEventListener('resize', checkMobileDevice);
   }, []);
 
+  // 🔥 핵심 수정: React Hook Form 우회하고 Zustand 직접 업데이트
   const setMediaValue = useCallback(
     (files: string[]) => {
-      console.log('🔧 [SET_MEDIA] setMediaValue 호출:', {
+      console.log('🔧 [SET_MEDIA] setMediaValue 호출 시작 - 직접동기화:', {
         filesCount: files.length,
+        filesPreview: files.map((url, index) => ({
+          index,
+          preview: url.slice(0, 30) + '...',
+        })),
         timestamp: new Date().toLocaleTimeString(),
       });
 
-      setValue('media', files, { shouldDirty: true });
+      try {
+        // 🚨 핵심 수정: React Hook Form 건드리지 않고 Zustand만 업데이트
+        const currentGalleryConfig = galleryStore.getImageViewConfig();
+
+        console.log('🔄 [DIRECT_SYNC] Zustand 직접 동기화 시작:', {
+          filesCount: files.length,
+          currentGalleryImagesCount:
+            currentGalleryConfig.selectedImages?.length ?? 0,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // Zustand 스토어 직접 업데이트
+        galleryStore.setImageViewConfig({
+          ...currentGalleryConfig,
+          selectedImages: files,
+        });
+
+        console.log('✅ [DIRECT_SYNC] Zustand 직접 동기화 완료:', {
+          syncedImagesCount: files.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // 초기화 상태 설정
+        if (typeof galleryStore.setIsInitialized === 'function') {
+          galleryStore.setIsInitialized(true);
+        }
+
+        // 🔧 추가: 콜백 트리거로 React Hook Form 동기화
+        setTimeout(() => {
+          console.log('🔄 [CALLBACK_TRIGGER] 콜백 트리거로 Form 동기화 시도');
+          const callback = syncCallbackRef.current;
+          if (callback) {
+            callback(files);
+          }
+        }, 100);
+      } catch (syncError) {
+        console.error('❌ [DIRECT_SYNC] 동기화 실패:', {
+          error: syncError,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
     },
-    [setValue]
+    [galleryStore, syncCallbackRef]
   );
 
   const setMainImageValue = useCallback(
@@ -265,6 +349,8 @@ export const useBlogMediaStepState = () => {
   const setSelectedFileNames = useCallback((names: string[]) => {
     console.log('🔧 [SET_NAMES] setSelectedFileNames 호출:', {
       namesCount: names.length,
+      namesPreview: names.slice(0, 3),
+      timestamp: new Date().toLocaleTimeString(),
     });
 
     setSelectionState((previousState) => ({
@@ -312,10 +398,10 @@ export const useBlogMediaStepState = () => {
     if (callback) {
       callback(currentGalleryImages);
     }
-  }, [getValues]); // 🔧 galleryStore 의존성 제거
+  }, [getValues, galleryStore]);
 
   console.log(
-    '✅ [BLOG_MEDIA_STATE] useBlogMediaStepState 반환 준비 - 에러수정수정:',
+    '✅ [BLOG_MEDIA_STATE] useBlogMediaStepState 반환 준비 - 실제수정버전:',
     {
       formValuesKeys: Object.keys(formValues),
       currentMediaFilesCount: currentMediaFiles.length,
@@ -335,7 +421,7 @@ export const useBlogMediaStepState = () => {
     toasts,
 
     setMediaValue,
-    setMainImageValue, // 🔧 메인 이미지 setter 추가
+    setMainImageValue,
     setSelectedFileNames,
     addToast,
     removeToast,

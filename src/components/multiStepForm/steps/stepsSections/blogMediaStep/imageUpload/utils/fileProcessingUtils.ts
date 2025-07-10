@@ -183,6 +183,13 @@ export const createFileReader = (
   onSuccess: (result: string) => void,
   onError: (error: ProgressEvent<FileReader>) => void
 ): void => {
+  console.log('🔧 [FILE_READER] createFileReader 함수 시작:', {
+    fileName: file.name,
+    fileId,
+    fileSize: file.size,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
   // FileReader 인스턴스 생성
   const reader = new FileReader();
 
@@ -192,6 +199,10 @@ export const createFileReader = (
 
     // 진행률 계산이 불가능한 경우 early return
     if (!lengthComputable) {
+      console.log('⚠️ [PROGRESS] 진행률 계산 불가능:', {
+        fileName: file.name,
+        fileId,
+      });
       return;
     }
 
@@ -208,20 +219,66 @@ export const createFileReader = (
     });
   };
 
-  // ✅ 파일 읽기 완료 이벤트 핸들러
+  // ✅ 파일 읽기 완료 이벤트 핸들러 - 🚨 디버깅 로그 대폭 추가
   reader.onload = (event) => {
+    console.log('🔧 [DEBUG] FileReader onload 이벤트 발생:', {
+      fileName: file.name,
+      fileId,
+      hasEvent: !!event,
+      eventType: typeof event,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
     const { target } = event;
+
+    console.log('🔧 [DEBUG] FileReader target 확인:', {
+      fileName: file.name,
+      fileId,
+      hasTarget: !!target,
+      targetType: typeof target,
+      targetIsFileReader: target instanceof FileReader,
+      timestamp: new Date().toLocaleTimeString(),
+    });
 
     // target이 null인 경우 에러 처리
     if (!target) {
-      console.error('❌ [TARGET_ERROR] FileReader target이 null입니다');
+      console.error('❌ [TARGET_ERROR] FileReader target이 null입니다:', {
+        fileName: file.name,
+        fileId,
+        event,
+        timestamp: new Date().toLocaleTimeString(),
+      });
       onError(event);
       return;
     }
 
+    // 🚨 추가 디버깅: target 객체의 속성들 확인
+    console.log('🔧 [DEBUG] FileReader target 속성 확인:', {
+      fileName: file.name,
+      fileId,
+      targetKeys: Object.keys(target),
+      hasResult: 'result' in target,
+      readyState: target.readyState,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
     // Reflect.get으로 안전하게 result 속성 접근 (타입 단언 대신)
     const fileReader = target;
     const readerResult = Reflect.get(fileReader, 'result');
+
+    console.log('🔧 [DEBUG] FileReader result 확인:', {
+      fileName: file.name,
+      fileId,
+      hasResult: readerResult !== null && readerResult !== undefined,
+      resultType: typeof readerResult,
+      resultIsString: typeof readerResult === 'string',
+      resultLength: typeof readerResult === 'string' ? readerResult.length : 0,
+      resultPreview:
+        typeof readerResult === 'string'
+          ? readerResult.slice(0, 50) + '...'
+          : 'not string',
+      timestamp: new Date().toLocaleTimeString(),
+    });
 
     // 결과가 string이 아닌 경우 에러 처리
     if (typeof readerResult !== 'string') {
@@ -229,8 +286,39 @@ export const createFileReader = (
         fileName: file.name,
         fileId,
         resultType: typeof readerResult,
+        resultValue: readerResult,
         timestamp: new Date().toLocaleTimeString(),
       });
+      onError(event);
+      return;
+    }
+
+    // 🎯 타입 가드 통과 후 string으로 확정
+    const validStringResult: string = readerResult;
+
+    // 🚨 추가 검증: 빈 문자열 체크 (타입 안전성 보장)
+    const resultLength = validStringResult.length;
+    if (resultLength === 0) {
+      console.error('❌ [EMPTY_RESULT] 결과가 빈 문자열입니다:', {
+        fileName: file.name,
+        fileId,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+      onError(event);
+      return;
+    }
+
+    // 🚨 추가 검증: Base64 형식 체크
+    if (!validStringResult.startsWith('data:')) {
+      console.error(
+        '❌ [INVALID_BASE64] 결과가 올바른 Base64 형식이 아닙니다:',
+        {
+          fileName: file.name,
+          fileId,
+          resultStart: validStringResult.slice(0, 20),
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
       onError(event);
       return;
     }
@@ -239,12 +327,37 @@ export const createFileReader = (
     console.log('📁 [READER_LOAD] FileReader 완료:', {
       fileName: file.name,
       fileId,
-      resultLength: readerResult.length,
+      resultLength: validStringResult.length,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    console.log('🎯 [SUCCESS] onSuccess 호출 직전:', {
+      fileName: file.name,
+      fileId,
+      onSuccessType: typeof onSuccess,
       timestamp: new Date().toLocaleTimeString(),
     });
 
     // 성공 콜백 호출 (Base64 문자열 전달)
-    onSuccess(readerResult);
+    try {
+      onSuccess(validStringResult);
+      console.log('✅ [SUCCESS] onSuccess 호출 완료:', {
+        fileName: file.name,
+        fileId,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } catch (onSuccessError) {
+      console.error(
+        '❌ [SUCCESS_CALLBACK_ERROR] onSuccess 콜백 실행 중 에러:',
+        {
+          fileName: file.name,
+          fileId,
+          error: onSuccessError,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
+      onError(event);
+    }
   };
 
   // ❌ 에러 이벤트 핸들러
@@ -258,6 +371,12 @@ export const createFileReader = (
 
     onError(error);
   };
+
+  console.log('🔧 [FILE_READER] readAsDataURL 시작:', {
+    fileName: file.name,
+    fileId,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   // 파일을 Data URL(Base64) 형태로 읽기 시작
   // readAsDataURL은 이미지 파일을 브라우저에서 표시할 수 있는 Base64 문자열로 변환

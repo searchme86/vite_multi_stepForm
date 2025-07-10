@@ -5,6 +5,7 @@ import type {
   ImageGalleryHybridData,
   ImageGalleryStorageConfig,
 } from './imageGalleryMetadata';
+import type { ImageGalleryCompressionResult } from './imageGalleryCompression';
 
 export interface ImageGalleryLocalStorageData {
   readonly version: string;
@@ -15,21 +16,6 @@ export interface ImageGalleryLocalStorageData {
 export interface ImageGalleryHybridStorageOptions {
   readonly enableCompression: boolean;
   readonly compressionQuality: number;
-}
-
-// 🔧 간소화된 압축 결과 인터페이스
-export interface ImageGalleryCompressionResult {
-  readonly originalBlob: Blob;
-  readonly compressedBlob: Blob;
-  readonly originalDataUrl: string;
-  readonly thumbnailDataUrl: string;
-  readonly compressionRatio: number;
-  readonly originalSize: number;
-  readonly compressedSize: number;
-  readonly dimensions: {
-    readonly width: number;
-    readonly height: number;
-  };
 }
 
 // 타입 가드 함수 추가 (타입 단언 제거)
@@ -677,6 +663,7 @@ export class ImageGalleryHybridStorage {
     });
   }
 
+  // 🔧 수정된 createImageMetadata 함수 (확장된 타입 사용)
   private createImageMetadata(
     metadataId: string,
     file: File,
@@ -686,14 +673,16 @@ export class ImageGalleryHybridStorage {
       id: metadataId,
       originalFileName: file.name,
       indexedDBKey: `binary_${metadataId}`,
-      thumbnailDataUrl: compressionResult.thumbnailDataUrl,
       originalDataUrl: compressionResult.originalDataUrl,
       fileSize: compressionResult.originalSize,
+      createdAt: new Date(),
+
+      // 🔧 선택적 필드들 추가
+      thumbnailDataUrl: compressionResult.thumbnailDataUrl,
       compressedSize: compressionResult.compressedSize,
       dimensions: compressionResult.dimensions,
       mimeType: file.type,
       quality: this.options.compressionQuality,
-      createdAt: new Date(),
       isCompressed: this.options.enableCompression,
     };
   }

@@ -106,7 +106,7 @@ export interface ContainerSelectOption {
   description?: string;
 }
 
-// 🆕 간소화된 이미지 메타데이터 (핵심만)
+// 🔧 수정: ImageGalleryMetadata 타입을 직접 정의 (import 경로 문제 해결)
 export interface ImageGalleryMetadata {
   readonly id: string;
   readonly originalFileName: string;
@@ -114,6 +114,17 @@ export interface ImageGalleryMetadata {
   readonly originalDataUrl: string;
   readonly fileSize: number;
   readonly createdAt: Date;
+
+  // 🆕 추가 필드들 (선택적)
+  readonly thumbnailDataUrl?: string;
+  readonly compressedSize?: number;
+  readonly dimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly mimeType?: string;
+  readonly quality?: number;
+  readonly isCompressed?: boolean;
 }
 
 // 🆕 통합된 하이브리드 이미지뷰 설정 (중복 제거)
