@@ -64,27 +64,27 @@ export const useBlogMediaStepState = () => {
   }, [currentMediaFiles, formValues]);
 
   // 🚨 핵심 추가: getValues로 실제 값 확인
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const realFormValues = getValues();
-      const realMediaValue = realFormValues.media ?? [];
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     const realFormValues = getValues();
+  //     const realMediaValue = realFormValues.media ?? [];
 
-      console.log('🔍 [REAL_VALUES] getValues() 실제 값 확인:', {
-        watchMediaCount: currentMediaFiles.length,
-        realMediaCount: realMediaValue.length,
-        isMatching: currentMediaFiles.length === realMediaValue.length,
-        watchPreview: currentMediaFiles
-          .slice(0, 1)
-          .map((url) => url.slice(0, 30) + '...'),
-        realPreview: realMediaValue
-          .slice(0, 1)
-          .map((url) => url.slice(0, 30) + '...'),
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    }, 2000);
+  //     console.log('🔍 [REAL_VALUES] getValues() 실제 값 확인:', {
+  //       watchMediaCount: currentMediaFiles.length,
+  //       realMediaCount: realMediaValue.length,
+  //       isMatching: currentMediaFiles.length === realMediaValue.length,
+  //       watchPreview: currentMediaFiles
+  //         .slice(0, 1)
+  //         .map((url) => url.slice(0, 30) + '...'),
+  //       realPreview: realMediaValue
+  //         .slice(0, 1)
+  //         .map((url) => url.slice(0, 30) + '...'),
+  //       timestamp: new Date().toLocaleTimeString(),
+  //     });
+  //   }, 2000);
 
-    return () => clearInterval(interval);
-  }, [currentMediaFiles, getValues]);
+  //   return () => clearInterval(interval);
+  // }, [currentMediaFiles, getValues]);
 
   const syncFromGalleryToFormCallback = useCallback(
     (galleryImages: string[]) => {
