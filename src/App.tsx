@@ -40,12 +40,9 @@ export default function App() {
   }, []); // 빈 의존성 배열로 앱 시작 시 한 번만 실행
 
   return (
-    <div
-      className="flex items-center justify-center min-h-screen"
-      id="sandbox-message"
-    >
-      <MultiStepFormContainer />
-    </div>
+    <MultiStepFormContainer />
+    // <div className="flex items-center justify-center" id="sandbox-message">
+    // </div>
   );
 }
 
