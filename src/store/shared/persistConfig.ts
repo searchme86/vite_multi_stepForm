@@ -264,31 +264,6 @@ export const hybridPartializeImageGalleryState = <
   return partializedState;
 };
 
-// 🆕 Promise 기반 이미지 복원 함수
-export const createPromiseBasedImageRestore = (
-  loadStoredImagesFunction: () => Promise<void>
-) => {
-  return async (rehydratedState?: any): Promise<void> => {
-    const hasRehydratedState =
-      rehydratedState !== null && rehydratedState !== undefined;
-    if (!hasRehydratedState) {
-      return;
-    }
-
-    console.log('🔄 [PROMISE_RESTORE] Promise 기반 이미지 복원 시작');
-
-    try {
-      // Promise 기반으로 동기화 (setTimeout 제거)
-      await loadStoredImagesFunction();
-      console.log('✅ [PROMISE_RESTORE] IndexedDB 이미지 복원 완료');
-    } catch (restoreError) {
-      console.error('❌ [PROMISE_RESTORE] 이미지 복원 실패:', {
-        error: restoreError,
-      });
-    }
-  };
-};
-
 // 🆕 간소화된 하이브리드 persist 설정 생성 함수
 export const createHybridPersistConfig = <
   T extends {
@@ -297,8 +272,7 @@ export const createHybridPersistConfig = <
   }
 >(
   configName: string,
-  storageType: 'local' | 'session' = 'local',
-  loadStoredImagesFunction?: () => Promise<void>
+  storageType: 'local' | 'session' = 'local'
 ): HybridPersistConfig<T> => {
   try {
     const hybridStorageKey = `${configName}_hybrid_metadata`;
@@ -311,24 +285,11 @@ export const createHybridPersistConfig = <
       deserialize: hybridDeserializeImageGalleryState,
       partialize: hybridPartializeImageGalleryState,
       skipHydration: false,
-
-      onRehydrateStorage: () => {
-        const hasLoadFunction = loadStoredImagesFunction !== undefined;
-        if (!hasLoadFunction) {
-          return () => {
-            console.log('ℹ️ [HYBRID_PERSIST] 이미지 로드 함수 없음');
-          };
-        }
-
-        // Promise 기반 복원 함수 반환
-        return createPromiseBasedImageRestore(loadStoredImagesFunction);
-      },
     };
 
     console.log('🔧 [HYBRID_PERSIST] 간소화된 하이브리드 설정 생성 완료:', {
       configName,
       storageType,
-      hasLoadFunction: loadStoredImagesFunction !== undefined,
     });
 
     return hybridPersistConfig;
