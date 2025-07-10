@@ -10,6 +10,7 @@ import { DEFAULT_DESKTOP_HERO_IMAGE } from '../utils/constants';
 import { renderMarkdown } from '../utils/markdownRenderer.tsx';
 import SwiperGalleryComponent from './SwiperGalleryComponent';
 import CustomImageGalleryComponent from './CustomImageGalleryComponent';
+import ImageGallerySliderWithZoom from '../../ImageGalleryWithContent/ImageGallerySliderWithZoom.tsx';
 
 interface DesktopContentComponentProps {
   currentFormValues: CurrentFormValues;
@@ -88,6 +89,9 @@ function DesktopContentComponent({
             '블로그의 요약 내용이 보여질 공간입니다.'}
         </p>
 
+        {/*  */}
+        <ImageGallerySliderWithZoom />
+        {/*  */}
         {displayContent.text ? (
           renderMarkdown(displayContent.text)
         ) : (
