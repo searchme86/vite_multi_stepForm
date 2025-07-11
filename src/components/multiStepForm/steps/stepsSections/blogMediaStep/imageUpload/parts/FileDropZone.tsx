@@ -71,10 +71,47 @@ function FileDropZone(): React.ReactNode {
       logger.debug('드롭 이벤트 처리 시작');
 
       try {
+        // 🔍 디버깅 추가: 드롭된 파일 개수 확인
+        const droppedFiles = Array.from(dropEvent.dataTransfer.files);
+        console.log('🔍 [DROP_DEBUG] 드롭된 파일들:', {
+          파일개수: droppedFiles.length,
+          파일명들: droppedFiles.map((file) => file.name),
+          파일크기들: droppedFiles.map(
+            (file) => `${file.name}: ${file.size} bytes`
+          ),
+          파일타입들: droppedFiles.map((file) => `${file.name}: ${file.type}`),
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // 🔍 파일 유효성 사전 체크
+        const validImageFiles = droppedFiles.filter((file) => {
+          const isImageType = file.type.startsWith('image/');
+          const isSizeValid = file.size <= 10 * 1024 * 1024; // 10MB
+          return isImageType && isSizeValid;
+        });
+
+        console.log('🔍 [DROP_DEBUG] 유효한 이미지 파일 필터링:', {
+          전체파일개수: droppedFiles.length,
+          유효한파일개수: validImageFiles.length,
+          유효한파일명들: validImageFiles.map((file) => file.name),
+          제외된파일개수: droppedFiles.length - validImageFiles.length,
+          제외된파일들: droppedFiles
+            .filter(
+              (file) =>
+                !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024
+            )
+            .map((file) => `${file.name} (${file.type}, ${file.size} bytes)`),
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
         handleDropEvent(dropEvent, updateDragActiveState, handleFilesDropped);
 
         logger.info('드롭 이벤트 처리 완료');
       } catch (dropEventError) {
+        console.error('🔍 [DROP_DEBUG] 드롭 이벤트 처리 중 오류:', {
+          error: dropEventError,
+          timestamp: new Date().toLocaleTimeString(),
+        });
         logger.error('드롭 이벤트 처리 중 오류', {
           error: dropEventError,
         });
@@ -96,10 +133,19 @@ function FileDropZone(): React.ReactNode {
     }
 
     try {
+      console.log('🔍 [CLICK_DEBUG] 파일 선택 버튼 클릭:', {
+        hasActiveUploads,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
       handleFileSelectClick();
 
       logger.info('파일 선택 클릭 처리 완료');
     } catch (fileSelectError) {
+      console.error('🔍 [CLICK_DEBUG] 파일 선택 클릭 처리 중 오류:', {
+        error: fileSelectError,
+        timestamp: new Date().toLocaleTimeString(),
+      });
       logger.error('파일 선택 클릭 처리 중 오류', {
         error: fileSelectError,
       });

@@ -252,7 +252,7 @@ function BlogMediaStepContainer(): React.ReactNode {
       console.log('📋 업로드된 이미지 없음 - 안내 메시지 표시');
 
       return (
-        <div className="flex items-center justify-center flex-1 p-6">
+        <div className="flex items-center justify-center p-6 w-full lg:w-[calc(100%-16rem)]">
           <div className="max-w-md text-center">
             <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full">
               <svg
@@ -283,7 +283,6 @@ function BlogMediaStepContainer(): React.ReactNode {
       );
     }
 
-    // ✅ Phase3&4: MainImageContainer 사용 방식 변경 (단순 미리보기 섹션)
     const contentComponentMap = {
       mainImage: (
         <div className="space-y-6">
@@ -297,7 +296,6 @@ function BlogMediaStepContainer(): React.ReactNode {
               변경할 수 있습니다.
             </p>
           </header>
-          {/* ✅ Phase3&4: MainImageContainer를 미리보기 전용으로 사용 */}
           <MainImageContainer />
         </div>
       ),
@@ -319,7 +317,11 @@ function BlogMediaStepContainer(): React.ReactNode {
       renderingMainImageAsPreview: activeSectionType === 'mainImage',
     });
 
-    return <main className="flex-1 p-6">{selectedContent}</main>;
+    return (
+      <main className="p-6 w-full lg:w-[calc(100%-16rem)]">
+        {selectedContent}
+      </main>
+    );
   };
 
   const shouldShowManagementSections = checkShouldShowImageManagementSections();

@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { useImageUploadHandlers } from '../hooks/useImageUploadHandlers';
 import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
+import { useBlogMediaStepIntegration } from '../../hooks/useBlogMediaStepIntegration';
 import type {
   MainImageHandlers,
   DeleteConfirmState,
@@ -29,6 +30,10 @@ interface ImageUploadContextValue {
   touchActiveImages: Set<number>;
   hasActiveUploads: boolean;
   isMobileDevice: boolean;
+
+  // 🎯 슬라이더 선택 상태 (새로 추가)
+  selectedSliderIndices: number[];
+  isImageSelectedForSlider: (imageIndex: number) => boolean;
 
   // 🎯 파일 처리 핸들러 (메모이제이션됨)
   handleFilesDropped: (files: File[]) => void;
@@ -74,6 +79,18 @@ function ImageUploadProvider({
     imageGalleryStore: galleryStoreInstance,
   } = blogMediaStepStateResult;
 
+  // 🚀 새로 추가: 슬라이더 선택 상태 가져오기
+  const blogMediaIntegrationResult = useBlogMediaStepIntegration();
+  const { currentFormValues: integrationFormValues } =
+    blogMediaIntegrationResult;
+  const { selectedSliderIndices = [] } = integrationFormValues;
+
+  console.log('🎯 [CONTEXT] 슬라이더 선택 상태 확인:', {
+    selectedSliderIndices,
+    selectedCount: selectedSliderIndices.length,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
   // 🔧 기존 useImageUploadHandlers 유지 (변경 없음)
   const imageUploadHandlersResult = useImageUploadHandlers({
     formValues: currentFormValues,
@@ -85,6 +102,30 @@ function ImageUploadProvider({
     showToastMessage,
     imageGalleryStore: galleryStoreInstance,
   });
+
+  // 🚀 새로 추가: 슬라이더 선택 체크 함수
+  const checkIsImageSelectedForSlider = useMemo(() => {
+    return (imageIndex: number): boolean => {
+      const isValidIndex = typeof imageIndex === 'number' && imageIndex >= 0;
+
+      if (!isValidIndex) {
+        console.log('⚠️ [CONTEXT] 유효하지 않은 이미지 인덱스:', {
+          imageIndex,
+        });
+        return false;
+      }
+
+      const isSelected = selectedSliderIndices.includes(imageIndex);
+
+      console.log('🔍 [CONTEXT] 슬라이더 선택 상태 확인:', {
+        imageIndex,
+        isSelected,
+        selectedSliderIndices,
+      });
+
+      return isSelected;
+    };
+  }, [selectedSliderIndices]);
 
   // 🚀 성능 최적화: 안정된 메인 이미지 핸들러 객체 생성
   const stableMainImageHandlers = useMemo(() => {
@@ -171,6 +212,10 @@ function ImageUploadProvider({
       hasActiveUploads: imageUploadHandlersResult.hasActiveUploads,
       isMobileDevice: imageUploadHandlersResult.isMobileDevice,
 
+      // 🚀 새로 추가: 슬라이더 선택 상태
+      selectedSliderIndices,
+      isImageSelectedForSlider: checkIsImageSelectedForSlider,
+
       // 메모이제이션된 핸들러들
       ...memoizedFileHandlers,
       ...memoizedImageManagementHandlers,
@@ -186,6 +231,7 @@ function ImageUploadProvider({
       uploadedImagesCount: finalContextValue.uploadedImages.length,
       hasActiveUploads: finalContextValue.hasActiveUploads,
       hasMainImageHandlers: finalContextValue.mainImageHandlers !== null,
+      selectedSliderCount: finalContextValue.selectedSliderIndices.length,
       timestamp: new Date().toLocaleTimeString(),
     });
 
@@ -200,6 +246,8 @@ function ImageUploadProvider({
     imageUploadHandlersResult.touchActiveImages,
     imageUploadHandlersResult.hasActiveUploads,
     imageUploadHandlersResult.isMobileDevice,
+    selectedSliderIndices,
+    checkIsImageSelectedForSlider,
     memoizedFileHandlers,
     memoizedImageManagementHandlers,
     stableMainImageHandlers,

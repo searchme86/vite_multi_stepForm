@@ -16,6 +16,9 @@ import type {
 
 const logger = createLogger('IMAGE_UPLOAD_HANDLERS');
 
+// 🔧 핵심 수정: 함수형 상태 업데이트를 지원하는 타입 정의
+type StateUpdaterFunction<T> = (previousValue: T) => T;
+
 interface ToastMessage {
   title: string;
   description: string;
@@ -23,8 +26,12 @@ interface ToastMessage {
 }
 
 interface FileProcessingCallbacks {
-  updateMediaValue: (files: string[]) => void;
-  updateSelectedFileNames: (names: string[]) => void;
+  updateMediaValue: (
+    filesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  ) => void;
+  updateSelectedFileNames: (
+    namesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  ) => void;
   showToastMessage: (toast: unknown) => void;
   showDuplicateMessage: (files: File[]) => void;
   startFileUpload: (fileId: string, fileName: string) => void;
@@ -41,9 +48,13 @@ interface ImageUploadHandlersProps {
   selectionState: {
     selectedFileNames: string[];
   };
-  updateMediaValue: (files: string[]) => void;
+  updateMediaValue: (
+    filesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  ) => void;
   setMainImageValue: (imageUrl: string) => void;
-  updateSelectedFileNames: (names: string[]) => void;
+  updateSelectedFileNames: (
+    namesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  ) => void;
   showToastMessage: (toast: Omit<ToastItem, 'id' | 'createdAt'>) => void;
   imageGalleryStore: unknown;
 }
@@ -70,16 +81,16 @@ export const useImageUploadHandlers = ({
 
   const fileSelectButtonRef = useRef<FileSelectButtonElement | null>(null);
 
-  logger.debug('useImageUploadHandlers 초기화 - 중복훅호출제거', {
+  logger.debug('useImageUploadHandlers 초기화 - 함수형 업데이트 지원', {
     currentMediaFilesCount: currentMediaFilesList.length,
     currentSelectedFileNamesCount: currentSelectedFileNames.length,
     isMobileDevice,
     hasGalleryStore:
       galleryStoreInstance !== null && galleryStoreInstance !== undefined,
+    functionalUpdateSupported: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🔧 메인 이미지 관리 훅들 - Props 방식으로 변경
   const mainImageManagementHook = useMainImageManagement({
     formValues: currentFormValues,
     setMainImageValue,
@@ -90,7 +101,6 @@ export const useImageUploadHandlers = ({
     formValues: currentFormValues,
   });
 
-  // 🔧 구조분해할당으로 핸들러 추출
   const {
     setAsMainImageDirect: setImageAsMainImageDirectly,
     cancelMainImage: cancelCurrentMainImage,
@@ -115,7 +125,7 @@ export const useImageUploadHandlers = ({
       const safeDescription =
         typeof description === 'string' ? description : '';
 
-      // 🔧 타입 단언 없이 안전한 색상 검증
+      // 🔧 타입 가드를 사용한 안전한 색상 검증
       const validColors = ['success', 'warning', 'danger', 'primary'] as const;
       type ValidColor = (typeof validColors)[number];
 
@@ -137,7 +147,6 @@ export const useImageUploadHandlers = ({
     []
   );
 
-  // 🔧 타입 안전한 Toast 표시 함수
   const displayToastMessage = useCallback(
     (toast: Omit<ToastItem, 'id' | 'createdAt'>) => {
       const safeToast = createSafeToastMessage(toast);
@@ -146,12 +155,11 @@ export const useImageUploadHandlers = ({
     [createSafeToastMessage, showToastMessage]
   );
 
-  // 🔧 메인 이미지 설정 핸들러 (React Hook Form 중심)
   const handleMainImageSet = useCallback(
     (imageIndex: number, imageUrl: string) => {
       const imageUrlPreview = imageUrl.slice(0, 30) + '...';
 
-      logger.debug('메인 이미지 설정 핸들러 호출 - 중복훅호출제거', {
+      logger.debug('메인 이미지 설정 핸들러 호출 - 함수형 업데이트 지원', {
         imageIndex,
         imageUrlPreview,
         timestamp: new Date().toLocaleTimeString(),
@@ -161,8 +169,9 @@ export const useImageUploadHandlers = ({
       const { isValid: isValidSelection, message: validationMessage } =
         validationResult;
 
-      // 🔧 early return으로 중첩 방지
-      if (!isValidSelection) {
+      const isInvalidSelection = !isValidSelection;
+
+      if (isInvalidSelection) {
         const safeValidationMessage =
           validationMessage !== null && validationMessage !== undefined
             ? validationMessage
@@ -198,9 +207,8 @@ export const useImageUploadHandlers = ({
     ]
   );
 
-  // 🔧 메인 이미지 해제 핸들러 (React Hook Form 중심)
   const handleMainImageCancel = useCallback(() => {
-    logger.debug('메인 이미지 해제 핸들러 호출 - 중복훅호출제거');
+    logger.debug('메인 이미지 해제 핸들러 호출 - 함수형 업데이트 지원');
 
     cancelCurrentMainImage();
 
@@ -210,10 +218,9 @@ export const useImageUploadHandlers = ({
     });
   }, [cancelCurrentMainImage]);
 
-  // 🔧 삭제 액션 핸들러 (React Hook Form 중심)
   const handleDeleteAction = useCallback(
     (imageIndex: number, imageName: string) => {
-      logger.debug('실제 삭제 처리 - 중복훅호출제거', {
+      logger.debug('실제 삭제 처리 - 함수형 업데이트 지원', {
         imageIndex,
         imageName,
         timestamp: new Date().toLocaleTimeString(),
@@ -237,8 +244,20 @@ export const useImageUploadHandlers = ({
           (_, filterIndex) => filterIndex !== imageIndex
         );
 
-        updateMediaValue(updatedMediaFiles);
-        updateSelectedFileNames(updatedFileNames);
+        // 🔧 핵심 수정: 함수형 업데이트 방식으로 호출
+        console.log('🔍 [DELETE_DEBUG] 함수형 업데이트로 삭제 처리:', {
+          이미지명: imageName,
+          이미지인덱스: imageIndex,
+          이전미디어개수: safeCurrentMediaFiles.length,
+          새미디어개수: updatedMediaFiles.length,
+          이전파일명개수: safeCurrentSelectedFileNames.length,
+          새파일명개수: updatedFileNames.length,
+          함수형업데이트사용: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        updateMediaValue(() => updatedMediaFiles);
+        updateSelectedFileNames(() => updatedFileNames);
 
         displayToastMessage({
           title: '이미지 삭제 완료',
@@ -246,11 +265,12 @@ export const useImageUploadHandlers = ({
           color: 'success',
         });
 
-        logger.info('이미지 삭제 완료 (자동 동기화 대기)', {
+        logger.info('이미지 삭제 완료 (자동 동기화 대기) - 함수형 업데이트', {
           imageName,
           remainingMediaCount: updatedMediaFiles.length,
           reactHookFormUpdated: true,
           zustandAutoSyncPending: true,
+          functionalUpdateUsed: true,
           timestamp: new Date().toLocaleTimeString(),
         });
       } catch (deleteError) {
@@ -282,10 +302,62 @@ export const useImageUploadHandlers = ({
 
   const deleteConfirmation = useDeleteConfirmation(handleDeleteAction);
 
-  // 🔧 FileProcessing에 타입 안전한 콜백 전달
+  // 🔧 핵심 수정: 함수형 상태 업데이트를 지원하는 콜백 구현
   const fileProcessingCallbacks: FileProcessingCallbacks = {
-    updateMediaValue,
-    updateSelectedFileNames,
+    updateMediaValue: (filesOrUpdater) => {
+      console.log('🔍 [CALLBACK_DEBUG] updateMediaValue 콜백 호출:', {
+        입력타입:
+          typeof filesOrUpdater === 'function'
+            ? '함수형 업데이터'
+            : '직접 배열',
+        함수형업데이트지원: true,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      const isUpdaterFunction = typeof filesOrUpdater === 'function';
+
+      if (isUpdaterFunction) {
+        console.log('🔍 [CALLBACK_DEBUG] 함수형 업데이터 감지, 직접 전달:', {
+          업데이터함수: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        updateMediaValue(filesOrUpdater);
+      } else {
+        console.log('🔍 [CALLBACK_DEBUG] 직접 배열 감지, 함수형으로 변환:', {
+          배열길이: filesOrUpdater.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        updateMediaValue(() => filesOrUpdater);
+      }
+    },
+
+    updateSelectedFileNames: (namesOrUpdater) => {
+      console.log('🔍 [CALLBACK_DEBUG] updateSelectedFileNames 콜백 호출:', {
+        입력타입:
+          typeof namesOrUpdater === 'function'
+            ? '함수형 업데이터'
+            : '직접 배열',
+        함수형업데이트지원: true,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      const isUpdaterFunction = typeof namesOrUpdater === 'function';
+
+      if (isUpdaterFunction) {
+        console.log('🔍 [CALLBACK_DEBUG] 함수형 업데이터 감지, 직접 전달:', {
+          업데이터함수: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        updateSelectedFileNames(namesOrUpdater);
+      } else {
+        console.log('🔍 [CALLBACK_DEBUG] 직접 배열 감지, 함수형으로 변환:', {
+          배열길이: namesOrUpdater.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        updateSelectedFileNames(() => namesOrUpdater);
+      }
+    },
+
     showToastMessage: (toast: unknown) => {
       // unknown을 안전하게 처리하여 Toast 형식으로 변환
       const hasToastValue = toast !== null && toast !== undefined;
@@ -331,6 +403,7 @@ export const useImageUploadHandlers = ({
       const safeToastData = { title, description, color };
       showToastMessage(safeToastData);
     },
+
     showDuplicateMessage: duplicateHandler.showDuplicateMessage,
     startFileUpload: uploadState.startFileUpload,
     updateFileProgress: uploadState.updateFileProgress,
@@ -354,8 +427,9 @@ export const useImageUploadHandlers = ({
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    // 🔧 early return으로 중첩 방지
-    if (hasActiveUploads) {
+    const isUploadInProgress = hasActiveUploads;
+
+    if (isUploadInProgress) {
       logger.warn('업로드 중이므로 파일 선택 무시');
       displayToastMessage({
         title: '업로드 진행 중',
@@ -371,7 +445,6 @@ export const useImageUploadHandlers = ({
       fileSelectButtonElement !== undefined &&
       typeof fileSelectButtonElement.clickFileInput === 'function';
 
-    // 🔧 삼항연산자 사용
     const clickAction = hasClickFunction ? 'execute-click' : 'skip-click';
 
     if (hasClickFunction) {
@@ -413,7 +486,7 @@ export const useImageUploadHandlers = ({
     fileProcessing,
   ]);
 
-  logger.info('useImageUploadHandlers 초기화 완료 - 중복훅호출제거', {
+  logger.info('useImageUploadHandlers 초기화 완료 - 함수형 업데이트 지원', {
     hasMainImageManagement:
       mainImageManagementHook !== null && mainImageManagementHook !== undefined,
     hasMainImageValidation:
@@ -422,6 +495,7 @@ export const useImageUploadHandlers = ({
     hasGalleryStore:
       galleryStoreInstance !== null && galleryStoreInstance !== undefined,
     reactHookFormCentricSync: true,
+    functionalUpdateSupported: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 

@@ -8,6 +8,9 @@ import type {
   ToastItem,
 } from '../../../../../../store/shared/commonTypes';
 
+// 🔧 핵심 추가: 함수형 상태 업데이트를 지원하는 타입 정의
+type StateUpdaterFunction<T> = (previousValue: T) => T;
+
 interface UIState {
   isMobile: boolean;
 }
@@ -38,16 +41,16 @@ export const useBlogMediaStepState = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   console.log(
-    '🔧 [BLOG_MEDIA_STATE] useBlogMediaStepState 초기화 - 실제수정버전:',
+    '🔧 [BLOG_MEDIA_STATE] useBlogMediaStepState 초기화 - 함수형업데이트지원:',
     {
       currentMediaFilesCount: currentMediaFiles.length,
       syncInitialized,
       galleryStoreInitialized: galleryStore.getIsInitialized(),
+      functionalUpdateSupported: true,
       timestamp: new Date().toLocaleTimeString(),
     }
   );
 
-  // 🚨 핵심 추가: watch() 변경사항 감지 디버깅
   useEffect(() => {
     console.log('🔍 [FORM_WATCH] React Hook Form watch() 변경 감지:', {
       mediaFilesCount: currentMediaFiles.length,
@@ -59,32 +62,37 @@ export const useBlogMediaStepState = () => {
       hasMediaField: 'media' in formValues,
       mediaFieldType: typeof formValues.media,
       mediaFieldValue: formValues.media,
+      functionalUpdateEnabled: true,
       timestamp: new Date().toLocaleTimeString(),
     });
   }, [currentMediaFiles, formValues]);
 
-  // 🚨 핵심 추가: getValues로 실제 값 확인
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     const realFormValues = getValues();
-  //     const realMediaValue = realFormValues.media ?? [];
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const galleryImages =
+        galleryStore.getImageViewConfig().selectedImages ?? [];
+      const formMediaImages = getValues('media') ?? [];
 
-  //     console.log('🔍 [REAL_VALUES] getValues() 실제 값 확인:', {
-  //       watchMediaCount: currentMediaFiles.length,
-  //       realMediaCount: realMediaValue.length,
-  //       isMatching: currentMediaFiles.length === realMediaValue.length,
-  //       watchPreview: currentMediaFiles
-  //         .slice(0, 1)
-  //         .map((url) => url.slice(0, 30) + '...'),
-  //       realPreview: realMediaValue
-  //         .slice(0, 1)
-  //         .map((url) => url.slice(0, 30) + '...'),
-  //       timestamp: new Date().toLocaleTimeString(),
-  //     });
-  //   }, 2000);
+      console.log('🔍 [DEBUG] 이미지 상태 비교:', {
+        갤러리_스토어_개수: galleryImages.length,
+        폼_개수: formMediaImages.length,
+        갤러리_이미지들: galleryImages.map(
+          (url, i) => `${i + 1}: ${url.slice(0, 20)}...`
+        ),
+        폼_이미지들: formMediaImages.map(
+          (url, i) => `${i + 1}: ${url.slice(0, 20)}...`
+        ),
+        동기화_상태:
+          galleryImages.length === formMediaImages.length
+            ? '✅ 동기화됨'
+            : '❌ 동기화 안됨',
+        함수형업데이트지원: true,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }, 3000);
 
-  //   return () => clearInterval(interval);
-  // }, [currentMediaFiles, getValues]);
+    return () => clearInterval(interval);
+  }, [galleryStore, getValues]);
 
   const syncFromGalleryToFormCallback = useCallback(
     (galleryImages: string[]) => {
@@ -93,6 +101,7 @@ export const useBlogMediaStepState = () => {
           '🔄 [GALLERY_TO_FORM] Zustand → React Hook Form 단방향 동기화:',
           {
             galleryImagesCount: galleryImages.length,
+            functionalUpdateSupported: true,
             timestamp: new Date().toLocaleTimeString(),
           }
         );
@@ -124,6 +133,7 @@ export const useBlogMediaStepState = () => {
               galleryImages.length > 0
                 ? galleryImages[0]?.slice(0, 30) + '...'
                 : 'none',
+            functionalUpdateApplied: true,
           }
         );
       } catch (syncError) {
@@ -140,7 +150,6 @@ export const useBlogMediaStepState = () => {
     syncCallbackRef.current = syncFromGalleryToFormCallback;
   }, [syncFromGalleryToFormCallback]);
 
-  // 🔧 핵심 수정: 의존성 배열 변경으로 무한루프 해결
   useEffect(() => {
     if (syncInitialized) {
       console.log('🧹 [SYNC_CLEANUP] 이미 초기화됨, 중복 방지');
@@ -165,7 +174,7 @@ export const useBlogMediaStepState = () => {
       console.log('🧹 [SYNC_CLEANUP] 갤러리 스토어 동기화 콜백 해제');
       galleryStore.setReactHookFormSyncCallback(null);
     };
-  }, []); // 🔧 핵심 수정: [galleryStore] → [] (한 번만 실행)
+  }, []);
 
   useEffect(() => {
     const initializeGallerySync = async () => {
@@ -205,7 +214,7 @@ export const useBlogMediaStepState = () => {
     if (syncInitialized) {
       initializeGallerySync();
     }
-  }, [syncInitialized, getValues]); // 🔧 galleryStore 의존성 제거
+  }, [syncInitialized, getValues]);
 
   useEffect(() => {
     const handlePageShow = (event: PageTransitionEvent) => {
@@ -241,7 +250,7 @@ export const useBlogMediaStepState = () => {
     return () => {
       window.removeEventListener('pageshow', handlePageShow);
     };
-  }, [syncInitialized, getValues]); // 🔧 galleryStore 의존성 제거
+  }, [syncInitialized, getValues]);
 
   useEffect(() => {
     const checkMobileDevice = () => {
@@ -277,61 +286,152 @@ export const useBlogMediaStepState = () => {
     return () => window.removeEventListener('resize', checkMobileDevice);
   }, []);
 
-  // 🔥 핵심 수정: React Hook Form 우회하고 Zustand 직접 업데이트
+  // 🔥 핵심 수정: 함수형 상태 업데이트를 지원하는 setMediaValue
   const setMediaValue = useCallback(
-    (files: string[]) => {
-      console.log('🔧 [SET_MEDIA] setMediaValue 호출 시작 - 직접동기화:', {
-        filesCount: files.length,
-        filesPreview: files.map((url, index) => ({
-          index,
-          preview: url.slice(0, 30) + '...',
-        })),
-        timestamp: new Date().toLocaleTimeString(),
-      });
+    (filesOrUpdater: string[] | StateUpdaterFunction<string[]>) => {
+      console.log(
+        '🔍 [SET_MEDIA_DEBUG] setMediaValue 호출 - 함수형업데이트지원:',
+        {
+          입력타입:
+            typeof filesOrUpdater === 'function'
+              ? '함수형업데이터'
+              : '직접배열',
+          현재갤러리개수:
+            galleryStore.getImageViewConfig().selectedImages?.length ?? 0,
+          현재폼개수: getValues('media')?.length ?? 0,
+          함수형업데이트지원: true,
+          타입에러해결예정: true,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
 
       try {
-        // 🚨 핵심 수정: React Hook Form 건드리지 않고 Zustand만 업데이트
-        const currentGalleryConfig = galleryStore.getImageViewConfig();
+        let finalFiles: string[];
 
-        console.log('🔄 [DIRECT_SYNC] Zustand 직접 동기화 시작:', {
-          filesCount: files.length,
-          currentGalleryImagesCount:
-            currentGalleryConfig.selectedImages?.length ?? 0,
+        // 🔧 타입 안전한 함수형 업데이트 처리
+        const isUpdaterFunction = typeof filesOrUpdater === 'function';
+
+        if (isUpdaterFunction) {
+          console.log(
+            '🔍 [FUNCTIONAL_UPDATE] 함수형 업데이터 감지, 현재 상태로 실행:',
+            {
+              업데이터타입: 'function',
+              timestamp: new Date().toLocaleTimeString(),
+            }
+          );
+
+          const currentMediaFiles = getValues('media') ?? [];
+          finalFiles = filesOrUpdater(currentMediaFiles);
+
+          console.log('🔍 [FUNCTIONAL_UPDATE] 함수형 업데이트 실행 완료:', {
+            이전파일개수: currentMediaFiles.length,
+            새파일개수: finalFiles.length,
+            타입에러해결됨: true,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else {
+          console.log('🔍 [DIRECT_UPDATE] 직접 배열 감지:', {
+            배열길이: filesOrUpdater.length,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+          finalFiles = filesOrUpdater;
+        }
+
+        console.log('🔧 [SET_MEDIA] 최종 파일 처리 시작:', {
+          finalFilesCount: finalFiles.length,
+          finalFilesPreview: finalFiles.map((url, index) => ({
+            index,
+            preview: url.slice(0, 30) + '...',
+          })),
+          functionalUpdateResolved: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
         // Zustand 스토어 직접 업데이트
-        galleryStore.setImageViewConfig({
-          ...currentGalleryConfig,
-          selectedImages: files,
+        const currentGalleryConfig = galleryStore.getImageViewConfig();
+
+        console.log('🔄 [DIRECT_SYNC] Zustand 직접 동기화 시작:', {
+          finalFilesCount: finalFiles.length,
+          currentGalleryImagesCount:
+            currentGalleryConfig.selectedImages?.length ?? 0,
+          typeErrorFixed: true,
+          timestamp: new Date().toLocaleTimeString(),
         });
 
+        const updatedConfig = {
+          ...currentGalleryConfig,
+          selectedImages: finalFiles,
+        };
+
+        galleryStore.setImageViewConfig(updatedConfig);
+
         console.log('✅ [DIRECT_SYNC] Zustand 직접 동기화 완료:', {
-          syncedImagesCount: files.length,
+          syncedImagesCount: finalFiles.length,
+          functionalUpdateApplied: true,
+          typeErrorResolved: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
         // 초기화 상태 설정
-        if (typeof galleryStore.setIsInitialized === 'function') {
+        const isInitializationMethodAvailable =
+          typeof galleryStore.setIsInitialized === 'function';
+        if (isInitializationMethodAvailable) {
           galleryStore.setIsInitialized(true);
+          console.log('🔍 [STORE_DEBUG] 갤러리 스토어 초기화 상태 설정 완료');
         }
 
-        // 🔧 추가: 콜백 트리거로 React Hook Form 동기화
+        // 콜백 트리거로 React Hook Form 동기화
         setTimeout(() => {
           console.log('🔄 [CALLBACK_TRIGGER] 콜백 트리거로 Form 동기화 시도');
           const callback = syncCallbackRef.current;
-          if (callback) {
-            callback(files);
+          const isCallbackAvailable =
+            callback !== null && callback !== undefined;
+
+          if (isCallbackAvailable) {
+            console.log('🔍 [STORE_DEBUG] 콜백 함수 실행:', {
+              콜백함수존재여부: true,
+              전달할이미지개수: finalFiles.length,
+              functionalUpdateComplete: true,
+              timestamp: new Date().toLocaleTimeString(),
+            });
+            callback(finalFiles);
+          } else {
+            console.log('🔍 [STORE_DEBUG] 콜백 함수가 존재하지 않음');
           }
         }, 100);
+
+        // 저장 후 갤러리 상태 확인
+        setTimeout(() => {
+          const updatedImages =
+            galleryStore.getImageViewConfig().selectedImages ?? [];
+          const updatedFormMedia = getValues('media') ?? [];
+          console.log('🔍 [STORE_DEBUG] 저장 후 갤러리 상태:', {
+            저장후갤러리개수: updatedImages.length,
+            저장후폼개수: updatedFormMedia.length,
+            저장된이미지프리뷰: updatedImages.map(
+              (url, i) => `${i + 1}: ${url.slice(0, 30)}...`
+            ),
+            저장된폼이미지프리뷰: updatedFormMedia.map(
+              (url, i) => `${i + 1}: ${url.slice(0, 30)}...`
+            ),
+            동기화상태:
+              updatedImages.length === updatedFormMedia.length
+                ? '✅ 동기화됨'
+                : '❌ 동기화 안됨',
+            functionalUpdateWorking: true,
+            typeErrorFixed: true,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        }, 500);
       } catch (syncError) {
         console.error('❌ [DIRECT_SYNC] 동기화 실패:', {
           error: syncError,
+          functionalUpdateFailed: true,
           timestamp: new Date().toLocaleTimeString(),
         });
       }
     },
-    [galleryStore, syncCallbackRef]
+    [galleryStore, syncCallbackRef, getValues]
   );
 
   const setMainImageValue = useCallback(
@@ -346,18 +446,80 @@ export const useBlogMediaStepState = () => {
     [setValue]
   );
 
-  const setSelectedFileNames = useCallback((names: string[]) => {
-    console.log('🔧 [SET_NAMES] setSelectedFileNames 호출:', {
-      namesCount: names.length,
-      namesPreview: names.slice(0, 3),
-      timestamp: new Date().toLocaleTimeString(),
-    });
+  // 🔥 핵심 수정: 함수형 상태 업데이트를 지원하는 setSelectedFileNames
+  const setSelectedFileNames = useCallback(
+    (namesOrUpdater: string[] | StateUpdaterFunction<string[]>) => {
+      console.log(
+        '🔧 [SET_NAMES_DEBUG] setSelectedFileNames 호출 - 함수형업데이트지원:',
+        {
+          입력타입:
+            typeof namesOrUpdater === 'function'
+              ? '함수형업데이터'
+              : '직접배열',
+          현재파일명개수: selectionState.selectedFileNames.length,
+          함수형업데이트지원: true,
+          타입에러해결예정: true,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
 
-    setSelectionState((previousState) => ({
-      ...previousState,
-      selectedFileNames: names,
-    }));
-  }, []);
+      try {
+        let finalNames: string[];
+
+        // 🔧 타입 안전한 함수형 업데이트 처리
+        const isUpdaterFunction = typeof namesOrUpdater === 'function';
+
+        if (isUpdaterFunction) {
+          console.log('🔍 [FUNCTIONAL_UPDATE] 파일명 함수형 업데이터 감지:', {
+            업데이터타입: 'function',
+            이전파일명개수: selectionState.selectedFileNames.length,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+
+          finalNames = namesOrUpdater(selectionState.selectedFileNames);
+
+          console.log('🔍 [FUNCTIONAL_UPDATE] 파일명 함수형 업데이트 완료:', {
+            이전파일명개수: selectionState.selectedFileNames.length,
+            새파일명개수: finalNames.length,
+            타입에러해결됨: true,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else {
+          console.log('🔍 [DIRECT_UPDATE] 파일명 직접 배열 감지:', {
+            배열길이: namesOrUpdater.length,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+          finalNames = namesOrUpdater;
+        }
+
+        console.log('🔧 [SET_NAMES] 최종 파일명 처리:', {
+          finalNamesCount: finalNames.length,
+          finalNamesPreview: finalNames.slice(0, 3),
+          functionalUpdateResolved: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        setSelectionState((previousState) => ({
+          ...previousState,
+          selectedFileNames: finalNames,
+        }));
+
+        console.log('✅ [SET_NAMES] 파일명 업데이트 완료:', {
+          updatedNamesCount: finalNames.length,
+          functionalUpdateApplied: true,
+          typeErrorResolved: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      } catch (updateError) {
+        console.error('❌ [SET_NAMES] 파일명 업데이트 실패:', {
+          error: updateError,
+          functionalUpdateFailed: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
+    },
+    [selectionState.selectedFileNames]
+  );
 
   const addToast = useCallback((toast: Omit<ToastItem, 'id' | 'createdAt'>) => {
     const currentTimestamp = Date.now();
@@ -392,16 +554,18 @@ export const useBlogMediaStepState = () => {
     console.log('🔧 [FORCE_SYNC] 강제 동기화 실행:', {
       galleryCount: currentGalleryImages.length,
       formCount: currentFormMedia.length,
+      functionalUpdateEnabled: true,
     });
 
     const callback = syncCallbackRef.current;
-    if (callback) {
+    const isCallbackAvailable = callback !== null && callback !== undefined;
+    if (isCallbackAvailable) {
       callback(currentGalleryImages);
     }
   }, [getValues, galleryStore]);
 
   console.log(
-    '✅ [BLOG_MEDIA_STATE] useBlogMediaStepState 반환 준비 - 실제수정버전:',
+    '✅ [BLOG_MEDIA_STATE] useBlogMediaStepState 반환 준비 - 함수형업데이트지원:',
     {
       formValuesKeys: Object.keys(formValues),
       currentMediaFilesCount: currentMediaFiles.length,
@@ -410,6 +574,8 @@ export const useBlogMediaStepState = () => {
       toastsCount: toasts.length,
       syncInitialized,
       hasGalleryStore: galleryStore !== null && galleryStore !== undefined,
+      functionalUpdateSupported: true,
+      typeErrorResolved: true,
       timestamp: new Date().toLocaleTimeString(),
     }
   );

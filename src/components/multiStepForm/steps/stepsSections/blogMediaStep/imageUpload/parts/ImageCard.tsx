@@ -14,15 +14,18 @@ function ImageCard(): React.ReactNode {
     selectedFileNames,
     touchActiveImages,
     isMobileDevice,
+    selectedSliderIndices,
+    isImageSelectedForSlider,
     handleImageTouch,
     handleDeleteButtonClick,
     mainImageHandlers,
   } = useImageUploadContext();
 
-  logger.debug('ImageCard 렌더링 - 메인이미지 기능 추가됨', {
+  logger.debug('ImageCard 렌더링 - 메인이미지 및 슬라이더 기능 추가됨', {
     uploadedImagesCount: uploadedImages.length,
     selectedFileNamesCount: selectedFileNames.length,
     touchActiveImagesCount: touchActiveImages.size,
+    selectedSliderIndicesCount: selectedSliderIndices.length,
     isMobileDevice,
     hasMainImageHandlers: mainImageHandlers !== null,
   });
@@ -87,6 +90,23 @@ function ImageCard(): React.ReactNode {
     );
   }, [mainImageHandlers, imageCardDataList]);
 
+  const allSliderSelectionStates = useMemo(() => {
+    return imageCardDataList.map(({ imageIndex, imageDisplayName }) => {
+      const isSliderSelected = isImageSelectedForSlider(imageIndex);
+
+      logger.debug('슬라이더 선택 상태 계산', {
+        imageIndex,
+        imageDisplayName,
+        isSliderSelected,
+        selectedSliderIndices,
+      });
+
+      return {
+        isSliderSelected,
+      };
+    });
+  }, [imageCardDataList, isImageSelectedForSlider, selectedSliderIndices]);
+
   const allFileSizes = useMemo(() => {
     return imageCardDataList.map(
       ({ imageUrl, imageIndex, imageDisplayName }) => {
@@ -106,18 +126,47 @@ function ImageCard(): React.ReactNode {
   const allStyleConfigurations = useMemo(() => {
     return imageCardDataList.map(({ isTouchActive }, cardIndex) => {
       const mainImageState = allMainImageStates[cardIndex];
+      const sliderSelectionState = allSliderSelectionStates[cardIndex];
       const { isMainImage: isCurrentMainImage } = mainImageState;
+      const { isSliderSelected: isCurrentSliderSelected } =
+        sliderSelectionState;
 
-      // 🎯 카드는 선명하게, 이미지만 별도 블러 처리
-      const mainImageRing = isCurrentMainImage ? 'ring-4 ring-blue-300' : '';
+      // 🎯 카드 링 스타일 결정
+      let cardRingClassName = '';
+      if (isCurrentMainImage && isCurrentSliderSelected) {
+        // 메인 + 슬라이더 선택: 파란색 메인 링 + 초록색 보조 링
+        cardRingClassName =
+          'ring-4 ring-blue-300 ring-offset-2 ring-offset-green-200';
+      } else if (isCurrentMainImage) {
+        // 메인 이미지만: 파란색 링
+        cardRingClassName = 'ring-4 ring-blue-300';
+      } else if (isCurrentSliderSelected) {
+        // 슬라이더 선택만: 초록색 링
+        cardRingClassName = 'ring-4 ring-green-400';
+      }
 
-      const cardClassName = `relative flex-shrink-0 overflow-hidden transition-all duration-300 bg-white border-2 rounded-lg shadow-sm hover:shadow-lg w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 ${
-        isCurrentMainImage
-          ? 'border-blue-500 ring-2 ring-blue-200'
-          : 'border-gray-200'
-      } ${isMobileDevice ? 'cursor-pointer' : 'group'} ${mainImageRing}`;
+      // 🎯 카드 보더 스타일 결정
+      let cardBorderClassName = '';
+      if (isCurrentMainImage && isCurrentSliderSelected) {
+        // 메인 + 슬라이더: 복합 보더
+        cardBorderClassName =
+          'border-blue-500 bg-gradient-to-r from-blue-50 to-green-50';
+      } else if (isCurrentMainImage) {
+        // 메인 이미지: 파란색 보더
+        cardBorderClassName = 'border-blue-500';
+      } else if (isCurrentSliderSelected) {
+        // 슬라이더 선택: 초록색 보더
+        cardBorderClassName = 'border-green-500';
+      } else {
+        // 일반 이미지: 기본 보더
+        cardBorderClassName = 'border-gray-200';
+      }
 
-      // 🎯 이미지만 블러 처리하기 위한 클래스
+      const cardClassName = `relative flex-shrink-0 overflow-hidden transition-all duration-300 bg-white border-2 rounded-lg shadow-sm hover:shadow-lg w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 ${cardBorderClassName} ${
+        isMobileDevice ? 'cursor-pointer' : 'group'
+      } ${cardRingClassName}`;
+
+      // 🎯 이미지 블러 처리 (메인 이미지만)
       const imageClassName = isCurrentMainImage
         ? 'object-cover w-full h-full opacity-60 transition-opacity duration-300'
         : 'object-cover w-full h-full transition-opacity duration-300';
@@ -166,7 +215,12 @@ function ImageCard(): React.ReactNode {
         shouldPreventInteraction,
       };
     });
-  }, [imageCardDataList, allMainImageStates, isMobileDevice]);
+  }, [
+    imageCardDataList,
+    allMainImageStates,
+    allSliderSelectionStates,
+    isMobileDevice,
+  ]);
 
   const handleImageClickEvent = useCallback(
     (imageIndex: number) => {
@@ -351,10 +405,12 @@ function ImageCard(): React.ReactNode {
         }
 
         const mainImageState = allMainImageStates[cardIndex];
+        const sliderSelectionState = allSliderSelectionStates[cardIndex];
         const fileSizeInKB = allFileSizes[cardIndex];
         const styleConfig = allStyleConfigurations[cardIndex];
 
         const { isMainImage, canSetAsMainImage } = mainImageState;
+        const { isSliderSelected } = sliderSelectionState;
         const {
           cardClassName,
           imageClassName,
@@ -380,7 +436,7 @@ function ImageCard(): React.ReactNode {
               showLabel={false}
             />
 
-            {/* 🎯 메인 이미지일 때 작은 뱃지로 표시 (오버레이 대신) */}
+            {/* 🎯 메인 이미지 뱃지 */}
             {isMainImage ? (
               <div className="absolute z-30 top-2 left-2">
                 <div className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-blue-500 rounded shadow-lg">
@@ -390,6 +446,24 @@ function ImageCard(): React.ReactNode {
                     aria-hidden="true"
                   />
                   <span>메인</span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 🎯 슬라이더 선택 뱃지 */}
+            {isSliderSelected ? (
+              <div
+                className={`absolute z-30 ${
+                  isMainImage ? 'top-2 left-16' : 'top-2 left-2'
+                }`}
+              >
+                <div className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-green-500 rounded shadow-lg">
+                  <Icon
+                    icon="lucide:layers"
+                    className="w-3 h-3"
+                    aria-hidden="true"
+                  />
+                  <span>슬라이더</span>
                 </div>
               </div>
             ) : null}
@@ -422,6 +496,11 @@ function ImageCard(): React.ReactNode {
                   {isMainImage ? (
                     <span className="ml-2 px-1 py-0.5 text-xs bg-blue-500 rounded">
                       메인
+                    </span>
+                  ) : null}
+                  {isSliderSelected ? (
+                    <span className="ml-2 px-1 py-0.5 text-xs bg-green-500 rounded">
+                      슬라이더
                     </span>
                   ) : null}
                 </div>
