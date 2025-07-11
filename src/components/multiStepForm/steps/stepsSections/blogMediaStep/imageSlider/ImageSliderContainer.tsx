@@ -18,12 +18,22 @@ function ImageSliderContainer(): React.ReactNode {
 
   const blogMediaStepState = useBlogMediaStepState();
   const { formValues, addToast } = blogMediaStepState;
-  const { media: availableMediaFileList, mainImage: selectedMainImageUrl } =
-    formValues;
+  const { media: rawMediaFileList, mainImage: rawMainImageUrl } = formValues;
+
+  // 🛡️ 타입 안전성 보장: undefined 처리
+  const availableMediaFileList =
+    rawMediaFileList !== null && rawMediaFileList !== undefined
+      ? rawMediaFileList
+      : [];
+  const selectedMainImageUrl =
+    rawMainImageUrl !== undefined ? rawMainImageUrl : null;
 
   console.log('📊 BlogMediaStepState 불러오기 완료:', {
     availableMediaCount: availableMediaFileList.length,
     hasMainImage: selectedMainImageUrl ? true : false,
+    mainImageUrl: selectedMainImageUrl
+      ? selectedMainImageUrl.slice(0, 30) + '...'
+      : null,
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -54,6 +64,35 @@ function ImageSliderContainer(): React.ReactNode {
     selectedImageCount: selectedImageIndexList.length,
     timestamp: new Date().toLocaleTimeString(),
   });
+
+  // 🎯 메인 이미지를 제외한 실제 슬라이더 가능한 이미지 개수 계산
+  const availableForSliderImageList = useMemo(() => {
+    const hasMainImage =
+      selectedMainImageUrl !== null &&
+      selectedMainImageUrl !== undefined &&
+      selectedMainImageUrl.length > 0;
+
+    if (!hasMainImage) {
+      console.log('🔧 메인 이미지 없음 - 모든 이미지가 슬라이더 가능:', {
+        totalImages: availableMediaFileList.length,
+      });
+      return availableMediaFileList;
+    }
+
+    const filteredImageList = availableMediaFileList.filter((imageUrl) => {
+      const isNotMainImage = imageUrl !== selectedMainImageUrl;
+      return isNotMainImage;
+    });
+
+    console.log('🔧 메인 이미지 제외한 슬라이더 가능 이미지 계산:', {
+      totalImages: availableMediaFileList.length,
+      mainImageUrl: selectedMainImageUrl.slice(0, 30) + '...',
+      filteredCount: filteredImageList.length,
+      excludedCount: availableMediaFileList.length - filteredImageList.length,
+    });
+
+    return filteredImageList;
+  }, [availableMediaFileList, selectedMainImageUrl]);
 
   const getSelectedImageUrlListFromIndexList = useCallback(
     (mediaFileUrlList: string[]) => {
@@ -183,14 +222,16 @@ function ImageSliderContainer(): React.ReactNode {
     console.log('✅ 모든 슬라이더 이미지 초기화 완료');
   }, [clearAllSliderImageList, clearCurrentImageSelection]);
 
-  const totalAvailableImageCount = availableMediaFileList.length;
+  const totalAvailableForSliderImageCount = availableForSliderImageList.length;
   const currentSliderImageTotalCount = getCurrentSliderImageTotalCount();
   const { length: sliderImageCount } = currentSliderImageUrlList;
   const hasSelectedSliderImages = sliderImageCount > 0;
-  const hasAvailableImageFiles = totalAvailableImageCount > 0;
+  const hasAvailableImageFiles = availableMediaFileList.length > 0;
 
   console.log('📊 렌더링 준비 상태:', {
-    totalAvailableImageCount,
+    totalAvailableForSliderImageCount,
+    totalOriginalImages: availableMediaFileList.length,
+    mainImageExists: selectedMainImageUrl ? true : false,
     currentSliderImageTotalCount,
     sliderImageCount,
     hasSelectedSliderImages,
@@ -226,13 +267,10 @@ function ImageSliderContainer(): React.ReactNode {
                 id="slider-status-display"
                 aria-live="polite"
               >
-                사용 가능한 이미지 {totalAvailableImageCount}개 | 슬라이더{' '}
-                {currentSliderImageTotalCount}개
-                {currentSelectedImageCount > 0 ? (
-                  <span className="ml-2 text-primary">
-                    ({currentSelectedImageCount}개 선택됨)
-                  </span>
-                ) : null}
+                슬라이더 가능한 이미지 {totalAvailableForSliderImageCount}개 |{' '}
+                <span className="font-medium text-primary">
+                  {currentSelectedImageCount}개 선택됨
+                </span>
               </div>
               {hasSelectedSliderImages ? (
                 <button
@@ -306,7 +344,15 @@ function ImageSliderContainer(): React.ReactNode {
               height={40}
             />
             <p className="text-default-600">
-              이미지를 업로드하면 슬라이더를 구성할 수 있습니다.
+              {selectedMainImageUrl ? (
+                <>
+                  메인 이미지가 설정되었습니다.
+                  <br />
+                  추가 이미지를 업로드하면 슬라이더를 구성할 수 있습니다.
+                </>
+              ) : (
+                '이미지를 업로드하면 슬라이더를 구성할 수 있습니다.'
+              )}
             </p>
           </div>
         )}
