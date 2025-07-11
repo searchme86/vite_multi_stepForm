@@ -127,7 +127,7 @@ export interface ImageGalleryMetadata {
   readonly isCompressed?: boolean;
 }
 
-// 🆕 통합된 하이브리드 이미지뷰 설정 (중복 제거)
+// 🚨 수정: 슬라이더 이미지 필드 추가로 데이터 동기화 문제 해결
 export interface HybridImageViewConfig {
   clickOrder: number[];
   selectedImageIds: string[]; // 🆕 ID 기반 관리
@@ -138,6 +138,10 @@ export interface HybridImageViewConfig {
     gridType: 'grid' | 'masonry';
   };
   filter: 'all' | 'available';
+
+  // 🚨 핵심 수정: 슬라이더 관련 필드들 추가
+  mainImage?: string | null; // 메인 이미지 URL
+  sliderImages: string[]; // 슬라이더 이미지 URL 목록
 }
 
 // 🆕 통합된 하이브리드 커스텀뷰 (중복 제거)
@@ -152,6 +156,10 @@ export interface HybridCustomGalleryView {
     gridType: 'grid' | 'masonry';
   };
   createdAt: Date;
+
+  // 🚨 슬라이더 관련 필드들도 커스텀뷰에 추가
+  mainImage?: string | null;
+  sliderImages: string[];
 }
 
 // 🆕 간소화된 이미지 처리 결과
@@ -168,9 +176,11 @@ export interface HybridImageProcessResult {
   readonly totalProcessed: number;
 }
 
-// 🆕 간소화된 기본 하이브리드 설정 생성 함수
+// 🚨 수정: 슬라이더 필드를 포함한 기본값 생성
 export const createDefaultHybridImageViewConfig = (): HybridImageViewConfig => {
-  console.log('🔧 [TYPES] 기본 하이브리드 이미지뷰 설정 생성');
+  console.log(
+    '🔧 [TYPES] 슬라이더 필드 포함 기본 하이브리드 이미지뷰 설정 생성'
+  );
 
   return {
     clickOrder: [],
@@ -182,5 +192,9 @@ export const createDefaultHybridImageViewConfig = (): HybridImageViewConfig => {
       gridType: 'grid',
     },
     filter: 'all',
+
+    // 🚨 슬라이더 관련 기본값 추가
+    mainImage: null,
+    sliderImages: [],
   };
 };

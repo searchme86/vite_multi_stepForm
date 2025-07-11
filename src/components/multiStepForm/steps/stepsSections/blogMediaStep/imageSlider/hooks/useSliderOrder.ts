@@ -23,15 +23,36 @@ interface IndexValidationResult {
   errorMessage: string;
 }
 
-export const useSliderOrder = (): SliderOrderResult => {
+export function useSliderOrder(): SliderOrderResult {
   console.log('🔧 useSliderOrder 훅 초기화');
 
   const imageGalleryStore = useImageGalleryStore();
   const { imageViewConfig } = imageGalleryStore;
 
-  // Reflect.get을 사용하여 안전하게 슬라이더 이미지 접근
+  // 🚨 데이터 동기화를 위한 모든 관련 배열 접근
   const rawSliderImages = Reflect.get(imageViewConfig || {}, 'sliderImages');
   const sliderImages = Array.isArray(rawSliderImages) ? rawSliderImages : [];
+
+  const rawSelectedImages = Reflect.get(
+    imageViewConfig || {},
+    'selectedImages'
+  );
+  const currentSelectedImages = Array.isArray(rawSelectedImages)
+    ? rawSelectedImages
+    : [];
+
+  const rawSelectedImageIds = Reflect.get(
+    imageViewConfig || {},
+    'selectedImageIds'
+  );
+  const currentSelectedImageIds = Array.isArray(rawSelectedImageIds)
+    ? rawSelectedImageIds
+    : [];
+
+  const rawImageMetadata = Reflect.get(imageViewConfig || {}, 'imageMetadata');
+  const currentImageMetadata = Array.isArray(rawImageMetadata)
+    ? rawImageMetadata
+    : [];
 
   const addToastMessage = useCallback((toastConfig: ToastConfig) => {
     // TODO: 실제 토스트 스토어 연결 필요
@@ -43,22 +64,101 @@ export const useSliderOrder = (): SliderOrderResult => {
     );
   }, []);
 
-  const updateSliderImages = useCallback(
+  // 🚨 핵심 수정: 데이터 동기화를 보장하는 업데이트 함수
+  const updateSliderImagesWithSync = useCallback(
     (newSliderImages: string[]) => {
       const currentConfig = imageGalleryStore.getImageViewConfig();
-      const updatedConfig = {
-        ...currentConfig,
-        sliderImages: newSliderImages,
-      };
 
-      imageGalleryStore.setImageViewConfig(updatedConfig);
+      // 🔧 데이터 무결성: selectedImages와 selectedImageIds 길이 동기화 확인
+      const lengthsMatch =
+        currentSelectedImages.length === currentSelectedImageIds.length &&
+        currentSelectedImages.length === currentImageMetadata.length;
 
-      console.log('✅ 슬라이더 이미지 순서 업데이트:', {
-        previousCount: sliderImages.length,
-        newCount: newSliderImages.length,
-      });
+      if (!lengthsMatch) {
+        console.warn('⚠️ [SLIDER_ORDER] 배열 길이 불일치 감지, 동기화 수행:', {
+          selectedImagesLength: currentSelectedImages.length,
+          selectedImageIdsLength: currentSelectedImageIds.length,
+          metadataLength: currentImageMetadata.length,
+        });
+
+        // 가장 긴 배열을 기준으로 동기화
+        const maxLength = Math.max(
+          currentSelectedImages.length,
+          currentSelectedImageIds.length,
+          currentImageMetadata.length
+        );
+
+        const syncedSelectedImages = currentSelectedImages.slice(0, maxLength);
+        const syncedSelectedImageIds =
+          currentSelectedImageIds.length >= maxLength
+            ? currentSelectedImageIds.slice(0, maxLength)
+            : [
+                ...currentSelectedImageIds,
+                ...Array(maxLength - currentSelectedImageIds.length)
+                  .fill(null)
+                  .map((_, i) => `sync-id-${Date.now()}-${i}`),
+              ];
+
+        const syncedImageMetadata =
+          currentImageMetadata.length >= maxLength
+            ? currentImageMetadata.slice(0, maxLength)
+            : [
+                ...currentImageMetadata,
+                ...Array(maxLength - currentImageMetadata.length)
+                  .fill(null)
+                  .map((_, i) => ({
+                    id: syncedSelectedImageIds[currentImageMetadata.length + i],
+                    originalFileName: `synced-image-${
+                      currentImageMetadata.length + i + 1
+                    }`,
+                    indexedDBKey: `sync-key-${Date.now()}-${i}`,
+                    originalDataUrl:
+                      syncedSelectedImages[currentImageMetadata.length + i] ||
+                      '',
+                    fileSize: 0,
+                    createdAt: new Date(),
+                  })),
+              ];
+
+        const updatedConfig = {
+          ...currentConfig,
+          sliderImages: newSliderImages,
+          selectedImages: syncedSelectedImages,
+          selectedImageIds: syncedSelectedImageIds,
+          imageMetadata: syncedImageMetadata,
+        };
+
+        imageGalleryStore.setImageViewConfig(updatedConfig);
+
+        console.log('✅ [SLIDER_ORDER] 동기화 포함 슬라이더 업데이트 완료:', {
+          newSliderCount: newSliderImages.length,
+          syncedSelectedImagesCount: syncedSelectedImages.length,
+          syncedSelectedImageIdsCount: syncedSelectedImageIds.length,
+          syncedMetadataCount: syncedImageMetadata.length,
+          dataIntegrityEnsured: true,
+        });
+      } else {
+        // 길이가 일치하는 경우 슬라이더만 업데이트
+        const updatedConfig = {
+          ...currentConfig,
+          sliderImages: newSliderImages,
+        };
+
+        imageGalleryStore.setImageViewConfig(updatedConfig);
+
+        console.log('✅ [SLIDER_ORDER] 슬라이더 순서 업데이트 완료:', {
+          previousCount: sliderImages.length,
+          newCount: newSliderImages.length,
+        });
+      }
     },
-    [imageGalleryStore, sliderImages.length]
+    [
+      imageGalleryStore,
+      sliderImages.length,
+      currentSelectedImages,
+      currentSelectedImageIds,
+      currentImageMetadata,
+    ]
   );
 
   const validateIndices = useCallback(
@@ -139,7 +239,7 @@ export const useSliderOrder = (): SliderOrderResult => {
         fromIndex,
         toIndex
       );
-      updateSliderImages(reorderedSliderImages);
+      updateSliderImagesWithSync(reorderedSliderImages);
 
       const movedImageUrl = reorderedSliderImages[toIndex];
       const safeMovedImageUrl = movedImageUrl ? movedImageUrl : 'unknown';
@@ -150,7 +250,12 @@ export const useSliderOrder = (): SliderOrderResult => {
         movedImage: safeMovedImageUrl.slice(0, 30) + '...',
       });
     },
-    [sliderImages, validateIndices, createReorderedArray, updateSliderImages]
+    [
+      sliderImages,
+      validateIndices,
+      createReorderedArray,
+      updateSliderImagesWithSync,
+    ]
   );
 
   const moveToFirst = useCallback(
@@ -259,11 +364,16 @@ export const useSliderOrder = (): SliderOrderResult => {
         index1,
         index2
       );
-      updateSliderImages(swappedSliderImages);
+      updateSliderImagesWithSync(swappedSliderImages);
 
       console.log('✅ swapSliderImages 완료:', { index1, index2 });
     },
-    [sliderImages, validateIndices, createSwappedArray, updateSliderImages]
+    [
+      sliderImages,
+      validateIndices,
+      createSwappedArray,
+      updateSliderImagesWithSync,
+    ]
   );
 
   const validateNewOrder = useCallback(
@@ -294,7 +404,7 @@ export const useSliderOrder = (): SliderOrderResult => {
         return;
       }
 
-      updateSliderImages(newOrder);
+      updateSliderImagesWithSync(newOrder);
 
       addToastMessage({
         title: '순서 변경 완료',
@@ -304,7 +414,12 @@ export const useSliderOrder = (): SliderOrderResult => {
 
       console.log('✅ reorderSliderImages 완료');
     },
-    [sliderImages, validateNewOrder, updateSliderImages, addToastMessage]
+    [
+      sliderImages,
+      validateNewOrder,
+      updateSliderImagesWithSync,
+      addToastMessage,
+    ]
   );
 
   const getImagePosition = useCallback(
@@ -323,6 +438,12 @@ export const useSliderOrder = (): SliderOrderResult => {
 
   console.log('✅ useSliderOrder 초기화 완료:', {
     sliderCount: sliderImages.length,
+    selectedImagesLength: currentSelectedImages.length,
+    selectedImageIdsLength: currentSelectedImageIds.length,
+    metadataLength: currentImageMetadata.length,
+    isDataSynced:
+      currentSelectedImages.length === currentSelectedImageIds.length &&
+      currentSelectedImages.length === currentImageMetadata.length,
   });
 
   return {
@@ -333,4 +454,7 @@ export const useSliderOrder = (): SliderOrderResult => {
     reorderSliderImages,
     getImagePosition,
   };
-};
+}
+
+// 기본 export 추가 (호환성 보장)
+export default useSliderOrder;

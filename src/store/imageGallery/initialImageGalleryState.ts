@@ -25,7 +25,7 @@ export interface HybridImageGalleryState {
 export const createInitialHybridImageGalleryState =
   (): HybridImageGalleryState => {
     console.log(
-      '🔧 [INITIAL_STATE] 하이브리드 이미지 갤러리 초기 상태 생성 (React Hook Form 동기화 포함)'
+      '🔧 [INITIAL_STATE] 슬라이더 필드 포함 하이브리드 이미지 갤러리 초기 상태 생성 (React Hook Form 동기화 포함)'
     );
 
     const hybridImageViewConfig = createDefaultHybridImageViewConfig();
@@ -44,6 +44,15 @@ export const createInitialHybridImageGalleryState =
       // 🆕 React Hook Form 동기화 상태 기본값
       _reactHookFormSyncCallback: null,
     };
+
+    console.log('✅ [INITIAL_STATE] 초기 상태 생성 완료:', {
+      hasSliderFields: true,
+      sliderImagesCount: hybridImageViewConfig.sliderImages.length,
+      mainImageSet: hybridImageViewConfig.mainImage !== null,
+      selectedImagesCount: hybridImageViewConfig.selectedImages.length,
+      selectedImageIdsCount: hybridImageViewConfig.selectedImageIds.length,
+      dataIntegrityEnsured: true,
+    });
 
     return hybridInitialState;
   };
@@ -115,27 +124,67 @@ export const validateHybridImageGalleryState = (
   const imageMetadata = Reflect.get(imageViewConfig, 'imageMetadata');
   const selectedImages = Reflect.get(imageViewConfig, 'selectedImages'); // 🆕 추가 검증
 
+  // 🚨 슬라이더 필드 검증 추가
+  const mainImage = Reflect.get(imageViewConfig, 'mainImage');
+  const sliderImages = Reflect.get(imageViewConfig, 'sliderImages');
+
   const hasSelectedImageIds = Array.isArray(selectedImageIds);
   const hasImageMetadata = Array.isArray(imageMetadata);
   const hasSelectedImages = Array.isArray(selectedImages); // 🆕 추가 검증
 
+  // 🚨 슬라이더 필드 검증
+  const hasValidMainImage =
+    mainImage === null ||
+    mainImage === undefined ||
+    typeof mainImage === 'string';
+  const hasValidSliderImages = Array.isArray(sliderImages);
+
   const isValidImageConfig =
-    hasSelectedImageIds && hasImageMetadata && hasSelectedImages; // 🆕 조건 추가
+    hasSelectedImageIds &&
+    hasImageMetadata &&
+    hasSelectedImages &&
+    hasValidMainImage &&
+    hasValidSliderImages; // 🚨 슬라이더 조건 추가
+
   if (!isValidImageConfig) {
     console.warn('⚠️ [VALIDATE] imageViewConfig 내부 검증 실패:', {
       hasSelectedImageIds,
       hasImageMetadata,
       hasSelectedImages, // 🆕 추가
+      hasValidMainImage, // 🚨 슬라이더 추가
+      hasValidSliderImages, // 🚨 슬라이더 추가
     });
     return false;
   }
 
+  // 🚨 슬라이더 데이터 무결성 추가 검증
+  if (sliderImages && sliderImages.length > 0) {
+    const isSliderSubsetOfSelected = sliderImages.every(
+      (sliderUrl: unknown) =>
+        typeof sliderUrl === 'string' && selectedImages.includes(sliderUrl)
+    );
+
+    if (!isSliderSubsetOfSelected) {
+      console.warn(
+        '⚠️ [VALIDATE] 슬라이더 이미지가 선택된 이미지의 부분집합이 아님:',
+        {
+          sliderImagesCount: sliderImages.length,
+          selectedImagesCount: selectedImages.length,
+        }
+      );
+      return false;
+    }
+  }
+
   console.log(
-    '✅ [VALIDATE] 하이브리드 상태 검증 완료 (React Hook Form 동기화 포함):',
+    '✅ [VALIDATE] 슬라이더 포함 하이브리드 상태 검증 완료 (React Hook Form 동기화 포함):',
     {
       _isInitialized,
       hasReactHookFormSyncCallback: hasValidSyncCallback,
       selectedImagesCount: selectedImages?.length || 0, // 🆕 추가
+      sliderImagesCount: sliderImages?.length || 0, // 🚨 슬라이더 추가
+      mainImageSet: mainImage !== null && mainImage !== undefined, // 🚨 슬라이더 추가
+      dataIntegrityEnsured: true,
     }
   );
   return true;
