@@ -1,8 +1,9 @@
-// blogMediaStep/imageSlider/ImageSliderContainer.tsx
+// 📁 blogMediaStep/imageSlider/ImageSliderContainer.tsx
 
 import React, { useCallback, useMemo } from 'react';
 import { Icon } from '@iconify/react';
 import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
+import { useBlogMediaStepIntegration } from '../hooks/useBlogMediaStepIntegration';
 import { useImageSlider } from './hooks/useImageSlider';
 import { useSliderSelection } from './hooks/useSliderSelection';
 import { useSliderOrder } from './hooks/useSliderOrder';
@@ -11,16 +12,26 @@ import SliderImageSelector from './parts/SliderImageSelector';
 import SelectedSliderImages from './parts/SelectedSliderImages';
 import SliderAddButton from './parts/SliderAddButton';
 
+interface FormValues {
+  media?: string[] | null;
+  mainImage?: string;
+}
+
 function ImageSliderContainer(): React.ReactNode {
   console.log('🚀 ImageSliderContainer 렌더링 시작:', {
     timestamp: new Date().toLocaleTimeString(),
   });
 
   const blogMediaStepState = useBlogMediaStepState();
-  const { formValues, addToast } = blogMediaStepState;
-  const { media: rawMediaFileList, mainImage: rawMainImageUrl } = formValues;
+  const { formValues, addToast } = blogMediaStepState || {};
 
-  // 🛡️ 타입 안전성 보장: undefined 처리
+  const defaultFormValues: FormValues = { media: null, mainImage: undefined };
+  const safeFormValues = formValues || defaultFormValues;
+  const {
+    media: rawMediaFileList = null,
+    mainImage: rawMainImageUrl = undefined,
+  } = safeFormValues;
+
   const availableMediaFileList =
     rawMediaFileList !== null && rawMediaFileList !== undefined
       ? rawMediaFileList
@@ -30,7 +41,8 @@ function ImageSliderContainer(): React.ReactNode {
 
   console.log('📊 BlogMediaStepState 불러오기 완료:', {
     availableMediaCount: availableMediaFileList.length,
-    hasMainImage: selectedMainImageUrl ? true : false,
+    hasMainImage:
+      selectedMainImageUrl !== null && selectedMainImageUrl !== undefined,
     mainImageUrl: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : null,
@@ -39,25 +51,28 @@ function ImageSliderContainer(): React.ReactNode {
 
   const imageSliderHook = useImageSlider();
   const {
-    localSliderImages: currentSliderImageUrlList,
+    localSliderImages: currentSliderImageUrlList = [],
     removeFromSlider: removeImageFromSliderByUrl,
     addSelectedToSlider: addSelectedImageListToSlider,
     clearSliderImages: clearAllSliderImageList,
     getSliderImageCount: getCurrentSliderImageTotalCount,
-  } = imageSliderHook;
+  } = imageSliderHook || {};
 
   const sliderSelectionHook = useSliderSelection();
   const {
-    selectedSliderImages: selectedImageIndexList,
-    handleSliderImageSelect: handleImageSelectionToggleByIndex,
+    selectedSliderImages: selectedImageIndexList = [],
+    handleSliderImageSelect: originalHandleSliderImageSelect,
     setSelectedSliderImages: updateSelectedImageIndexList,
-  } = sliderSelectionHook;
+  } = sliderSelectionHook || {};
 
   const sliderOrderHook = useSliderOrder();
   const {
     moveToFirst: moveImageToFirstPosition,
     moveToLast: moveImageToLastPosition,
-  } = sliderOrderHook;
+  } = sliderOrderHook || {};
+
+  const blogMediaIntegrationResult = useBlogMediaStepIntegration();
+  const { setSelectedSliderIndicesValue } = blogMediaIntegrationResult || {};
 
   console.log('🔧 훅 초기화 완료:', {
     sliderImageCount: currentSliderImageUrlList.length,
@@ -65,7 +80,6 @@ function ImageSliderContainer(): React.ReactNode {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🎯 메인 이미지를 제외한 실제 슬라이더 가능한 이미지 개수 계산
   const availableForSliderImageList = useMemo(() => {
     const hasMainImage =
       selectedMainImageUrl !== null &&
@@ -79,10 +93,12 @@ function ImageSliderContainer(): React.ReactNode {
       return availableMediaFileList;
     }
 
-    const filteredImageList = availableMediaFileList.filter((imageUrl) => {
-      const isNotMainImage = imageUrl !== selectedMainImageUrl;
-      return isNotMainImage;
-    });
+    const filteredImageList = availableMediaFileList.filter(
+      (imageUrl: string) => {
+        const isNotMainImage = imageUrl !== selectedMainImageUrl;
+        return isNotMainImage;
+      }
+    );
 
     console.log('🔧 메인 이미지 제외한 슬라이더 가능 이미지 계산:', {
       totalImages: availableMediaFileList.length,
@@ -94,6 +110,46 @@ function ImageSliderContainer(): React.ReactNode {
     return filteredImageList;
   }, [availableMediaFileList, selectedMainImageUrl]);
 
+  const handleImageSelectionToggleByIndex = useCallback(
+    (imageIndex: number) => {
+      console.log(
+        '🔧 handleImageSelectionToggleByIndex 호출 - 양방향 동기화:',
+        {
+          imageIndex,
+          currentSelectedCount: selectedImageIndexList.length,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
+
+      originalHandleSliderImageSelect?.(imageIndex);
+
+      const isCurrentlySelected = selectedImageIndexList.includes(imageIndex);
+      const newSelectedIndices = isCurrentlySelected
+        ? selectedImageIndexList.filter((index: number) => index !== imageIndex)
+        : [...selectedImageIndexList, imageIndex];
+
+      console.log('🔧 React Hook Form 동기화 실행:', {
+        imageIndex,
+        isCurrentlySelected,
+        previousCount: selectedImageIndexList.length,
+        newCount: newSelectedIndices.length,
+        newIndices: newSelectedIndices,
+      });
+
+      setSelectedSliderIndicesValue?.(newSelectedIndices);
+
+      console.log('✅ 양방향 동기화 완료:', {
+        imageIndex,
+        finalSelectedCount: newSelectedIndices.length,
+      });
+    },
+    [
+      originalHandleSliderImageSelect,
+      selectedImageIndexList,
+      setSelectedSliderIndicesValue,
+    ]
+  );
+
   const getSelectedImageUrlListFromIndexList = useCallback(
     (mediaFileUrlList: string[]) => {
       console.log('🔄 getSelectedImageUrlListFromIndexList 호출:', {
@@ -102,7 +158,7 @@ function ImageSliderContainer(): React.ReactNode {
       });
 
       const selectedUrlList = selectedImageIndexList
-        .map((imageIndex) => {
+        .map((imageIndex: number) => {
           const imageUrl = mediaFileUrlList[imageIndex];
           return imageUrl || null;
         })
@@ -125,9 +181,11 @@ function ImageSliderContainer(): React.ReactNode {
 
   const clearCurrentImageSelection = useCallback(() => {
     console.log('🔄 clearCurrentImageSelection 호출');
-    updateSelectedImageIndexList([]);
-    console.log('✅ 선택 목록 초기화 완료');
-  }, [updateSelectedImageIndexList]);
+    updateSelectedImageIndexList?.([]);
+    setSelectedSliderIndicesValue?.([]);
+
+    console.log('✅ 선택 목록 초기화 완료 (양방향)');
+  }, [updateSelectedImageIndexList, setSelectedSliderIndicesValue]);
 
   const selectedImageUrlList = useMemo(
     () => getSelectedImageUrlListFromIndexList(availableMediaFileList),
@@ -148,7 +206,7 @@ function ImageSliderContainer(): React.ReactNode {
 
     if (selectedImageCount === 0) {
       console.log('❌ 선택된 이미지 없음 - 토스트 표시');
-      addToast({
+      addToast?.({
         title: '선택된 이미지가 없습니다',
         description: '슬라이더에 추가할 이미지를 먼저 선택해주세요.',
         color: 'warning',
@@ -156,7 +214,7 @@ function ImageSliderContainer(): React.ReactNode {
       return;
     }
 
-    addSelectedImageListToSlider(selectedImageUrlList);
+    addSelectedImageListToSlider?.(selectedImageUrlList);
     clearCurrentImageSelection();
 
     console.log('✅ 슬라이더에 이미지 추가 완료:', {
@@ -175,8 +233,8 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      removeImageFromSliderByUrl(targetImageUrl);
-      addToast({
+      removeImageFromSliderByUrl?.(targetImageUrl);
+      addToast?.({
         title: '슬라이더에서 제거',
         description: '이미지가 슬라이더에서 제거되었습니다.',
         color: 'success',
@@ -193,7 +251,7 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      moveImageToFirstPosition(targetImageUrl);
+      moveImageToFirstPosition?.(targetImageUrl);
 
       console.log('✅ 이미지 첫 번째 위치로 이동 완료');
     },
@@ -206,7 +264,7 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      moveImageToLastPosition(targetImageUrl);
+      moveImageToLastPosition?.(targetImageUrl);
 
       console.log('✅ 이미지 마지막 위치로 이동 완료');
     },
@@ -216,27 +274,36 @@ function ImageSliderContainer(): React.ReactNode {
   const handleClearAllSliderImageList = useCallback(() => {
     console.log('🔧 handleClearAllSliderImageList 호출');
 
-    clearAllSliderImageList();
+    clearAllSliderImageList?.();
     clearCurrentImageSelection();
 
     console.log('✅ 모든 슬라이더 이미지 초기화 완료');
   }, [clearAllSliderImageList, clearCurrentImageSelection]);
 
   const totalAvailableForSliderImageCount = availableForSliderImageList.length;
-  const currentSliderImageTotalCount = getCurrentSliderImageTotalCount();
+  const currentSliderImageTotalCount = getCurrentSliderImageTotalCount?.() || 0;
   const { length: sliderImageCount } = currentSliderImageUrlList;
   const hasSelectedSliderImages = sliderImageCount > 0;
   const hasAvailableImageFiles = availableMediaFileList.length > 0;
+  const canCreateSlider = totalAvailableForSliderImageCount >= 3;
+
+  console.log('🎯 슬라이더 최소 조건 검증:', {
+    totalAvailableForSliderImageCount,
+    canCreateSlider,
+    minimumRequired: 3,
+  });
 
   console.log('📊 렌더링 준비 상태:', {
     totalAvailableForSliderImageCount,
     totalOriginalImages: availableMediaFileList.length,
-    mainImageExists: selectedMainImageUrl ? true : false,
+    mainImageExists:
+      selectedMainImageUrl !== null && selectedMainImageUrl !== undefined,
     currentSliderImageTotalCount,
     sliderImageCount,
     hasSelectedSliderImages,
     hasAvailableImageFiles,
     currentSelectedImageCount,
+    canCreateSlider,
   });
 
   return (
@@ -285,6 +352,41 @@ function ImageSliderContainer(): React.ReactNode {
               ) : null}
             </div>
 
+            {!canCreateSlider ? (
+              <div
+                className="p-4 border rounded-lg bg-warning-50 border-warning-200"
+                role="alert"
+                aria-labelledby="slider-minimum-requirement-title"
+              >
+                <div className="flex items-start gap-3">
+                  <Icon
+                    icon="lucide:info"
+                    className="w-5 h-5 text-warning-600 flex-shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <h3
+                      id="slider-minimum-requirement-title"
+                      className="text-sm font-medium text-warning-800"
+                    >
+                      슬라이더 생성 조건 안내
+                    </h3>
+                    <p className="mt-1 text-sm text-warning-700">
+                      3개 이미지부터 슬라이더를 생성할 수 있습니다.
+                      <br />
+                      현재 메인 이미지를 제외한 이미지가{' '}
+                      {totalAvailableForSliderImageCount}개 있습니다.
+                      {totalAvailableForSliderImageCount === 0
+                        ? ' 추가 이미지를 업로드해주세요.'
+                        : ` ${
+                            3 - totalAvailableForSliderImageCount
+                          }개 더 업로드해주세요.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <section
               role="group"
               aria-labelledby="image-selection-section-title"
@@ -301,13 +403,15 @@ function ImageSliderContainer(): React.ReactNode {
               />
             </section>
 
-            <SliderAddButton
-              selectedCount={currentSelectedImageCount}
-              onAddToSlider={handleAddSelectedImageListToSlider}
-              isDisabled={
-                !hasAvailableImageFiles || currentSelectedImageCount === 0
-              }
-            />
+            {canCreateSlider ? (
+              <SliderAddButton
+                selectedCount={currentSelectedImageCount}
+                onAddToSlider={handleAddSelectedImageListToSlider}
+                isDisabled={
+                  !hasAvailableImageFiles || currentSelectedImageCount === 0
+                }
+              />
+            ) : null}
 
             {hasSelectedSliderImages ? (
               <section
@@ -344,7 +448,8 @@ function ImageSliderContainer(): React.ReactNode {
               height={40}
             />
             <p className="text-default-600">
-              {selectedMainImageUrl ? (
+              {selectedMainImageUrl !== null &&
+              selectedMainImageUrl !== undefined ? (
                 <>
                   메인 이미지가 설정되었습니다.
                   <br />
