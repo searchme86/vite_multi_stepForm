@@ -1,123 +1,104 @@
-// blogMediaStep/imageUpload/parts/ImageList.tsx
+// 📁 imageUpload/parts/ImageList.tsx
 
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { Icon } from '@iconify/react';
+import { useImageUploadContext } from '../context/ImageUploadContext';
+import { createLogger } from '../utils/loggerUtils';
 import ImageCard from './ImageCard';
-import { type MainImageHandlers } from '../types/imageUploadTypes';
 
-interface ImageListProps {
-  mediaFiles: string[];
-  selectedFileNames: string[];
-  touchActiveImages: Set<number>;
-  isMobileDevice: boolean;
-  onImageTouch: (imageIndex: number) => void;
-  onDeleteButtonClick: (imageIndex: number, imageDisplayName: string) => void;
+const logger = createLogger('IMAGE_LIST');
 
-  // ✅ Phase3: 메인 이미지 관련 props 추가
-  mainImageHandlers?: MainImageHandlers;
-}
+// ✅ Props 인터페이스 완전 제거 (작업지시서 목표 달성)
+// ❌ interface ImageListProps - 완전 삭제됨
+// ✅ Context Only 패턴으로 완전 전환
 
-function ImageList({
-  mediaFiles,
-  selectedFileNames,
-  touchActiveImages,
-  isMobileDevice,
-  onImageTouch,
-  onDeleteButtonClick,
+function ImageList(): React.ReactNode {
+  // ✅ Context에서 모든 데이터 가져오기 (Props 0개)
+  const {
+    uploadedImages,
+    selectedFileNames,
+    touchActiveImages,
+    isMobileDevice,
+    mainImageHandlers,
+  } = useImageUploadContext();
 
-  // ✅ Phase3: 메인 이미지 핸들러 구조분해할당
-  mainImageHandlers,
-}: ImageListProps): React.ReactNode {
-  console.log('📋 [IMAGE_LIST] ImageList 렌더링 - Phase3 메인이미지기능추가:', {
-    mediaFilesCount: mediaFiles.length,
+  logger.debug('ImageList 렌더링 - Context Only 패턴', {
+    uploadedImagesCount: uploadedImages.length,
     selectedFileNamesCount: selectedFileNames.length,
     touchActiveImagesCount: touchActiveImages.size,
     isMobileDevice,
-    hasMainImageHandlers: mainImageHandlers ? true : false,
-    timestamp: new Date().toLocaleTimeString(),
+    hasMainImageHandlers: mainImageHandlers !== null,
   });
 
-  // ✅ Phase3: 메인 이미지 핸들러들 구조분해할당 (fallback 처리)
-  const {
-    onMainImageSet: handleMainImageSetAction,
-    onMainImageCancel: handleMainImageCancelAction,
-    checkIsMainImage: checkIsMainImageFunction,
-    checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
-  } = mainImageHandlers ?? {
-    onMainImageSet: undefined,
-    onMainImageCancel: undefined,
-    checkIsMainImage: undefined,
-    checkCanSetAsMainImage: undefined,
-  };
+  // 🚀 성능 최적화: 스크롤 가이드 표시 여부 메모이제이션
+  const scrollGuideConfiguration = useMemo(() => {
+    const imageCount = uploadedImages.length;
+    const shouldShowScrollGuide = imageCount > 4;
 
-  const hasMainImageHandlers = mainImageHandlers ? true : false;
-  const shouldShowScrollGuide = mediaFiles.length > 4;
+    logger.debug('스크롤 가이드 설정 계산', {
+      imageCount,
+      shouldShowScrollGuide,
+    });
 
-  console.log('📋 [IMAGE_LIST] 메인 이미지 핸들러 상태 - Phase3:', {
-    hasMainImageHandlers,
-    hasSetHandler: handleMainImageSetAction ? true : false,
-    hasCancelHandler: handleMainImageCancelAction ? true : false,
-    hasCheckIsMainHandler: checkIsMainImageFunction ? true : false,
-    hasCheckCanSetHandler: checkCanSetAsMainImageFunction ? true : false,
-  });
+    return {
+      shouldShow: shouldShowScrollGuide,
+      imageCount,
+    };
+  }, [uploadedImages.length]);
+
+  // 🚀 성능 최적화: 컨테이너 스타일 메모이제이션
+  const containerStyleConfiguration = useMemo(() => {
+    const baseClassName = 'flex gap-3 pb-2 overflow-x-auto scroll-hidden';
+    const scrollHiddenStyle = {
+      scrollbarWidth: 'none' as const,
+      msOverflowStyle: 'none' as const,
+    };
+
+    return {
+      className: baseClassName,
+      style: scrollHiddenStyle,
+    };
+  }, []);
+
+  // 🚀 성능 최적화: 접근성 속성 메모이제이션
+  const accessibilityAttributes = useMemo(() => {
+    const imageCount = uploadedImages.length;
+    const ariaLabel = `업로드된 이미지 목록 (총 ${imageCount}개)`;
+
+    return {
+      role: 'list' as const,
+      'aria-label': ariaLabel,
+      'aria-live': 'polite' as const,
+    };
+  }, [uploadedImages.length]);
+
+  // 🔧 구조분해할당으로 설정값 접근
+  const { shouldShow: shouldShowScrollGuide } = scrollGuideConfiguration;
+  const { className: containerClassName, style: containerStyle } =
+    containerStyleConfiguration;
+
+  // 🔧 early return으로 빈 상태 처리
+  if (uploadedImages.length === 0) {
+    logger.debug('표시할 이미지가 없어서 렌더링 안함');
+    return null;
+  }
 
   return (
     <div className="relative">
+      {/* 스크롤 숨김 스타일 */}
       <style>{`.scroll-hidden::-webkit-scrollbar { display: none; }`}</style>
 
       <ul
-        className="flex gap-3 pb-2 overflow-x-auto scroll-hidden"
-        style={{
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-        role="list"
-        aria-label="업로드된 이미지 목록"
+        className={containerClassName}
+        style={containerStyle}
+        {...accessibilityAttributes}
       >
-        {mediaFiles.map((imageUrl, imageIndex) => {
-          const imageDisplayName =
-            selectedFileNames[imageIndex] ?? `이미지 ${imageIndex + 1}`;
-          const isTouchActive = touchActiveImages.has(imageIndex);
-
-          // ✅ Phase3: 메인 이미지 상태 체크 (안전하게 호출)
-          const isCurrentMainImage = checkIsMainImageFunction
-            ? checkIsMainImageFunction(imageUrl)
-            : false;
-
-          const canSetAsMainImage = checkCanSetAsMainImageFunction
-            ? checkCanSetAsMainImageFunction(imageUrl)
-            : false;
-
-          console.log('🖼️ [IMAGE_LIST] ImageCard 렌더링 준비:', {
-            imageIndex,
-            imageDisplayName,
-            isCurrentMainImage,
-            canSetAsMainImage,
-            hasMainImageHandlers,
-            timestamp: new Date().toLocaleTimeString(),
-          });
-
-          return (
-            <ImageCard
-              key={`image-card-${imageIndex}-${imageDisplayName}`}
-              imageUrl={imageUrl}
-              imageIndex={imageIndex}
-              imageDisplayName={imageDisplayName}
-              isTouchActive={isTouchActive}
-              isMobileDevice={isMobileDevice}
-              onImageTouch={onImageTouch}
-              onDeleteButtonClick={onDeleteButtonClick}
-              // ✅ Phase3: 메인 이미지 관련 props 전달
-              isMainImage={isCurrentMainImage}
-              canSetAsMainImage={canSetAsMainImage}
-              onMainImageSet={handleMainImageSetAction}
-              onMainImageCancel={handleMainImageCancelAction}
-            />
-          );
-        })}
+        {/* ✅ Props 완전 제거: ImageCard가 Context에서 모든 데이터 처리 */}
+        <ImageCard />
       </ul>
 
-      {shouldShowScrollGuide && (
+      {/* 스크롤 가이드 표시 */}
+      {shouldShowScrollGuide ? (
         <div className="absolute top-0 right-0 z-10 flex items-center justify-center w-8 h-8 text-gray-400 pointer-events-none">
           <Icon
             icon="lucide:chevron-right"
@@ -125,9 +106,9 @@ function ImageList({
             aria-hidden="true"
           />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-export default ImageList;
+export default memo(ImageList);

@@ -1,7 +1,10 @@
-// blogMediaStep/imageUpload/hooks/useDeleteConfirmation.ts
+// 📁 imageUpload/hooks/useDeleteConfirmation.ts
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { type DeleteConfirmState } from '../types/imageUploadTypes';
+import { createLogger } from '../utils/loggerUtils';
+import type { DeleteConfirmState } from '../types/imageUploadTypes';
+
+const logger = createLogger('DELETE_CONFIRMATION');
 
 export const useDeleteConfirmation = (
   onConfirmDelete: (imageIndex: number, imageName: string) => void
@@ -19,13 +22,16 @@ export const useDeleteConfirmation = (
   });
 
   useEffect(() => {
+    const { imageIndex: currentImageIndex, imageName: currentImageName } =
+      deleteConfirmState;
+
     currentStateRef.current = {
-      imageIndex: deleteConfirmState.imageIndex,
-      imageName: deleteConfirmState.imageName,
+      imageIndex: currentImageIndex,
+      imageName: currentImageName,
     };
   }, [deleteConfirmState.imageIndex, deleteConfirmState.imageName]);
 
-  console.log('🔧 [DELETE_CONFIRMATION] useDeleteConfirmation 초기화:', {
+  logger.debug('useDeleteConfirmation 초기화', {
     isVisible: deleteConfirmState.isVisible,
     imageIndex: deleteConfirmState.imageIndex,
     imageName: deleteConfirmState.imageName,
@@ -34,61 +40,86 @@ export const useDeleteConfirmation = (
 
   const showDeleteConfirmation = useCallback(
     (imageIndex: number, imageDisplayName: string) => {
-      console.log('🗑️ [DELETE_UI] 삭제 확인 UI 표시:', {
+      logger.debug('삭제 확인 UI 표시', {
         imageIndex,
         imageDisplayName,
         timestamp: new Date().toLocaleTimeString(),
       });
 
-      setDeleteConfirmState({
+      const newDeleteConfirmState: DeleteConfirmState = {
         isVisible: true,
         imageIndex,
         imageName: imageDisplayName,
-      });
+      };
+
+      setDeleteConfirmState(newDeleteConfirmState);
     },
     []
   );
 
   const confirmDelete = useCallback(() => {
-    const { imageIndex, imageName } = currentStateRef.current;
+    const { imageIndex: currentImageIndex, imageName: currentImageName } =
+      currentStateRef.current;
 
-    console.log('✅ [DELETE_CONFIRM] 삭제 확인:', {
-      imageIndex,
-      imageName,
+    logger.debug('삭제 확인', {
+      imageIndex: currentImageIndex,
+      imageName: currentImageName,
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    const isValidIndex = imageIndex >= 0;
-    const hasImageName = imageName.length > 0;
+    const isValidIndex = currentImageIndex >= 0;
+    const hasImageName = currentImageName.length > 0;
 
+    // 🔧 early return으로 중첩 방지
     if (!isValidIndex || !hasImageName) {
-      console.error('❌ [DELETE_ERROR] 잘못된 삭제 요청:', {
-        imageIndex,
-        imageName,
+      logger.error('잘못된 삭제 요청', {
+        imageIndex: currentImageIndex,
+        imageName: currentImageName,
         isValidIndex,
         hasImageName,
       });
       return;
     }
 
-    onConfirmDelete(imageIndex, imageName);
+    onConfirmDelete(currentImageIndex, currentImageName);
 
-    setDeleteConfirmState({
+    const resetDeleteConfirmState: DeleteConfirmState = {
       isVisible: false,
       imageIndex: -1,
       imageName: '',
+    };
+
+    setDeleteConfirmState(resetDeleteConfirmState);
+
+    logger.info('삭제 확인 처리 완료', {
+      imageIndex: currentImageIndex,
+      imageName: currentImageName,
+      timestamp: new Date().toLocaleTimeString(),
     });
   }, [onConfirmDelete]);
 
   const cancelDelete = useCallback(() => {
-    console.log('❌ [DELETE_CANCEL] 삭제 취소:', {
+    const { imageIndex: previousImageIndex, imageName: previousImageName } =
+      currentStateRef.current;
+
+    logger.debug('삭제 취소', {
+      previousImageIndex,
+      previousImageName,
       timestamp: new Date().toLocaleTimeString(),
     });
 
-    setDeleteConfirmState({
+    const cancelledDeleteConfirmState: DeleteConfirmState = {
       isVisible: false,
       imageIndex: -1,
       imageName: '',
+    };
+
+    setDeleteConfirmState(cancelledDeleteConfirmState);
+
+    logger.info('삭제 취소 처리 완료', {
+      previousImageIndex,
+      previousImageName,
+      timestamp: new Date().toLocaleTimeString(),
     });
   }, []);
 

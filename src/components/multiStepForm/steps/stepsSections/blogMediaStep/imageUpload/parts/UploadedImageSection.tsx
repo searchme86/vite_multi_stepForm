@@ -1,91 +1,86 @@
-// blogMediaStep/imageUpload/parts/UploadedImageSection.tsx
+// 📁 imageUpload/parts/UploadedImageSection.tsx
 
-import React from 'react';
-import {
-  type DeleteConfirmState,
-  type DuplicateMessageState,
-  type MainImageHandlers,
-} from '../types/imageUploadTypes';
+import React, { memo, useMemo } from 'react';
+import { useImageUploadContext } from '../context/ImageUploadContext';
+import { createLogger } from '../utils/loggerUtils';
 import ImageList from './ImageList';
 import DuplicateMessage from './DuplicateMessage';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import UploadSummary from './UploadSummary';
 
-interface UploadedImageSectionProps {
-  mediaFiles: string[];
-  selectedFileNames: string[];
-  deleteConfirmState: DeleteConfirmState;
-  duplicateMessageState: DuplicateMessageState;
-  touchActiveImages: Set<number>;
-  isMobileDevice: boolean;
-  onDeleteButtonClick: (imageIndex: number, imageDisplayName: string) => void;
-  onDeleteConfirm: () => void;
-  onDeleteCancel: () => void;
-  onImageTouch: (imageIndex: number) => void;
+const logger = createLogger('UPLOADED_IMAGE_SECTION');
 
-  // ✅ Phase3: 메인 이미지 관련 props 추가
-  mainImageHandlers?: MainImageHandlers;
-}
+function UploadedImageSection(): React.ReactNode {
+  // ✅ Context에서 모든 데이터 가져오기 (Props 0개)
+  const {
+    uploadedImages,
+    selectedFileNames,
+    deleteConfirmState,
+    mainImageHandlers,
+  } = useImageUploadContext();
 
-function UploadedImageSection({
-  mediaFiles,
-  selectedFileNames,
-  deleteConfirmState,
-  duplicateMessageState,
-  touchActiveImages,
-  isMobileDevice,
-  onDeleteButtonClick,
-  onDeleteConfirm,
-  onDeleteCancel,
-  onImageTouch,
+  logger.debug('UploadedImageSection 렌더링', {
+    uploadedImagesCount: uploadedImages.length,
+    selectedFileNamesCount: selectedFileNames.length,
+    deleteConfirmVisible: deleteConfirmState.isVisible,
+    hasMainImageHandlers: mainImageHandlers !== null,
+  });
 
-  // ✅ Phase3: 메인 이미지 핸들러 구조분해할당
-  mainImageHandlers,
-}: UploadedImageSectionProps): React.ReactNode {
-  console.log(
-    '🖼️ [UPLOADED_SECTION] UploadedImageSection 렌더링 - Phase3 메인이미지추가:',
-    {
-      mediaFilesCount: mediaFiles.length,
-      selectedFileNamesCount: selectedFileNames.length,
-      deleteConfirmVisible: deleteConfirmState.isVisible,
-      duplicateMessageVisible: duplicateMessageState.isVisible,
-      touchActiveImagesCount: touchActiveImages.size,
-      isMobileDevice,
-      hasMainImageHandlers: mainImageHandlers ? true : false,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-  );
+  // 🚀 성능 최적화: 업로드된 이미지 존재 여부 메모이제이션
+  const hasUploadedImages = useMemo(() => {
+    const imageCount = uploadedImages.length;
+    const hasImages = imageCount > 0;
 
-  const hasUploadedImages = mediaFiles.length > 0;
+    logger.debug('업로드된 이미지 존재 여부 계산', {
+      imageCount,
+      hasImages,
+    });
 
+    return hasImages;
+  }, [uploadedImages.length]);
+
+  // 🔧 early return으로 중첩 방지
   if (!hasUploadedImages) {
-    console.log('⚠️ [UPLOADED_SECTION] 업로드된 이미지가 없음');
+    logger.debug('업로드된 이미지가 없어서 렌더링 안함');
     return null;
   }
 
-  // ✅ Phase3: 메인 이미지 핸들러 상태 확인
-  const hasMainImageHandlers = mainImageHandlers ? true : false;
+  // 🚀 성능 최적화: 푸터 높이 계산 메모이제이션
+  const footerConfiguration = useMemo(() => {
+    const { isVisible: isDeleteConfirmVisible } = deleteConfirmState;
+    const minimumHeight = isDeleteConfirmVisible ? '120px' : '60px';
+
+    logger.debug('푸터 구성 계산', {
+      isDeleteConfirmVisible,
+      minimumHeight,
+    });
+
+    return {
+      minimumHeight,
+      hasDeleteConfirm: isDeleteConfirmVisible,
+    };
+  }, [deleteConfirmState.isVisible]);
+
+  // 🚀 성능 최적화: 메인 이미지 기능 상태 메모이제이션
+  const mainImageFeatureInfo = useMemo(() => {
+    const isMainImageFeatureAvailable = mainImageHandlers !== null;
+
+    logger.debug('메인 이미지 기능 상태 계산', {
+      isMainImageFeatureAvailable,
+    });
+
+    return {
+      isAvailable: isMainImageFeatureAvailable,
+      statusLabel: isMainImageFeatureAvailable ? '메인 이미지 설정 가능' : '',
+    };
+  }, [mainImageHandlers]);
+
+  // 🔧 구조분해할당으로 설정값 접근
+  const { minimumHeight: footerMinHeight } = footerConfiguration;
   const {
-    onMainImageSet: handleMainImageSetAction,
-    onMainImageCancel: handleMainImageCancelAction,
-    checkIsMainImage: checkIsMainImageFunction,
-    checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
-  } = mainImageHandlers ?? {
-    onMainImageSet: undefined,
-    onMainImageCancel: undefined,
-    checkIsMainImage: undefined,
-    checkCanSetAsMainImage: undefined,
-  };
-
-  console.log('🖼️ [UPLOADED_SECTION] 메인 이미지 핸들러 상태 - Phase3:', {
-    hasMainImageHandlers,
-    hasSetHandler: handleMainImageSetAction ? true : false,
-    hasCancelHandler: handleMainImageCancelAction ? true : false,
-    hasCheckIsMainHandler: checkIsMainImageFunction ? true : false,
-    hasCheckCanSetHandler: checkCanSetAsMainImageFunction ? true : false,
-  });
-
-  const footerMinHeight = deleteConfirmState.isVisible ? '120px' : '60px';
+    isAvailable: isMainImageFeatureAvailable,
+    statusLabel: mainImageStatusLabel,
+  } = mainImageFeatureInfo;
 
   return (
     <section
@@ -98,81 +93,32 @@ function UploadedImageSection({
           id="uploaded-images-heading"
           className="text-lg font-semibold text-gray-800"
         >
-          업로드된 이미지들 ({mediaFiles.length}개)
-          {/* ✅ Phase3: 메인 이미지 기능 상태 표시 */}
-          {hasMainImageHandlers && (
+          업로드된 이미지들 ({uploadedImages.length}개)
+          {isMainImageFeatureAvailable ? (
             <span className="px-2 py-1 ml-2 text-xs text-blue-700 bg-blue-100 rounded-full">
-              메인 이미지 설정 가능
+              {mainImageStatusLabel}
             </span>
-          )}
+          ) : null}
         </h3>
-
-        <DuplicateMessage duplicateMessageState={duplicateMessageState} />
+        {/* ✅ Props 없이 Component 사용 */}
+        <DuplicateMessage />
       </header>
 
-      {/* ✅ Phase3: ImageList에 메인 이미지 핸들러 전달 */}
-      <ImageList
-        mediaFiles={mediaFiles}
-        selectedFileNames={selectedFileNames}
-        touchActiveImages={touchActiveImages}
-        isMobileDevice={isMobileDevice}
-        onImageTouch={onImageTouch}
-        onDeleteButtonClick={onDeleteButtonClick}
-        mainImageHandlers={mainImageHandlers}
-      />
+      <main>
+        {/* ✅ Props 없이 Component 사용 */}
+        <ImageList />
+      </main>
 
       <footer
         className="relative p-3 mt-4 overflow-hidden border border-blue-200 rounded-lg bg-blue-50"
         style={{ minHeight: footerMinHeight }}
       >
-        <UploadSummary
-          mediaFiles={mediaFiles}
-          deleteConfirmState={deleteConfirmState}
-          isMobileDevice={isMobileDevice}
-        />
-
-        <DeleteConfirmDialog
-          deleteConfirmState={deleteConfirmState}
-          onConfirm={onDeleteConfirm}
-          onCancel={onDeleteCancel}
-        />
+        {/* ✅ Props 없이 Component 사용 */}
+        <UploadSummary />
+        <DeleteConfirmDialog />
       </footer>
-
-      {/* ✅ Phase3: 메인 이미지 도움말 추가
-      {hasMainImageHandlers && mediaFiles.length > 0 && (
-        <div className="p-3 mt-3 border border-green-200 rounded-lg bg-green-50">
-          <div className="flex items-start gap-2">
-            <svg
-              className="w-4 h-4 mt-0.5 text-green-600 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div className="text-sm text-green-800">
-              <p className="font-medium">메인 이미지 설정 안내</p>
-              <p className="mt-1">
-                이미지에 마우스를 올리고{' '}
-                <span className="inline-flex items-center px-1 py-0.5 bg-green-200 rounded text-xs font-mono">
-                  🏠
-                </span>{' '}
-                버튼을 클릭하여 메인 이미지로 설정할 수 있습니다.
-                {isMobileDevice &&
-                  ' 모바일에서는 이미지를 터치한 후 버튼을 선택하세요.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )} */}
     </section>
   );
 }
 
-export default UploadedImageSection;
+export default memo(UploadedImageSection);

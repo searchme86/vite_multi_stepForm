@@ -1,6 +1,7 @@
-// 📁 blogMediaStep/imageUpload/hooks/useFileProcessing.ts
+// 📁 imageUpload/hooks/useFileProcessing.ts
 
 import { useRef, useCallback, useEffect } from 'react';
+import { createLogger } from '../utils/loggerUtils';
 import { validateFile } from '../../utils/fileValidationUtils';
 import { generateSecureFileId } from '../utils/fileIdUtils';
 import { filterDuplicateFiles } from '../utils/duplicateFileUtils';
@@ -9,18 +10,22 @@ import {
   convertFilesToFileList,
 } from '../utils/fileProcessingUtils';
 
+const logger = createLogger('FILE_PROCESSING');
+
 interface FileProcessingCallbacks {
   updateMediaValue: (files: string[]) => void;
   updateSelectedFileNames: (names: string[]) => void;
-  showToastMessage: (toast: any) => void;
+  showToastMessage: (toast: unknown) => void;
   showDuplicateMessage: (files: File[]) => void;
   startFileUpload: (fileId: string, fileName: string) => void;
   updateFileProgress: (fileId: string, progress: number) => void;
   completeFileUpload: (fileId: string, fileName: string) => void;
   failFileUpload: (fileId: string, fileName: string) => void;
+}
 
-  // 🔧 Zustand 동기화 콜백 제거 (React Hook Form 중심으로 변경)
-  // updateImageGalleryStore?: (config: Partial<ImageViewConfig>) => void;
+interface CurrentStateRef {
+  mediaFiles: string[];
+  fileNames: string[];
 }
 
 export const useFileProcessing = (
@@ -28,7 +33,7 @@ export const useFileProcessing = (
   currentSelectedFileNames: string[],
   callbacks: FileProcessingCallbacks
 ) => {
-  const currentStateRef = useRef({
+  const currentStateRef = useRef<CurrentStateRef>({
     mediaFiles: currentMediaFilesList,
     fileNames: currentSelectedFileNames,
   });
@@ -40,18 +45,15 @@ export const useFileProcessing = (
     };
   }, [currentMediaFilesList, currentSelectedFileNames]);
 
-  console.log(
-    '🔧 [FILE_PROCESSING] useFileProcessing 초기화 - React Hook Form 중심:',
-    {
-      currentMediaFilesCount: currentMediaFilesList.length,
-      currentSelectedFileNamesCount: currentSelectedFileNames.length,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-  );
+  logger.debug('useFileProcessing 초기화 - React Hook Form 중심', {
+    currentMediaFilesCount: currentMediaFilesList.length,
+    currentSelectedFileNamesCount: currentSelectedFileNames.length,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   const processFiles = useCallback(
     (files: FileList) => {
-      console.log('🚨 [FILES] processFiles 시작 - React Hook Form 중심:', {
+      logger.debug('processFiles 시작 - React Hook Form 중심', {
         fileCount: files.length,
         timestamp: new Date().toLocaleTimeString(),
       });
@@ -63,10 +65,17 @@ export const useFileProcessing = (
       );
 
       const hasDuplicateFiles = duplicateFiles.length > 0;
+
+      // 🔧 삼항연산자 사용
+      const duplicateAction = hasDuplicateFiles
+        ? 'show-animation'
+        : 'skip-animation';
+
       if (hasDuplicateFiles) {
-        console.log('🎨 [FILES] 중복 파일 발견! 애니메이션 표시:', {
-          duplicateFileNames: duplicateFiles.map((f) => f.name),
+        logger.debug('중복 파일 발견! 애니메이션 표시', {
+          duplicateFileNames: duplicateFiles.map((file) => file.name),
           duplicateCount: duplicateFiles.length,
+          duplicateAction,
         });
 
         callbacks.showDuplicateMessage(duplicateFiles);
@@ -78,14 +87,16 @@ export const useFileProcessing = (
       }
 
       const hasNoUniqueFiles = uniqueFiles.length === 0;
+
+      // 🔧 early return으로 중첩 방지
       if (hasNoUniqueFiles) {
-        console.log('⚠️ [FILES] 업로드할 고유 파일이 없음');
+        logger.warn('업로드할 고유 파일이 없음');
         return;
       }
 
-      console.log('✅ [FILES] 고유 파일들 업로드 시작:', {
+      logger.info('고유 파일들 업로드 시작', {
         uniqueFilesCount: uniqueFiles.length,
-        uniqueFileNames: uniqueFiles.map((f) => f.name),
+        uniqueFileNames: uniqueFiles.map((file) => file.name),
       });
 
       uniqueFiles.forEach((file) => {
@@ -100,32 +111,38 @@ export const useFileProcessing = (
       const fileId = generateSecureFileId(file.name);
       const { name: fileName } = file;
 
-      console.log(
-        '📁 [FILE_PROCESS] 개별 파일 처리 시작 - React Hook Form 중심:',
-        {
-          fileName,
-          fileId,
-          fileSize: file.size,
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
+      logger.debug('개별 파일 처리 시작 - React Hook Form 중심', {
+        fileName,
+        fileId,
+        fileSize: file.size,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
       const validationResult = validateFile(file);
       const { isValid: fileIsValid, errorMessage: validationError } =
         validationResult;
 
       const isInvalidFile = !fileIsValid;
+
+      // 🔧 early return으로 중첩 방지
       if (isInvalidFile) {
-        console.log('❌ [VALIDATION] 파일 검증 실패:', {
+        const errorMessage =
+          validationError !== null && validationError !== undefined
+            ? validationError
+            : 'unknown';
+
+        logger.error('파일 검증 실패', {
           fileName,
-          error: validationError || 'unknown',
+          error: errorMessage,
         });
 
         callbacks.failFileUpload(fileId, fileName);
         callbacks.showToastMessage({
           title: '업로드 실패',
           description:
-            validationError || `${fileName} 파일 검증에 실패했습니다.`,
+            errorMessage !== 'unknown'
+              ? errorMessage
+              : `${fileName} 파일 검증에 실패했습니다.`,
           color: 'danger',
         });
         return;
@@ -139,18 +156,15 @@ export const useFileProcessing = (
 
       const handleSuccess = (result: string) => {
         setTimeout(() => {
-          console.log(
-            '⏰ [TIMEOUT] setTimeout 콜백 실행 - React Hook Form 중심:',
-            {
-              fileName,
-              fileId,
-              timestamp: new Date().toLocaleTimeString(),
-            }
-          );
+          logger.debug('setTimeout 콜백 실행 - React Hook Form 중심', {
+            fileName,
+            fileId,
+            timestamp: new Date().toLocaleTimeString(),
+          });
 
           try {
-            const latestMediaFiles = currentStateRef.current.mediaFiles;
-            const latestFileNames = currentStateRef.current.fileNames;
+            const { mediaFiles: latestMediaFiles, fileNames: latestFileNames } =
+              currentStateRef.current;
 
             // 🔧 React Hook Form만 업데이트 (Zustand는 자동 동기화됨)
             const updatedMediaFiles = [...latestMediaFiles, result];
@@ -160,27 +174,29 @@ export const useFileProcessing = (
             callbacks.updateSelectedFileNames(updatedFileNames);
             callbacks.completeFileUpload(fileId, fileName);
 
-            // 🔧 Zustand 수동 동기화 제거 (React Hook Form 변경 감지로 자동 동기화됨)
-            // syncToImageGalleryStore(updatedMediaFiles);
-
             callbacks.showToastMessage({
               title: '업로드 완료',
               description: `${fileName} 파일이 성공적으로 업로드되었습니다.`,
               color: 'success',
             });
 
-            console.log('✅ [SUCCESS] 파일 업로드 완료 (자동 동기화 대기):', {
+            logger.info('파일 업로드 완료 (자동 동기화 대기)', {
               fileName,
               fileId,
               totalMediaCount: updatedMediaFiles.length,
               reactHookFormUpdated: true,
-              zustandAutoSyncPending: true, // 자동으로 동기화될 예정
+              zustandAutoSyncPending: true,
             });
           } catch (uploadError) {
-            console.error('❌ [ERROR] 업로드 처리 중 오류:', {
+            const errorMessage =
+              uploadError instanceof Error
+                ? uploadError.message
+                : 'Unknown upload error';
+
+            logger.error('업로드 처리 중 오류', {
               fileName,
               fileId,
-              error: uploadError,
+              error: errorMessage,
             });
 
             callbacks.failFileUpload(fileId, fileName);
@@ -193,11 +209,14 @@ export const useFileProcessing = (
         }, 1500);
       };
 
-      const handleError = (error: ProgressEvent<FileReader>) => {
-        console.error('❌ [READER_ERROR] FileReader 에러:', {
+      const handleError = (error: Error) => {
+        const errorMessage =
+          error instanceof Error ? error.message : 'FileReader 에러';
+
+        logger.error('FileReader 에러', {
           fileName,
           fileId,
-          error,
+          error: errorMessage,
         });
 
         callbacks.failFileUpload(fileId, fileName);
@@ -216,20 +235,22 @@ export const useFileProcessing = (
         handleError
       );
     },
-    [callbacks] // syncToImageGalleryStore 의존성 제거
+    [callbacks]
   );
 
   const handleFilesDropped = useCallback(
     (droppedFilesList: File[]) => {
-      console.log('🚨 [DROP] handleFilesDropped - React Hook Form 중심:', {
+      logger.debug('handleFilesDropped - React Hook Form 중심', {
         fileCount: droppedFilesList.length,
-        fileNames: droppedFilesList.map((f) => f.name),
+        fileNames: droppedFilesList.map((file) => file.name),
         timestamp: new Date().toLocaleTimeString(),
       });
 
       const hasNoFiles = droppedFilesList.length === 0;
+
+      // 🔧 early return으로 중첩 방지
       if (hasNoFiles) {
-        console.log('⚠️ [DROP] 드롭된 파일이 없음');
+        logger.warn('드롭된 파일이 없음');
         return;
       }
 
@@ -241,22 +262,57 @@ export const useFileProcessing = (
 
   const handleFileChange = useCallback(
     (changedFileList: FileList) => {
-      console.log('🚨 [CHANGE] handleFileChange - React Hook Form 중심:', {
+      logger.debug('handleFileChange - React Hook Form 중심', {
         fileCount: changedFileList.length,
         timestamp: new Date().toLocaleTimeString(),
       });
 
       const hasFiles = changedFileList.length > 0;
+
+      // 🔧 삼항연산자 사용
+      const changeAction = hasFiles ? 'process-files' : 'skip-processing';
+
       if (hasFiles) {
+        logger.debug('파일 변경 감지, 처리 시작', {
+          fileCount: changedFileList.length,
+          changeAction,
+        });
         processFiles(changedFileList);
+      } else {
+        logger.debug('변경된 파일이 없음', { changeAction });
       }
     },
     [processFiles]
   );
 
+  const validateProcessingState = useCallback((): boolean => {
+    const { mediaFiles: currentMediaFiles, fileNames: currentFileNames } =
+      currentStateRef.current;
+
+    const hasValidMediaFiles = Array.isArray(currentMediaFiles);
+    const hasValidFileNames = Array.isArray(currentFileNames);
+    const hasConsistentLength =
+      currentMediaFiles.length === currentFileNames.length;
+
+    const isValidState =
+      hasValidMediaFiles && hasValidFileNames && hasConsistentLength;
+
+    logger.debug('파일 처리 상태 검증', {
+      hasValidMediaFiles,
+      hasValidFileNames,
+      hasConsistentLength,
+      isValidState,
+      mediaFilesCount: currentMediaFiles.length,
+      fileNamesCount: currentFileNames.length,
+    });
+
+    return isValidState;
+  }, []);
+
   return {
     processFiles,
     handleFilesDropped,
     handleFileChange,
+    validateProcessingState,
   };
 };

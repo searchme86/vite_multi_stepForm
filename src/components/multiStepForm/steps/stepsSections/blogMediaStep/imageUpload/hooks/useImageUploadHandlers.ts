@@ -1,6 +1,7 @@
-// 📁 blogMediaStep/imageUpload/hooks/useImageUploadHandlers.ts
+// 📁 imageUpload/hooks/useImageUploadHandlers.ts
 
 import { useRef, useCallback } from 'react';
+import { createLogger } from '../utils/loggerUtils';
 import { useMainImageManagement } from '../../mainImage/hooks/useMainImageManagement';
 import { useMainImageValidation } from '../../mainImage/hooks/useMainImageValidation';
 import { useFileUploadState } from './useFileUploadState';
@@ -12,6 +13,25 @@ import type {
   FormValues,
   ToastItem,
 } from '../../../../../../../store/shared/commonTypes';
+
+const logger = createLogger('IMAGE_UPLOAD_HANDLERS');
+
+interface ToastMessage {
+  title: string;
+  description: string;
+  color: 'success' | 'warning' | 'danger' | 'primary';
+}
+
+interface FileProcessingCallbacks {
+  updateMediaValue: (files: string[]) => void;
+  updateSelectedFileNames: (names: string[]) => void;
+  showToastMessage: (toast: unknown) => void;
+  showDuplicateMessage: (files: File[]) => void;
+  startFileUpload: (fileId: string, fileName: string) => void;
+  updateFileProgress: (fileId: string, progress: number) => void;
+  completeFileUpload: (fileId: string, fileName: string) => void;
+  failFileUpload: (fileId: string, fileName: string) => void;
+}
 
 interface ImageUploadHandlersProps {
   formValues: FormValues;
@@ -25,7 +45,11 @@ interface ImageUploadHandlersProps {
   setMainImageValue: (imageUrl: string) => void;
   updateSelectedFileNames: (names: string[]) => void;
   showToastMessage: (toast: Omit<ToastItem, 'id' | 'createdAt'>) => void;
-  imageGalleryStore: any;
+  imageGalleryStore: unknown;
+}
+
+interface FileSelectButtonElement {
+  clickFileInput: () => void;
 }
 
 export const useImageUploadHandlers = ({
@@ -39,23 +63,21 @@ export const useImageUploadHandlers = ({
   imageGalleryStore: galleryStoreInstance,
 }: ImageUploadHandlersProps) => {
   const { media: mediaFromForm } = currentFormValues;
-  const currentMediaFilesList = mediaFromForm ?? [];
+  const currentMediaFilesList =
+    mediaFromForm !== null && mediaFromForm !== undefined ? mediaFromForm : [];
   const { isMobile: isMobileDevice } = currentUiState;
   const { selectedFileNames: currentSelectedFileNames } = currentSelectionState;
 
-  const fileSelectButtonRef = useRef<any>(null);
+  const fileSelectButtonRef = useRef<FileSelectButtonElement | null>(null);
 
-  console.log(
-    '🔧 [MAIN_HANDLERS] useImageUploadHandlers 초기화 - 중복훅호출제거:',
-    {
-      currentMediaFilesCount: currentMediaFilesList.length,
-      currentSelectedFileNamesCount: currentSelectedFileNames.length,
-      isMobileDevice,
-      hasGalleryStore:
-        galleryStoreInstance !== null && galleryStoreInstance !== undefined,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-  );
+  logger.debug('useImageUploadHandlers 초기화 - 중복훅호출제거', {
+    currentMediaFilesCount: currentMediaFilesList.length,
+    currentSelectedFileNamesCount: currentSelectedFileNames.length,
+    isMobileDevice,
+    hasGalleryStore:
+      galleryStoreInstance !== null && galleryStoreInstance !== undefined,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   // 🔧 메인 이미지 관리 훅들 - Props 방식으로 변경
   const mainImageManagementHook = useMainImageManagement({
@@ -68,6 +90,7 @@ export const useImageUploadHandlers = ({
     formValues: currentFormValues,
   });
 
+  // 🔧 구조분해할당으로 핸들러 추출
   const {
     setAsMainImageDirect: setImageAsMainImageDirectly,
     cancelMainImage: cancelCurrentMainImage,
@@ -83,34 +106,77 @@ export const useImageUploadHandlers = ({
   const duplicateHandler = useDuplicateFileHandler();
   const mobileTouchState = useMobileTouchState(isMobileDevice);
 
+  // 🔧 타입 안전한 Toast 메시지 변환 함수
+  const createSafeToastMessage = useCallback(
+    (toast: Omit<ToastItem, 'id' | 'createdAt'>): ToastMessage => {
+      const { title = '', description = '', color = 'primary' } = toast;
+
+      const safeTitle = typeof title === 'string' ? title : 'Notification';
+      const safeDescription =
+        typeof description === 'string' ? description : '';
+
+      // 🔧 타입 단언 없이 안전한 색상 검증
+      const validColors = ['success', 'warning', 'danger', 'primary'] as const;
+      type ValidColor = (typeof validColors)[number];
+
+      const isValidColor = (colorValue: unknown): colorValue is ValidColor => {
+        return (
+          typeof colorValue === 'string' &&
+          validColors.some((validColorItem) => validColorItem === colorValue)
+        );
+      };
+
+      const safeColor = isValidColor(color) ? color : 'primary';
+
+      return {
+        title: safeTitle,
+        description: safeDescription,
+        color: safeColor,
+      };
+    },
+    []
+  );
+
+  // 🔧 타입 안전한 Toast 표시 함수
+  const displayToastMessage = useCallback(
+    (toast: Omit<ToastItem, 'id' | 'createdAt'>) => {
+      const safeToast = createSafeToastMessage(toast);
+      showToastMessage(safeToast);
+    },
+    [createSafeToastMessage, showToastMessage]
+  );
+
   // 🔧 메인 이미지 설정 핸들러 (React Hook Form 중심)
   const handleMainImageSet = useCallback(
     (imageIndex: number, imageUrl: string) => {
       const imageUrlPreview = imageUrl.slice(0, 30) + '...';
 
-      console.log(
-        '🏠 [MAIN_IMAGE_SET] 메인 이미지 설정 핸들러 호출 - 중복훅호출제거:',
-        {
-          imageIndex,
-          imageUrlPreview,
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
+      logger.debug('메인 이미지 설정 핸들러 호출 - 중복훅호출제거', {
+        imageIndex,
+        imageUrlPreview,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
       const validationResult = validateMainImageSelectionFunction(imageUrl);
       const { isValid: isValidSelection, message: validationMessage } =
         validationResult;
 
+      // 🔧 early return으로 중첩 방지
       if (!isValidSelection) {
-        console.log('❌ [MAIN_IMAGE_SET] 메인 이미지 설정 불가능:', {
+        const safeValidationMessage =
+          validationMessage !== null && validationMessage !== undefined
+            ? validationMessage
+            : '메인 이미지로 설정할 수 없습니다.';
+
+        logger.warn('메인 이미지 설정 불가능', {
           imageIndex,
           imageUrlPreview,
-          validationMessage,
+          validationMessage: safeValidationMessage,
         });
 
-        showToastMessage({
+        displayToastMessage({
           title: '메인 이미지 설정 불가',
-          description: validationMessage ?? '메인 이미지로 설정할 수 없습니다.',
+          description: safeValidationMessage,
           color: 'warning',
         });
         return;
@@ -118,52 +184,51 @@ export const useImageUploadHandlers = ({
 
       setImageAsMainImageDirectly(imageIndex);
 
-      console.log(
-        '✅ [MAIN_IMAGE_SET] 메인 이미지 설정 완료 (자동 동기화 대기):',
-        {
-          imageIndex,
-          imageUrlPreview,
-          reactHookFormUpdated: true,
-          zustandAutoSyncPending: true,
-        }
-      );
+      logger.info('메인 이미지 설정 완료 (자동 동기화 대기)', {
+        imageIndex,
+        imageUrlPreview,
+        reactHookFormUpdated: true,
+        zustandAutoSyncPending: true,
+      });
     },
     [
       validateMainImageSelectionFunction,
       setImageAsMainImageDirectly,
-      showToastMessage,
+      displayToastMessage,
     ]
   );
 
   // 🔧 메인 이미지 해제 핸들러 (React Hook Form 중심)
   const handleMainImageCancel = useCallback(() => {
-    console.log(
-      '❌ [MAIN_IMAGE_CANCEL] 메인 이미지 해제 핸들러 호출 - 중복훅호출제거'
-    );
+    logger.debug('메인 이미지 해제 핸들러 호출 - 중복훅호출제거');
 
     cancelCurrentMainImage();
 
-    console.log(
-      '✅ [MAIN_IMAGE_CANCEL] 메인 이미지 해제 완료 (자동 동기화 대기):',
-      {
-        reactHookFormUpdated: true,
-        zustandAutoSyncPending: true,
-      }
-    );
+    logger.info('메인 이미지 해제 완료 (자동 동기화 대기)', {
+      reactHookFormUpdated: true,
+      zustandAutoSyncPending: true,
+    });
   }, [cancelCurrentMainImage]);
 
   // 🔧 삭제 액션 핸들러 (React Hook Form 중심)
   const handleDeleteAction = useCallback(
     (imageIndex: number, imageName: string) => {
-      console.log('✅ [DELETE_ACTION] 실제 삭제 처리 - 중복훅호출제거:', {
+      logger.debug('실제 삭제 처리 - 중복훅호출제거', {
         imageIndex,
         imageName,
         timestamp: new Date().toLocaleTimeString(),
       });
 
       try {
-        const safeCurrentMediaFiles = currentMediaFilesList ?? [];
-        const safeCurrentSelectedFileNames = currentSelectedFileNames ?? [];
+        const safeCurrentMediaFiles =
+          currentMediaFilesList !== null && currentMediaFilesList !== undefined
+            ? currentMediaFilesList
+            : [];
+        const safeCurrentSelectedFileNames =
+          currentSelectedFileNames !== null &&
+          currentSelectedFileNames !== undefined
+            ? currentSelectedFileNames
+            : [];
 
         const updatedMediaFiles = safeCurrentMediaFiles.filter(
           (_, filterIndex) => filterIndex !== imageIndex
@@ -175,13 +240,13 @@ export const useImageUploadHandlers = ({
         updateMediaValue(updatedMediaFiles);
         updateSelectedFileNames(updatedFileNames);
 
-        showToastMessage({
+        displayToastMessage({
           title: '이미지 삭제 완료',
           description: `"${imageName}" 이미지가 삭제되었습니다.`,
           color: 'success',
         });
 
-        console.log('✅ [DELETE] 이미지 삭제 완료 (자동 동기화 대기):', {
+        logger.info('이미지 삭제 완료 (자동 동기화 대기)', {
           imageName,
           remainingMediaCount: updatedMediaFiles.length,
           reactHookFormUpdated: true,
@@ -189,12 +254,17 @@ export const useImageUploadHandlers = ({
           timestamp: new Date().toLocaleTimeString(),
         });
       } catch (deleteError) {
-        console.error('❌ [DELETE_ERROR] 삭제 처리 중 오류:', {
+        const errorMessage =
+          deleteError instanceof Error
+            ? deleteError.message
+            : 'Unknown delete error';
+
+        logger.error('삭제 처리 중 오류', {
           imageName,
-          error: deleteError,
+          error: errorMessage,
         });
 
-        showToastMessage({
+        displayToastMessage({
           title: '삭제 실패',
           description: '이미지 삭제 중 오류가 발생했습니다.',
           color: 'danger',
@@ -206,38 +276,88 @@ export const useImageUploadHandlers = ({
       currentSelectedFileNames,
       updateMediaValue,
       updateSelectedFileNames,
-      showToastMessage,
+      displayToastMessage,
     ]
   );
 
   const deleteConfirmation = useDeleteConfirmation(handleDeleteAction);
 
+  // 🔧 FileProcessing에 타입 안전한 콜백 전달
+  const fileProcessingCallbacks: FileProcessingCallbacks = {
+    updateMediaValue,
+    updateSelectedFileNames,
+    showToastMessage: (toast: unknown) => {
+      // unknown을 안전하게 처리하여 Toast 형식으로 변환
+      const hasToastValue = toast !== null && toast !== undefined;
+      const isToastObject = hasToastValue && typeof toast === 'object';
+
+      const titleProperty = isToastObject
+        ? Reflect.get(toast, 'title')
+        : undefined;
+      const descriptionProperty = isToastObject
+        ? Reflect.get(toast, 'description')
+        : undefined;
+      const colorProperty = isToastObject
+        ? Reflect.get(toast, 'color')
+        : undefined;
+
+      const title =
+        typeof titleProperty === 'string' ? titleProperty : 'Notification';
+      const description =
+        typeof descriptionProperty === 'string' ? descriptionProperty : '';
+
+      // 🔧 타입 가드를 사용한 안전한 색상 처리
+      type ValidToastColor = 'success' | 'warning' | 'danger' | 'primary';
+      const validToastColors: ValidToastColor[] = [
+        'success',
+        'warning',
+        'danger',
+        'primary',
+      ];
+
+      const isValidToastColor = (
+        colorValue: unknown
+      ): colorValue is ValidToastColor => {
+        return (
+          typeof colorValue === 'string' &&
+          validToastColors.some((validColor) => validColor === colorValue)
+        );
+      };
+
+      const color = isValidToastColor(colorProperty)
+        ? colorProperty
+        : 'primary';
+
+      const safeToastData = { title, description, color };
+      showToastMessage(safeToastData);
+    },
+    showDuplicateMessage: duplicateHandler.showDuplicateMessage,
+    startFileUpload: uploadState.startFileUpload,
+    updateFileProgress: uploadState.updateFileProgress,
+    completeFileUpload: uploadState.completeFileUpload,
+    failFileUpload: uploadState.failFileUpload,
+  };
+
   const fileProcessing = useFileProcessing(
     currentMediaFilesList,
-    currentSelectedFileNames ?? [],
-    {
-      updateMediaValue,
-      updateSelectedFileNames,
-      showToastMessage,
-      showDuplicateMessage: duplicateHandler.showDuplicateMessage,
-      startFileUpload: uploadState.startFileUpload,
-      updateFileProgress: uploadState.updateFileProgress,
-      completeFileUpload: uploadState.completeFileUpload,
-      failFileUpload: uploadState.failFileUpload,
-    }
+    currentSelectedFileNames !== null && currentSelectedFileNames !== undefined
+      ? currentSelectedFileNames
+      : [],
+    fileProcessingCallbacks
   );
 
   const handleFileSelectClick = useCallback(() => {
-    const hasActiveUploads = uploadState.hasActiveUploads;
+    const { hasActiveUploads } = uploadState;
 
-    console.log('🚨 [CLICK] handleFileSelectClick:', {
+    logger.debug('handleFileSelectClick', {
       hasActiveUploads,
       timestamp: new Date().toLocaleTimeString(),
     });
 
+    // 🔧 early return으로 중첩 방지
     if (hasActiveUploads) {
-      console.log('⚠️ [CLICK] 업로드 중이므로 파일 선택 무시');
-      showToastMessage({
+      logger.warn('업로드 중이므로 파일 선택 무시');
+      displayToastMessage({
         title: '업로드 진행 중',
         description: '현재 업로드가 진행 중입니다. 완료 후 다시 시도해주세요.',
         color: 'warning',
@@ -246,29 +366,64 @@ export const useImageUploadHandlers = ({
     }
 
     const { current: fileSelectButtonElement } = fileSelectButtonRef;
-    const hasClickFunction = fileSelectButtonElement?.clickFileInput;
+    const hasClickFunction =
+      fileSelectButtonElement !== null &&
+      fileSelectButtonElement !== undefined &&
+      typeof fileSelectButtonElement.clickFileInput === 'function';
+
+    // 🔧 삼항연산자 사용
+    const clickAction = hasClickFunction ? 'execute-click' : 'skip-click';
 
     if (hasClickFunction) {
+      logger.debug('파일 선택 버튼 클릭 실행', { clickAction });
       fileSelectButtonElement.clickFileInput();
+    } else {
+      logger.warn('파일 선택 버튼 참조가 유효하지 않음', { clickAction });
     }
-  }, [uploadState.hasActiveUploads, showToastMessage]);
+  }, [uploadState.hasActiveUploads, displayToastMessage]);
 
-  console.log(
-    '✅ [MAIN_HANDLERS] useImageUploadHandlers 초기화 완료 - 중복훅호출제거:',
-    {
-      hasMainImageManagement:
-        mainImageManagementHook !== null &&
-        mainImageManagementHook !== undefined,
-      hasMainImageValidation:
-        mainImageValidationHook !== null &&
-        mainImageValidationHook !== undefined,
-      uploadingCount: Object.keys(uploadState.uploading).length,
-      hasGalleryStore:
-        galleryStoreInstance !== null && galleryStoreInstance !== undefined,
-      reactHookFormCentricSync: true,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-  );
+  const validateHandlersState = useCallback((): boolean => {
+    const hasMainImageManagement =
+      mainImageManagementHook !== null && mainImageManagementHook !== undefined;
+    const hasMainImageValidation =
+      mainImageValidationHook !== null && mainImageValidationHook !== undefined;
+    const hasUploadState = uploadState !== null && uploadState !== undefined;
+    const hasFileProcessing =
+      fileProcessing !== null && fileProcessing !== undefined;
+
+    const isValidState =
+      hasMainImageManagement &&
+      hasMainImageValidation &&
+      hasUploadState &&
+      hasFileProcessing;
+
+    logger.debug('핸들러 상태 검증', {
+      hasMainImageManagement,
+      hasMainImageValidation,
+      hasUploadState,
+      hasFileProcessing,
+      isValidState,
+    });
+
+    return isValidState;
+  }, [
+    mainImageManagementHook,
+    mainImageValidationHook,
+    uploadState,
+    fileProcessing,
+  ]);
+
+  logger.info('useImageUploadHandlers 초기화 완료 - 중복훅호출제거', {
+    hasMainImageManagement:
+      mainImageManagementHook !== null && mainImageManagementHook !== undefined,
+    hasMainImageValidation:
+      mainImageValidationHook !== null && mainImageValidationHook !== undefined,
+    uploadingCount: Object.keys(uploadState.uploading).length,
+    hasGalleryStore:
+      galleryStoreInstance !== null && galleryStoreInstance !== undefined,
+    reactHookFormCentricSync: true,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   return {
     // 기존 상태들
@@ -302,10 +457,17 @@ export const useImageUploadHandlers = ({
 
     // 기타 상태
     currentMediaFilesList,
-    currentSelectedFileNames: currentSelectedFileNames ?? [],
+    currentSelectedFileNames:
+      currentSelectedFileNames !== null &&
+      currentSelectedFileNames !== undefined
+        ? currentSelectedFileNames
+        : [],
     isMobileDevice,
 
     // 갤러리 스토어 참조만 유지
     imageGalleryStore: galleryStoreInstance,
+
+    // 추가 유틸리티
+    validateHandlersState,
   };
 };
