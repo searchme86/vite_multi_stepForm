@@ -8,11 +8,7 @@ import MainImageIndicator from '../../mainImage/parts/MainImageIndicator';
 
 const logger = createLogger('IMAGE_CARD');
 
-// ✅ Props 인터페이스 완전 제거 (작업지시서 목표 달성)
-// ✅ React Hooks Rules 완전 준수로 재설계
-
 function ImageCard(): React.ReactNode {
-  // ✅ Context에서 모든 데이터 가져오기 (Props 0개)
   const {
     uploadedImages,
     selectedFileNames,
@@ -23,7 +19,7 @@ function ImageCard(): React.ReactNode {
     mainImageHandlers,
   } = useImageUploadContext();
 
-  logger.debug('ImageCard 렌더링 - React Hooks Rules 준수', {
+  logger.debug('ImageCard 렌더링 - 메인이미지 기능 추가됨', {
     uploadedImagesCount: uploadedImages.length,
     selectedFileNamesCount: selectedFileNames.length,
     touchActiveImagesCount: touchActiveImages.size,
@@ -31,7 +27,6 @@ function ImageCard(): React.ReactNode {
     hasMainImageHandlers: mainImageHandlers !== null,
   });
 
-  // 🚀 성능 최적화: 이미지 카드 데이터 메모이제이션 (최상단 위치)
   const imageCardDataList = useMemo(() => {
     logger.debug('이미지 카드 데이터 메모이제이션 실행', {
       imageCount: uploadedImages.length,
@@ -56,7 +51,6 @@ function ImageCard(): React.ReactNode {
     });
   }, [uploadedImages, selectedFileNames, touchActiveImages]);
 
-  // 🚀 성능 최적화: 모든 이미지의 메인 이미지 상태 미리 계산 (최상단 위치)
   const allMainImageStates = useMemo(() => {
     const hasMainImageHandlers = mainImageHandlers !== null;
 
@@ -93,7 +87,6 @@ function ImageCard(): React.ReactNode {
     );
   }, [mainImageHandlers, imageCardDataList]);
 
-  // 🚀 성능 최적화: 모든 이미지의 파일 크기 미리 계산 (최상단 위치)
   const allFileSizes = useMemo(() => {
     return imageCardDataList.map(
       ({ imageUrl, imageIndex, imageDisplayName }) => {
@@ -110,17 +103,24 @@ function ImageCard(): React.ReactNode {
     );
   }, [imageCardDataList]);
 
-  // 🚀 성능 최적화: 모든 이미지의 스타일 설정 미리 계산 (최상단 위치)
   const allStyleConfigurations = useMemo(() => {
     return imageCardDataList.map(({ isTouchActive }, cardIndex) => {
       const mainImageState = allMainImageStates[cardIndex];
       const { isMainImage: isCurrentMainImage } = mainImageState;
 
-      const cardClassName = `relative flex-shrink-0 overflow-hidden transition-shadow duration-300 bg-white border-2 rounded-lg shadow-sm hover:shadow-lg w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 ${
+      // 🎯 카드는 선명하게, 이미지만 별도 블러 처리
+      const mainImageRing = isCurrentMainImage ? 'ring-4 ring-blue-300' : '';
+
+      const cardClassName = `relative flex-shrink-0 overflow-hidden transition-all duration-300 bg-white border-2 rounded-lg shadow-sm hover:shadow-lg w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 ${
         isCurrentMainImage
           ? 'border-blue-500 ring-2 ring-blue-200'
           : 'border-gray-200'
-      } ${isMobileDevice ? 'cursor-pointer' : 'group'}`;
+      } ${isMobileDevice ? 'cursor-pointer' : 'group'} ${mainImageRing}`;
+
+      // 🎯 이미지만 블러 처리하기 위한 클래스
+      const imageClassName = isCurrentMainImage
+        ? 'object-cover w-full h-full opacity-60 transition-opacity duration-300'
+        : 'object-cover w-full h-full transition-opacity duration-300';
 
       const overlayClassName = `absolute inset-x-0 bottom-0 z-10 transition-all duration-300 transform bg-black bg-opacity-70 backdrop-blur-sm ${
         isMobileDevice
@@ -130,44 +130,62 @@ function ImageCard(): React.ReactNode {
           : 'translate-y-full group-hover:translate-y-0'
       }`;
 
-      const deleteButtonClassName = `absolute z-20 flex items-center justify-center transition-all duration-300 transform bg-red-500 shadow-lg rounded-lg hover:bg-red-600 hover:scale-110 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 w-6 h-6 top-1.5 right-1.5 sm:w-8 sm:h-8 sm:top-2 sm:right-2 ${
-        isMobileDevice
+      // 🎯 메인 이미지일 때는 터치 무시하도록 처리
+      const shouldPreventInteraction = isCurrentMainImage;
+
+      // 🎯 버튼들은 항상 선명하게 - 메인 이미지일 때도 명확히 보이도록
+      const deleteButtonClassName = `absolute z-30 flex items-center justify-center transition-all duration-300 transform bg-red-500 shadow-lg rounded-lg hover:bg-red-600 hover:scale-110 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 w-6 h-6 top-1.5 right-1.5 sm:w-8 sm:h-8 sm:top-2 sm:right-2 ${
+        shouldPreventInteraction
+          ? 'opacity-50 cursor-not-allowed pointer-events-none'
+          : isMobileDevice
           ? isTouchActive
             ? 'opacity-100'
             : 'opacity-0 pointer-events-none'
           : 'opacity-0 group-hover:opacity-100'
       }`;
 
-      const mainImageButtonClassName = `absolute z-20 flex items-center justify-center transition-all duration-300 transform shadow-lg rounded-lg hover:scale-110 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 w-6 h-6 top-1.5 right-9 sm:w-8 sm:h-8 sm:top-2 sm:right-11 ${
+      // 🎯 메인 이미지 버튼들 - 삭제 버튼과 동일한 사이즈로 통일
+      const mainImageButtonClassName = `absolute z-30 flex items-center justify-center transition-all duration-300 transform shadow-lg rounded-lg hover:scale-110 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 w-6 h-6 top-1.5 right-9 sm:w-8 sm:h-8 sm:top-2 sm:right-11 ${
         isMobileDevice
           ? isTouchActive
             ? 'opacity-100'
+            : isCurrentMainImage
+            ? 'opacity-100'
             : 'opacity-0 pointer-events-none'
+          : isCurrentMainImage
+          ? 'opacity-100'
           : 'opacity-0 group-hover:opacity-100'
       }`;
 
       return {
         cardClassName,
+        imageClassName,
         overlayClassName,
         deleteButtonClassName,
         mainImageButtonClassName,
+        shouldPreventInteraction,
       };
     });
   }, [imageCardDataList, allMainImageStates, isMobileDevice]);
 
-  // 🚀 성능 최적화: 이벤트 핸들러들 메모이제이션 (최상단 위치)
   const handleImageClickEvent = useCallback(
     (imageIndex: number) => {
       const imageDisplayName =
         selectedFileNames[imageIndex] || `이미지 ${imageIndex + 1}`;
 
+      // 🎯 메인 이미지 상태 확인
+      const mainImageState = allMainImageStates[imageIndex];
+      const shouldPreventClick = mainImageState
+        ? mainImageState.isMainImage
+        : false;
+
       logger.debug('이미지 클릭 이벤트 처리', {
         imageIndex,
         imageDisplayName,
         isMobileDevice,
+        shouldPreventClick,
       });
 
-      // 🔧 early return으로 중첩 방지
       if (!isMobileDevice) {
         logger.debug('모바일 디바이스가 아니므로 터치 이벤트 무시', {
           imageIndex,
@@ -176,9 +194,17 @@ function ImageCard(): React.ReactNode {
         return;
       }
 
+      if (shouldPreventClick) {
+        logger.debug('메인 이미지는 터치 이벤트 무시', {
+          imageIndex,
+          imageDisplayName,
+        });
+        return;
+      }
+
       handleImageTouch(imageIndex);
     },
-    [isMobileDevice, selectedFileNames, handleImageTouch]
+    [isMobileDevice, selectedFileNames, handleImageTouch, allMainImageStates]
   );
 
   const handleDeleteClickEvent = useCallback(
@@ -188,14 +214,29 @@ function ImageCard(): React.ReactNode {
       const imageDisplayName =
         selectedFileNames[imageIndex] || `이미지 ${imageIndex + 1}`;
 
+      // 🎯 메인 이미지는 삭제 방지
+      const mainImageState = allMainImageStates[imageIndex];
+      const shouldPreventDelete = mainImageState
+        ? mainImageState.isMainImage
+        : false;
+
       logger.debug('삭제 버튼 클릭 이벤트 처리', {
         imageIndex,
         imageDisplayName,
+        shouldPreventDelete,
       });
+
+      if (shouldPreventDelete) {
+        logger.warn('메인 이미지는 삭제할 수 없음', {
+          imageIndex,
+          imageDisplayName,
+        });
+        return;
+      }
 
       handleDeleteButtonClick(imageIndex, imageDisplayName);
     },
-    [selectedFileNames, handleDeleteButtonClick]
+    [selectedFileNames, handleDeleteButtonClick, allMainImageStates]
   );
 
   const handleMainImageSetClickEvent = useCallback(
@@ -212,7 +253,6 @@ function ImageCard(): React.ReactNode {
 
       const hasMainImageHandlers = mainImageHandlers !== null;
 
-      // 🔧 early return으로 중첩 방지
       if (!hasMainImageHandlers) {
         logger.warn('메인 이미지 핸들러가 없음', {
           imageIndex,
@@ -241,7 +281,6 @@ function ImageCard(): React.ReactNode {
 
       const hasMainImageHandlers = mainImageHandlers !== null;
 
-      // 🔧 early return으로 중첩 방지
       if (!hasMainImageHandlers) {
         logger.warn('메인 이미지 핸들러가 없음', {
           imageIndex,
@@ -290,7 +329,6 @@ function ImageCard(): React.ReactNode {
     [selectedFileNames]
   );
 
-  // 🔧 React Hooks Rules 준수: 모든 hooks 호출 후 early return
   if (imageCardDataList.length === 0) {
     logger.debug('표시할 이미지가 없어서 렌더링 안함');
     return null;
@@ -307,13 +345,11 @@ function ImageCard(): React.ReactNode {
           uniqueKey,
         } = cardData;
 
-        // 🔧 유효하지 않은 이미지 URL 처리
         if (imageUrl.length === 0) {
           logger.warn('유효하지 않은 이미지 URL', { imageIndex });
           return null;
         }
 
-        // 🔧 미리 계산된 값들 가져오기 (hooks 없음)
         const mainImageState = allMainImageStates[cardIndex];
         const fileSizeInKB = allFileSizes[cardIndex];
         const styleConfig = allStyleConfigurations[cardIndex];
@@ -321,9 +357,11 @@ function ImageCard(): React.ReactNode {
         const { isMainImage, canSetAsMainImage } = mainImageState;
         const {
           cardClassName,
+          imageClassName,
           overlayClassName,
           deleteButtonClassName,
           mainImageButtonClassName,
+          shouldPreventInteraction,
         } = styleConfig;
 
         return (
@@ -342,11 +380,25 @@ function ImageCard(): React.ReactNode {
               showLabel={false}
             />
 
+            {/* 🎯 메인 이미지일 때 작은 뱃지로 표시 (오버레이 대신) */}
+            {isMainImage ? (
+              <div className="absolute z-30 top-2 left-2">
+                <div className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-blue-500 rounded shadow-lg">
+                  <Icon
+                    icon="lucide:home"
+                    className="w-3 h-3"
+                    aria-hidden="true"
+                  />
+                  <span>메인</span>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex items-center justify-center w-full h-full bg-gray-100">
               <img
                 src={imageUrl}
                 alt={`업로드된 이미지 ${imageIndex + 1}: ${imageDisplayName}`}
-                className="object-cover w-full h-full"
+                className={imageClassName}
                 onLoad={(loadEvent) =>
                   handleImageLoadEvent(imageIndex, loadEvent)
                 }
@@ -379,7 +431,7 @@ function ImageCard(): React.ReactNode {
             {isMainImage ? (
               <button
                 type="button"
-                className={`${mainImageButtonClassName} bg-orange-500 hover:bg-orange-600 focus:ring-orange-500`}
+                className={`${mainImageButtonClassName} bg-orange-500 hover:bg-orange-600 focus:ring-orange-500 ring-2 ring-white`}
                 onClick={(clickEvent) =>
                   handleMainImageCancelClickEvent(imageIndex, clickEvent)
                 }
@@ -418,6 +470,7 @@ function ImageCard(): React.ReactNode {
               }
               aria-label={`${imageDisplayName} 이미지 삭제`}
               title={`${imageDisplayName} 이미지 삭제`}
+              disabled={shouldPreventInteraction}
             >
               <Icon
                 icon="lucide:trash-2"
