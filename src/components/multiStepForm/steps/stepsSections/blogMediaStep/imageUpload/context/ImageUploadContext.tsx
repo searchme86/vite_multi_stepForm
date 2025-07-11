@@ -20,7 +20,6 @@ interface FileSelectButtonRef {
 }
 
 interface ImageUploadContextValue {
-  // 🎯 상태 데이터 (읽기 전용)
   uploadedImages: string[];
   selectedFileNames: string[];
   uploading: Record<string, number>;
@@ -31,25 +30,20 @@ interface ImageUploadContextValue {
   hasActiveUploads: boolean;
   isMobileDevice: boolean;
 
-  // 🎯 슬라이더 선택 상태 (새로 추가)
   selectedSliderIndices: number[];
   isImageSelectedForSlider: (imageIndex: number) => boolean;
 
-  // 🎯 파일 처리 핸들러 (메모이제이션됨)
   handleFilesDropped: (files: File[]) => void;
   handleFileSelectClick: () => void;
   handleFileChange: (files: FileList) => void;
 
-  // 🎯 이미지 관리 핸들러 (메모이제이션됨)
   handleDeleteButtonClick: (index: number, name: string) => void;
   handleDeleteConfirm: () => void;
   handleDeleteCancel: () => void;
   handleImageTouch: (index: number) => void;
 
-  // 🎯 메인 이미지 핸들러 (안정된 참조)
   mainImageHandlers: MainImageHandlers | null;
 
-  // 🎯 참조 객체
   fileSelectButtonRef: React.RefObject<FileSelectButtonRef>;
 }
 
@@ -62,11 +56,11 @@ interface ImageUploadProviderProps {
 function ImageUploadProvider({
   children,
 }: ImageUploadProviderProps): React.ReactNode {
-  console.log('🏗️ [CONTEXT] ImageUploadProvider 렌더링 시작:', {
+  console.log('🏗️ [CONTEXT] 단순화된 ImageUploadProvider 렌더링 시작:', {
     timestamp: new Date().toLocaleTimeString(),
+    simplifiedVersion: true,
   });
 
-  // 🔧 기존 useBlogMediaStepState 유지 (변경 없음)
   const blogMediaStepStateResult = useBlogMediaStepState();
   const {
     formValues: currentFormValues,
@@ -79,19 +73,18 @@ function ImageUploadProvider({
     imageGalleryStore: galleryStoreInstance,
   } = blogMediaStepStateResult;
 
-  // 🚀 새로 추가: 슬라이더 선택 상태 가져오기
   const blogMediaIntegrationResult = useBlogMediaStepIntegration();
   const { currentFormValues: integrationFormValues } =
     blogMediaIntegrationResult;
   const { selectedSliderIndices = [] } = integrationFormValues;
 
-  console.log('🎯 [CONTEXT] 슬라이더 선택 상태 확인:', {
+  console.log('🎯 [CONTEXT] 슬라이더 선택 상태 확인 - 단순화된 방식:', {
     selectedSliderIndices,
     selectedCount: selectedSliderIndices.length,
+    directAccess: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🔧 기존 useImageUploadHandlers 유지 (변경 없음)
   const imageUploadHandlersResult = useImageUploadHandlers({
     formValues: currentFormValues,
     uiState: currentUiState,
@@ -103,31 +96,28 @@ function ImageUploadProvider({
     imageGalleryStore: galleryStoreInstance,
   });
 
-  // 🚀 새로 추가: 슬라이더 선택 체크 함수
-  const checkIsImageSelectedForSlider = useMemo(() => {
-    return (imageIndex: number): boolean => {
-      const isValidIndex = typeof imageIndex === 'number' && imageIndex >= 0;
+  const checkIsImageSelectedForSlider = (imageIndex: number): boolean => {
+    const isValidIndex = typeof imageIndex === 'number' && imageIndex >= 0;
 
-      if (!isValidIndex) {
-        console.log('⚠️ [CONTEXT] 유효하지 않은 이미지 인덱스:', {
-          imageIndex,
-        });
-        return false;
-      }
-
-      const isSelected = selectedSliderIndices.includes(imageIndex);
-
-      console.log('🔍 [CONTEXT] 슬라이더 선택 상태 확인:', {
+    if (!isValidIndex) {
+      console.log('⚠️ [CONTEXT] 유효하지 않은 이미지 인덱스:', {
         imageIndex,
-        isSelected,
-        selectedSliderIndices,
       });
+      return false;
+    }
 
-      return isSelected;
-    };
-  }, [selectedSliderIndices]);
+    const isSelected = selectedSliderIndices.includes(imageIndex);
 
-  // 🚀 성능 최적화: 안정된 메인 이미지 핸들러 객체 생성
+    console.log('🔍 [CONTEXT] 슬라이더 선택 상태 확인 - 직접 체크:', {
+      imageIndex,
+      isSelected,
+      selectedSliderIndices,
+      directCheck: true,
+    });
+
+    return isSelected;
+  };
+
   const stableMainImageHandlers = useMemo(() => {
     const {
       handleMainImageSet: handleMainImageSetAction,
@@ -136,7 +126,6 @@ function ImageUploadProvider({
       checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
     } = imageUploadHandlersResult;
 
-    // 모든 핸들러가 유효한 경우에만 객체 생성
     const hasAllHandlers =
       typeof handleMainImageSetAction === 'function' &&
       typeof handleMainImageCancelAction === 'function' &&
@@ -154,12 +143,14 @@ function ImageUploadProvider({
       return null;
     }
 
-    return {
+    const validHandlers: MainImageHandlers = {
       onMainImageSet: handleMainImageSetAction,
       onMainImageCancel: handleMainImageCancelAction,
       checkIsMainImage: checkIsMainImageFunction,
       checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
-    } satisfies MainImageHandlers;
+    };
+
+    return validHandlers;
   }, [
     imageUploadHandlersResult.handleMainImageSet,
     imageUploadHandlersResult.handleMainImageCancel,
@@ -167,41 +158,8 @@ function ImageUploadProvider({
     imageUploadHandlersResult.checkCanSetAsMainImage,
   ]);
 
-  // 🚀 성능 최적화: 파일 처리 핸들러들 메모이제이션
-  const memoizedFileHandlers = useMemo(
-    () => ({
-      handleFilesDropped: imageUploadHandlersResult.handleFilesDropped,
-      handleFileSelectClick: imageUploadHandlersResult.handleFileSelectClick,
-      handleFileChange: imageUploadHandlersResult.handleFileChange,
-    }),
-    [
-      imageUploadHandlersResult.handleFilesDropped,
-      imageUploadHandlersResult.handleFileSelectClick,
-      imageUploadHandlersResult.handleFileChange,
-    ]
-  );
-
-  // 🚀 성능 최적화: 이미지 관리 핸들러들 메모이제이션
-  const memoizedImageManagementHandlers = useMemo(
-    () => ({
-      handleDeleteButtonClick:
-        imageUploadHandlersResult.handleDeleteButtonClick,
-      handleDeleteConfirm: imageUploadHandlersResult.handleDeleteConfirm,
-      handleDeleteCancel: imageUploadHandlersResult.handleDeleteCancel,
-      handleImageTouch: imageUploadHandlersResult.handleImageTouch,
-    }),
-    [
-      imageUploadHandlersResult.handleDeleteButtonClick,
-      imageUploadHandlersResult.handleDeleteConfirm,
-      imageUploadHandlersResult.handleDeleteCancel,
-      imageUploadHandlersResult.handleImageTouch,
-    ]
-  );
-
-  // 🚀 성능 최적화: 전체 Context 값 메모이제이션
   const contextValue = useMemo<ImageUploadContextValue>(() => {
     const finalContextValue: ImageUploadContextValue = {
-      // 상태 데이터
       uploadedImages: imageUploadHandlersResult.currentMediaFilesList,
       selectedFileNames: imageUploadHandlersResult.currentSelectedFileNames,
       uploading: imageUploadHandlersResult.uploading,
@@ -212,26 +170,30 @@ function ImageUploadProvider({
       hasActiveUploads: imageUploadHandlersResult.hasActiveUploads,
       isMobileDevice: imageUploadHandlersResult.isMobileDevice,
 
-      // 🚀 새로 추가: 슬라이더 선택 상태
       selectedSliderIndices,
       isImageSelectedForSlider: checkIsImageSelectedForSlider,
 
-      // 메모이제이션된 핸들러들
-      ...memoizedFileHandlers,
-      ...memoizedImageManagementHandlers,
+      handleFilesDropped: imageUploadHandlersResult.handleFilesDropped,
+      handleFileSelectClick: imageUploadHandlersResult.handleFileSelectClick,
+      handleFileChange: imageUploadHandlersResult.handleFileChange,
 
-      // 안정된 메인 이미지 핸들러
+      handleDeleteButtonClick:
+        imageUploadHandlersResult.handleDeleteButtonClick,
+      handleDeleteConfirm: imageUploadHandlersResult.handleDeleteConfirm,
+      handleDeleteCancel: imageUploadHandlersResult.handleDeleteCancel,
+      handleImageTouch: imageUploadHandlersResult.handleImageTouch,
+
       mainImageHandlers: stableMainImageHandlers,
 
-      // 참조 객체
       fileSelectButtonRef: imageUploadHandlersResult.fileSelectButtonRef,
     };
 
-    console.log('🎯 [CONTEXT] Context 값 생성 완료:', {
+    console.log('🎯 [CONTEXT] 단순화된 Context 값 생성 완료:', {
       uploadedImagesCount: finalContextValue.uploadedImages.length,
       hasActiveUploads: finalContextValue.hasActiveUploads,
       hasMainImageHandlers: finalContextValue.mainImageHandlers !== null,
       selectedSliderCount: finalContextValue.selectedSliderIndices.length,
+      simplifiedContextValue: true,
       timestamp: new Date().toLocaleTimeString(),
     });
 
@@ -247,15 +209,20 @@ function ImageUploadProvider({
     imageUploadHandlersResult.hasActiveUploads,
     imageUploadHandlersResult.isMobileDevice,
     selectedSliderIndices,
-    checkIsImageSelectedForSlider,
-    memoizedFileHandlers,
-    memoizedImageManagementHandlers,
+    imageUploadHandlersResult.handleFilesDropped,
+    imageUploadHandlersResult.handleFileSelectClick,
+    imageUploadHandlersResult.handleFileChange,
+    imageUploadHandlersResult.handleDeleteButtonClick,
+    imageUploadHandlersResult.handleDeleteConfirm,
+    imageUploadHandlersResult.handleDeleteCancel,
+    imageUploadHandlersResult.handleImageTouch,
     stableMainImageHandlers,
     imageUploadHandlersResult.fileSelectButtonRef,
   ]);
 
-  console.log('✅ [CONTEXT] ImageUploadProvider 렌더링 완료:', {
+  console.log('✅ [CONTEXT] 단순화된 ImageUploadProvider 렌더링 완료:', {
     contextValueReady: true,
+    simplifiedProviderCompleted: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -266,7 +233,6 @@ function ImageUploadProvider({
   );
 }
 
-// 🛡️ 타입 안전한 Context Hook
 function useImageUploadContext(): ImageUploadContextValue {
   const contextResult = useContext(ImageUploadContext);
 

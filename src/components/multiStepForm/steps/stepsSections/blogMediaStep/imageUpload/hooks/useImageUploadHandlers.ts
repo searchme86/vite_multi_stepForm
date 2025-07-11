@@ -16,7 +16,6 @@ import type {
 
 const logger = createLogger('IMAGE_UPLOAD_HANDLERS');
 
-// 🔧 핵심 수정: 함수형 상태 업데이트를 지원하는 타입 정의
 type StateUpdaterFunction<T> = (previousValue: T) => T;
 
 interface ToastMessage {
@@ -81,13 +80,14 @@ export const useImageUploadHandlers = ({
 
   const fileSelectButtonRef = useRef<FileSelectButtonElement | null>(null);
 
-  logger.debug('useImageUploadHandlers 초기화 - 함수형 업데이트 지원', {
+  logger.debug('useImageUploadHandlers 초기화 - 단순화된 콜백 체인', {
     currentMediaFilesCount: currentMediaFilesList.length,
     currentSelectedFileNamesCount: currentSelectedFileNames.length,
     isMobileDevice,
     hasGalleryStore:
       galleryStoreInstance !== null && galleryStoreInstance !== undefined,
-    functionalUpdateSupported: true,
+    simplifiedCallbackChain: true,
+    directStateUpdates: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -116,7 +116,6 @@ export const useImageUploadHandlers = ({
   const duplicateHandler = useDuplicateFileHandler();
   const mobileTouchState = useMobileTouchState(isMobileDevice);
 
-  // 🔧 타입 안전한 Toast 메시지 변환 함수
   const createSafeToastMessage = useCallback(
     (toast: Omit<ToastItem, 'id' | 'createdAt'>): ToastMessage => {
       const { title = '', description = '', color = 'primary' } = toast;
@@ -125,7 +124,6 @@ export const useImageUploadHandlers = ({
       const safeDescription =
         typeof description === 'string' ? description : '';
 
-      // 🔧 타입 가드를 사용한 안전한 색상 검증
       const validColors = ['success', 'warning', 'danger', 'primary'] as const;
       type ValidColor = (typeof validColors)[number];
 
@@ -159,9 +157,10 @@ export const useImageUploadHandlers = ({
     (imageIndex: number, imageUrl: string) => {
       const imageUrlPreview = imageUrl.slice(0, 30) + '...';
 
-      logger.debug('메인 이미지 설정 핸들러 호출 - 함수형 업데이트 지원', {
+      logger.debug('메인 이미지 설정 핸들러 호출 - 단순화된 처리', {
         imageIndex,
         imageUrlPreview,
+        simplifiedProcessing: true,
         timestamp: new Date().toLocaleTimeString(),
       });
 
@@ -193,11 +192,11 @@ export const useImageUploadHandlers = ({
 
       setImageAsMainImageDirectly(imageIndex);
 
-      logger.info('메인 이미지 설정 완료 (자동 동기화 대기)', {
+      logger.info('메인 이미지 설정 완료 - 단순화된 처리', {
         imageIndex,
         imageUrlPreview,
-        reactHookFormUpdated: true,
-        zustandAutoSyncPending: true,
+        simplifiedProcessing: true,
+        directUpdate: true,
       });
     },
     [
@@ -208,21 +207,22 @@ export const useImageUploadHandlers = ({
   );
 
   const handleMainImageCancel = useCallback(() => {
-    logger.debug('메인 이미지 해제 핸들러 호출 - 함수형 업데이트 지원');
+    logger.debug('메인 이미지 해제 핸들러 호출 - 단순화된 처리');
 
     cancelCurrentMainImage();
 
-    logger.info('메인 이미지 해제 완료 (자동 동기화 대기)', {
-      reactHookFormUpdated: true,
-      zustandAutoSyncPending: true,
+    logger.info('메인 이미지 해제 완료 - 단순화된 처리', {
+      simplifiedProcessing: true,
+      directUpdate: true,
     });
   }, [cancelCurrentMainImage]);
 
   const handleDeleteAction = useCallback(
     (imageIndex: number, imageName: string) => {
-      logger.debug('실제 삭제 처리 - 함수형 업데이트 지원', {
+      logger.debug('실제 삭제 처리 - 단순화된 상태 업데이트', {
         imageIndex,
         imageName,
+        simplifiedProcessing: true,
         timestamp: new Date().toLocaleTimeString(),
       });
 
@@ -244,15 +244,15 @@ export const useImageUploadHandlers = ({
           (_, filterIndex) => filterIndex !== imageIndex
         );
 
-        // 🔧 핵심 수정: 함수형 업데이트 방식으로 호출
-        console.log('🔍 [DELETE_DEBUG] 함수형 업데이트로 삭제 처리:', {
+        console.log('🔍 [DELETE_DEBUG] 단순화된 삭제 처리:', {
           이미지명: imageName,
           이미지인덱스: imageIndex,
           이전미디어개수: safeCurrentMediaFiles.length,
           새미디어개수: updatedMediaFiles.length,
           이전파일명개수: safeCurrentSelectedFileNames.length,
           새파일명개수: updatedFileNames.length,
-          함수형업데이트사용: true,
+          단순화된처리: true,
+          directUpdate: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
@@ -265,12 +265,11 @@ export const useImageUploadHandlers = ({
           color: 'success',
         });
 
-        logger.info('이미지 삭제 완료 (자동 동기화 대기) - 함수형 업데이트', {
+        logger.info('이미지 삭제 완료 - 단순화된 처리', {
           imageName,
           remainingMediaCount: updatedMediaFiles.length,
-          reactHookFormUpdated: true,
-          zustandAutoSyncPending: true,
-          functionalUpdateUsed: true,
+          simplifiedProcessing: true,
+          directUpdate: true,
           timestamp: new Date().toLocaleTimeString(),
         });
       } catch (deleteError) {
@@ -302,64 +301,8 @@ export const useImageUploadHandlers = ({
 
   const deleteConfirmation = useDeleteConfirmation(handleDeleteAction);
 
-  // 🔧 핵심 수정: 함수형 상태 업데이트를 지원하는 콜백 구현
-  const fileProcessingCallbacks: FileProcessingCallbacks = {
-    updateMediaValue: (filesOrUpdater) => {
-      console.log('🔍 [CALLBACK_DEBUG] updateMediaValue 콜백 호출:', {
-        입력타입:
-          typeof filesOrUpdater === 'function'
-            ? '함수형 업데이터'
-            : '직접 배열',
-        함수형업데이트지원: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      const isUpdaterFunction = typeof filesOrUpdater === 'function';
-
-      if (isUpdaterFunction) {
-        console.log('🔍 [CALLBACK_DEBUG] 함수형 업데이터 감지, 직접 전달:', {
-          업데이터함수: true,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        updateMediaValue(filesOrUpdater);
-      } else {
-        console.log('🔍 [CALLBACK_DEBUG] 직접 배열 감지, 함수형으로 변환:', {
-          배열길이: filesOrUpdater.length,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        updateMediaValue(() => filesOrUpdater);
-      }
-    },
-
-    updateSelectedFileNames: (namesOrUpdater) => {
-      console.log('🔍 [CALLBACK_DEBUG] updateSelectedFileNames 콜백 호출:', {
-        입력타입:
-          typeof namesOrUpdater === 'function'
-            ? '함수형 업데이터'
-            : '직접 배열',
-        함수형업데이트지원: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      const isUpdaterFunction = typeof namesOrUpdater === 'function';
-
-      if (isUpdaterFunction) {
-        console.log('🔍 [CALLBACK_DEBUG] 함수형 업데이터 감지, 직접 전달:', {
-          업데이터함수: true,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        updateSelectedFileNames(namesOrUpdater);
-      } else {
-        console.log('🔍 [CALLBACK_DEBUG] 직접 배열 감지, 함수형으로 변환:', {
-          배열길이: namesOrUpdater.length,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        updateSelectedFileNames(() => namesOrUpdater);
-      }
-    },
-
-    showToastMessage: (toast: unknown) => {
-      // unknown을 안전하게 처리하여 Toast 형식으로 변환
+  const createSafeToastFromUnknown = useCallback(
+    (toast: unknown): ToastMessage => {
       const hasToastValue = toast !== null && toast !== undefined;
       const isToastObject = hasToastValue && typeof toast === 'object';
 
@@ -378,7 +321,6 @@ export const useImageUploadHandlers = ({
       const description =
         typeof descriptionProperty === 'string' ? descriptionProperty : '';
 
-      // 🔧 타입 가드를 사용한 안전한 색상 처리
       type ValidToastColor = 'success' | 'warning' | 'danger' | 'primary';
       const validToastColors: ValidToastColor[] = [
         'success',
@@ -400,7 +342,43 @@ export const useImageUploadHandlers = ({
         ? colorProperty
         : 'primary';
 
-      const safeToastData = { title, description, color };
+      return { title, description, color };
+    },
+    []
+  );
+
+  const fileProcessingCallbacks: FileProcessingCallbacks = {
+    updateMediaValue: (filesOrUpdater) => {
+      console.log('🔍 [CALLBACK_DEBUG] 단순화된 updateMediaValue 콜백:', {
+        입력타입:
+          typeof filesOrUpdater === 'function' ? '함수형업데이터' : '직접배열',
+        단순화된처리: true,
+        directCallbackExecution: true,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      updateMediaValue(filesOrUpdater);
+    },
+
+    updateSelectedFileNames: (namesOrUpdater) => {
+      console.log(
+        '🔍 [CALLBACK_DEBUG] 단순화된 updateSelectedFileNames 콜백:',
+        {
+          입력타입:
+            typeof namesOrUpdater === 'function'
+              ? '함수형업데이터'
+              : '직접배열',
+          단순화된처리: true,
+          directCallbackExecution: true,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
+
+      updateSelectedFileNames(namesOrUpdater);
+    },
+
+    showToastMessage: (toast: unknown) => {
+      const safeToastData = createSafeToastFromUnknown(toast);
       showToastMessage(safeToastData);
     },
 
@@ -422,8 +400,9 @@ export const useImageUploadHandlers = ({
   const handleFileSelectClick = useCallback(() => {
     const { hasActiveUploads } = uploadState;
 
-    logger.debug('handleFileSelectClick', {
+    logger.debug('handleFileSelectClick - 단순화된 처리', {
       hasActiveUploads,
+      simplifiedProcessing: true,
       timestamp: new Date().toLocaleTimeString(),
     });
 
@@ -470,12 +449,13 @@ export const useImageUploadHandlers = ({
       hasUploadState &&
       hasFileProcessing;
 
-    logger.debug('핸들러 상태 검증', {
+    logger.debug('핸들러 상태 검증 - 단순화된 구조', {
       hasMainImageManagement,
       hasMainImageValidation,
       hasUploadState,
       hasFileProcessing,
       isValidState,
+      simplifiedStructure: true,
     });
 
     return isValidState;
@@ -486,7 +466,7 @@ export const useImageUploadHandlers = ({
     fileProcessing,
   ]);
 
-  logger.info('useImageUploadHandlers 초기화 완료 - 함수형 업데이트 지원', {
+  logger.info('useImageUploadHandlers 초기화 완료 - 단순화된 콜백 체인', {
     hasMainImageManagement:
       mainImageManagementHook !== null && mainImageManagementHook !== undefined,
     hasMainImageValidation:
@@ -494,13 +474,13 @@ export const useImageUploadHandlers = ({
     uploadingCount: Object.keys(uploadState.uploading).length,
     hasGalleryStore:
       galleryStoreInstance !== null && galleryStoreInstance !== undefined,
-    reactHookFormCentricSync: true,
-    functionalUpdateSupported: true,
+    simplifiedCallbackChain: true,
+    directStateUpdates: true,
+    noComplexConversions: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
   return {
-    // 기존 상태들
     uploading: uploadState.uploading,
     uploadStatus: uploadState.uploadStatus,
     hasActiveUploads: uploadState.hasActiveUploads,
@@ -508,10 +488,8 @@ export const useImageUploadHandlers = ({
     duplicateMessageState: duplicateHandler.duplicateMessageState,
     touchActiveImages: mobileTouchState.touchActiveImages,
 
-    // Refs
     fileSelectButtonRef,
 
-    // 기존 핸들러들
     handleFiles: fileProcessing.processFiles,
     handleFilesDropped: fileProcessing.handleFilesDropped,
     handleFileSelectClick,
@@ -521,15 +499,12 @@ export const useImageUploadHandlers = ({
     handleDeleteCancel: deleteConfirmation.cancelDelete,
     handleImageTouch: mobileTouchState.handleImageTouch,
 
-    // 메인 이미지 관리 핸들러들
     handleMainImageSet,
     handleMainImageCancel,
 
-    // 메인 이미지 상태 체크 함수들
     checkIsMainImage: checkIsMainImageFunction,
     checkCanSetAsMainImage: checkCanSetAsMainImageFunction,
 
-    // 기타 상태
     currentMediaFilesList,
     currentSelectedFileNames:
       currentSelectedFileNames !== null &&
@@ -538,10 +513,8 @@ export const useImageUploadHandlers = ({
         : [],
     isMobileDevice,
 
-    // 갤러리 스토어 참조만 유지
     imageGalleryStore: galleryStoreInstance,
 
-    // 추가 유틸리티
     validateHandlersState,
   };
 };

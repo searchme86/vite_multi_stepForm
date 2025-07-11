@@ -125,6 +125,24 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
         }
       };
 
+      // 🚨 Race Condition 수정: 안전한 동기화 함수
+      const safeAsyncSync = (shouldSync: boolean) => {
+        if (!shouldSync) {
+          return;
+        }
+
+        // 🔧 상태 업데이트 완료 후 동기화 실행
+        setTimeout(() => {
+          try {
+            syncToReactHookFormInternal();
+          } catch (syncError) {
+            console.error('❌ [SAFE_SYNC] 지연 동기화 실패:', {
+              error: syncError,
+            });
+          }
+        }, 0);
+      };
+
       const loadStoredImagesInternal = async (): Promise<void> => {
         try {
           const storage = getHybridStorage();
@@ -178,6 +196,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             metadataCount: restoredMetadata.length,
           });
 
+          // 🚨 Race Condition 수정: 상태 업데이트와 동기화 분리
           set((state) => ({
             ...state,
             imageViewConfig: {
@@ -190,7 +209,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             _isInitialized: true,
           }));
 
-          syncToReactHookFormInternal();
+          // 상태 업데이트 완료 후 동기화
+          safeAsyncSync(true);
         } catch (loadError) {
           console.error('❌ [LOAD_INTERNAL] 이미지 로드 실패:', {
             error: loadError,
@@ -209,7 +229,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
         if (_isInitialized) {
           console.log('ℹ️ [AUTO_INIT] 이미 초기화됨');
-          syncToReactHookFormInternal();
+          safeAsyncSync(true);
           return;
         }
 
@@ -257,9 +277,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
           imageViewConfig: { ...state.imageViewConfig, ...config },
         }));
 
-        if (shouldSync) {
-          syncToReactHookFormInternal();
-        }
+        // 상태 업데이트 완료 후 동기화
+        safeAsyncSync(shouldSync);
       };
 
       return {
@@ -281,8 +300,9 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             _reactHookFormSyncCallback: callback,
           }));
 
-          if (callback) {
-            syncToReactHookFormInternal();
+          const hasValidCallback = callback !== null;
+          if (hasValidCallback) {
+            safeAsyncSync(true);
           }
         },
 
@@ -478,7 +498,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             _initializationPromise: null,
           });
 
-          syncToReactHookFormInternal();
+          safeAsyncSync(true);
         },
 
         setSelectedImageIds: (imageIds: string[]) => {
@@ -626,6 +646,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
 
             const hasSuccessfulResults = successful.length > 0;
             if (hasSuccessfulResults) {
+              // 🚨 Race Condition 수정: 상태 업데이트와 동기화 분리
               set((state) => {
                 const { imageViewConfig } = state;
                 const {
@@ -662,7 +683,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
                 };
               });
 
-              syncToReactHookFormInternal();
+              // 상태 업데이트 완료 후 동기화
+              safeAsyncSync(true);
             }
 
             const result: HybridImageProcessResult = {
@@ -711,6 +733,7 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
             const storage = getHybridStorage();
             await storage.deleteImageFromHybridStorage(imageId);
 
+            // 🚨 Race Condition 수정: 상태 업데이트와 동기화 분리
             set((state) => {
               const { imageViewConfig } = state;
               const {
@@ -744,7 +767,8 @@ export const useHybridImageGalleryStore = create<HybridImageGalleryStore>()(
               };
             });
 
-            syncToReactHookFormInternal();
+            // 상태 업데이트 완료 후 동기화
+            safeAsyncSync(true);
 
             console.log('✅ [HYBRID_DELETE] 이미지 삭제 완료:', { imageId });
           } catch (deleteError) {

@@ -10,7 +10,7 @@ interface BlogMediaFormFields {
   media: string[];
   mainImage: string | null;
   sliderImages: string[];
-  selectedSliderIndices: number[]; // ✅ 새로 추가: 슬라이더 선택된 이미지 인덱스들
+  selectedSliderIndices: number[];
 }
 
 interface ToastData {
@@ -29,20 +29,17 @@ interface BlogMediaStepIntegrationResult {
   setMediaValue: (value: string[]) => void;
   setMainImageValue: (value: string) => void;
   setSliderImagesValue: (value: string[]) => void;
-  setSelectedSliderIndicesValue: (value: number[]) => void; // ✅ 새로 추가
+  setSelectedSliderIndicesValue: (value: number[]) => void;
   currentFormValues: BlogMediaFormFields;
   addToast: (toast: ToastData) => void;
 
-  // ✅ 수정: 하이브리드 갤러리 스토어 관련
   imageGalleryStore: ReturnType<typeof useImageGalleryStore>;
   syncToImageGalleryStore: (config: Partial<HybridImageViewConfig>) => void;
 }
 
 export const useBlogMediaStepIntegration =
   (): BlogMediaStepIntegrationResult => {
-    console.log(
-      '🔧 useBlogMediaStepIntegration 훅 초기화 - 하이브리드 연동 + 슬라이더 선택'
-    );
+    console.log('🔧 [INTEGRATION] 단순화된 통합 훅 초기화');
 
     const { setValue, watch } = useFormContext();
 
@@ -57,22 +54,21 @@ export const useBlogMediaStepIntegration =
       media: [],
       mainImage: null,
       sliderImages: [],
-      selectedSliderIndices: [], // ✅ 초기값 추가
+      selectedSliderIndices: [],
     });
 
     const currentMedia = watch('media') || [];
     const currentMainImage = watch('mainImage') || null;
     const currentSliderImages = watch('sliderImages') || [];
-    const currentSelectedSliderIndices = watch('selectedSliderIndices') || []; // ✅ 새로 추가
+    const currentSelectedSliderIndices = watch('selectedSliderIndices') || [];
 
     const currentFormValues: BlogMediaFormFields = {
       media: currentMedia,
       mainImage: currentMainImage,
       sliderImages: currentSliderImages,
-      selectedSliderIndices: currentSelectedSliderIndices, // ✅ 새로 추가
+      selectedSliderIndices: currentSelectedSliderIndices,
     };
 
-    // ✅ 수정: 하이브리드 갤러리 스토어 동기화 함수
     const syncToImageGalleryStore = useCallback(
       (config: Partial<HybridImageViewConfig>) => {
         const hasImageGalleryStore =
@@ -105,156 +101,96 @@ export const useBlogMediaStepIntegration =
           const hasFilter =
             config.filter !== null && config.filter !== undefined;
 
-          console.log(
-            '✅ [INTEGRATION_SYNC] 하이브리드 갤러리 스토어 동기화 완료:',
-            {
-              selectedImagesCount,
-              selectedImageIdsCount,
-              clickOrderLength,
-              hasLayout,
-              hasFilter,
-              timestamp: new Date().toLocaleTimeString(),
-            }
-          );
+          console.log('✅ [INTEGRATION_SYNC] 갤러리 스토어 직접 동기화 완료:', {
+            selectedImagesCount,
+            selectedImageIdsCount,
+            clickOrderLength,
+            hasLayout,
+            hasFilter,
+            simplifiedSync: true,
+            timestamp: new Date().toLocaleTimeString(),
+          });
         } catch (integrationSyncError) {
           const errorMessage =
             integrationSyncError instanceof Error
               ? integrationSyncError.message
               : 'Unknown sync error';
 
-          console.error(
-            '❌ [INTEGRATION_SYNC] 하이브리드 갤러리 스토어 동기화 실패:',
-            {
-              error: errorMessage,
-              config,
-              timestamp: new Date().toLocaleTimeString(),
-            }
-          );
+          console.error('❌ [INTEGRATION_SYNC] 갤러리 스토어 동기화 실패:', {
+            error: errorMessage,
+            config,
+            timestamp: new Date().toLocaleTimeString(),
+          });
         }
       },
       [imageGalleryStore]
     );
 
-    // ✅ 수정: 하이브리드 타입에 맞는 자동 갤러리 동기화 함수
-    const autoSyncFormToGalleryStore = useCallback(
-      (formValues: BlogMediaFormFields) => {
-        const { media, mainImage } = formValues;
-
-        // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
-        let clickOrderArray = media.map((_, imageIndex) => imageIndex);
-
-        const hasMainImage =
-          mainImage !== null && mainImage !== undefined && mainImage.length > 0;
-        if (hasMainImage) {
-          const mainImageIndex = media.indexOf(mainImage);
-          const isValidMainImageIndex = mainImageIndex >= 0;
-
-          if (isValidMainImageIndex) {
-            clickOrderArray = [
-              mainImageIndex,
-              ...clickOrderArray.filter((index) => index !== mainImageIndex),
-            ];
-          }
-        }
-
-        // ✅ 수정: HybridImageViewConfig 타입 사용
-        const currentTimestamp = Date.now();
-        const selectedImageIds = media.map(
-          (_, index) => `form_image_${currentTimestamp}_${index}`
-        );
-
-        const galleryConfig: Partial<HybridImageViewConfig> = {
-          selectedImages: media,
-          selectedImageIds,
-          clickOrder: clickOrderArray,
-          layout: {
-            columns: 3,
-            gridType: 'grid',
-          },
-          filter: 'all',
-        };
-
-        syncToImageGalleryStore(galleryConfig);
-
-        const mainImageIndex = hasMainImage ? media.indexOf(mainImage) : -1;
-
-        console.log('🔄 [AUTO_SYNC] 자동 하이브리드 갤러리 동기화 실행:', {
-          mediaCount: media.length,
-          selectedImageIdsCount: selectedImageIds.length,
-          mainImageIndex,
-          clickOrderLength: clickOrderArray.length,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      },
-      [syncToImageGalleryStore]
-    );
-
     const setMediaValue = useCallback(
       (value: string[]) => {
-        console.log('🔄 setMediaValue 호출 - 하이브리드 연동:', {
+        console.log('🔄 [SET_MEDIA] 단순화된 미디어 값 설정:', {
           count: value.length,
+          directUpdate: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
         setValue('media', value);
 
-        // ✅ 수정: 미디어 변경 시 자동 하이브리드 갤러리 동기화
-        const updatedFormValues: BlogMediaFormFields = {
-          ...currentFormValues,
-          media: value,
-        };
-        autoSyncFormToGalleryStore(updatedFormValues);
+        const currentGalleryConfig = imageGalleryStore?.getImageViewConfig();
+        if (currentGalleryConfig) {
+          const updatedConfig = {
+            ...currentGalleryConfig,
+            selectedImages: value,
+          };
+
+          console.log('🔄 [SET_MEDIA] 갤러리 스토어 직접 업데이트:', {
+            newImageCount: value.length,
+            directGalleryUpdate: true,
+          });
+
+          imageGalleryStore?.setImageViewConfig(updatedConfig);
+        }
       },
-      [setValue, currentFormValues, autoSyncFormToGalleryStore]
+      [setValue, imageGalleryStore]
     );
 
     const setMainImageValue = useCallback(
       (value: string) => {
-        console.log('🔄 setMainImageValue 호출 - 하이브리드 연동:', {
+        console.log('🔄 [SET_MAIN_IMAGE] 단순화된 메인 이미지 설정:', {
           hasValue: value !== null && value !== undefined && value.length > 0,
           valueLength: value?.length || 0,
+          directUpdate: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
         setValue('mainImage', value);
-
-        // ✅ 수정: 메인 이미지 변경 시 자동 하이브리드 갤러리 동기화
-        const updatedFormValues: BlogMediaFormFields = {
-          ...currentFormValues,
-          mainImage: value,
-        };
-        autoSyncFormToGalleryStore(updatedFormValues);
-      },
-      [setValue, currentFormValues, autoSyncFormToGalleryStore]
-    );
-
-    const setSliderImagesValue = useCallback(
-      (value: string[]) => {
-        console.log('🔄 setSliderImagesValue 호출 - 하이브리드 연동:', {
-          count: value.length,
-          firstImage:
-            value.length > 0 ? value[0]?.slice(0, 30) + '...' : 'none',
-          timestamp: new Date().toLocaleTimeString(),
-        });
-
-        setValue('sliderImages', value);
-
-        // 슬라이더 이미지는 하이브리드 갤러리 스토어 동기화에 직접적인 영향을 주지 않으므로
-        // 별도 동기화는 하지 않음 (필요 시 HybridCustomGalleryView로 관리)
       },
       [setValue]
     );
 
-    // ✅ 새로 추가: 슬라이더 선택 상태 설정 함수
+    const setSliderImagesValue = useCallback(
+      (value: string[]) => {
+        console.log('🔄 [SET_SLIDER] 단순화된 슬라이더 이미지 설정:', {
+          count: value.length,
+          firstImage:
+            value.length > 0 ? value[0]?.slice(0, 30) + '...' : 'none',
+          directUpdate: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        setValue('sliderImages', value);
+      },
+      [setValue]
+    );
+
     const setSelectedSliderIndicesValue = useCallback(
       (value: number[]) => {
-        console.log('🔄 setSelectedSliderIndicesValue 호출:', {
+        console.log('🔄 [SET_SLIDER_INDICES] 슬라이더 선택 인덱스 설정:', {
           count: value.length,
           indices: value,
           timestamp: new Date().toLocaleTimeString(),
         });
 
-        // 🔧 입력값 검증
         const isValidArray = Array.isArray(value);
 
         if (!isValidArray) {
@@ -262,7 +198,6 @@ export const useBlogMediaStepIntegration =
           return;
         }
 
-        // 🔧 각 인덱스의 유효성 검증
         const hasValidIndices = value.every(
           (indexItem) => typeof indexItem === 'number' && indexItem >= 0
         );
@@ -284,7 +219,7 @@ export const useBlogMediaStepIntegration =
 
     const addToast = useCallback(
       (toast: ToastData) => {
-        console.log('🔔 addToast 호출:', {
+        console.log('🔔 [ADD_TOAST] 토스트 메시지 추가:', {
           title: toast.title,
           color: toast.color,
           timestamp: new Date().toLocaleTimeString(),
@@ -305,7 +240,7 @@ export const useBlogMediaStepIntegration =
       const hasSliderImagesChanged =
         JSON.stringify(prev.sliderImages) !==
         JSON.stringify(current.sliderImages);
-      const hasSelectedSliderIndicesChanged = // ✅ 새로 추가
+      const hasSelectedSliderIndicesChanged =
         JSON.stringify(prev.selectedSliderIndices) !==
         JSON.stringify(current.selectedSliderIndices);
 
@@ -313,45 +248,28 @@ export const useBlogMediaStepIntegration =
         hasMediaChanged ||
         hasMainImageChanged ||
         hasSliderImagesChanged ||
-        hasSelectedSliderIndicesChanged; // ✅ 조건 추가
+        hasSelectedSliderIndicesChanged;
 
       if (hasAnyChanged) {
-        console.log('📊 폼 값 변경 감지 - 하이브리드 연동 + 슬라이더 선택:', {
+        console.log('📊 [FORM_CHANGE] 폼 값 변경 감지 - 단순화된 처리:', {
           hasMediaChanged,
           hasMainImageChanged,
           hasSliderImagesChanged,
-          hasSelectedSliderIndicesChanged, // ✅ 새로 추가
+          hasSelectedSliderIndicesChanged,
           mediaCount: current.media.length,
           hasMainImage:
             current.mainImage !== null && current.mainImage !== undefined,
           sliderCount: current.sliderImages.length,
-          selectedSliderIndicesCount: current.selectedSliderIndices.length, // ✅ 새로 추가
+          selectedSliderIndicesCount: current.selectedSliderIndices.length,
+          simplifiedProcessing: true,
           timestamp: new Date().toLocaleTimeString(),
         });
 
-        const updateData: Partial<BlogMediaFormFields> = {};
-
-        if (hasMediaChanged) updateData.media = current.media;
-        if (hasMainImageChanged) updateData.mainImage = current.mainImage;
-        if (hasSliderImagesChanged)
-          updateData.sliderImages = current.sliderImages;
-        if (hasSelectedSliderIndicesChanged)
-          updateData.selectedSliderIndices = current.selectedSliderIndices; // ✅ 새로 추가
-
-        // ✅ 수정: 폼 값 변경 시 하이브리드 갤러리 스토어 동기화
-        const shouldSyncToGallery = hasMediaChanged || hasMainImageChanged;
-        if (shouldSyncToGallery) {
-          console.log(
-            '🔄 [FORM_CHANGE_SYNC] 폼 변경으로 하이브리드 갤러리 동기화 실행'
-          );
-          autoSyncFormToGalleryStore(current);
-        }
-
         prevFormValuesRef.current = { ...current };
 
-        console.log('✅ 하이브리드 스토어 동기화 완료:', updateData);
+        console.log('✅ [FORM_CHANGE] 단순화된 폼 변경 처리 완료');
       }
-    }, [currentFormValues, autoSyncFormToGalleryStore]);
+    }, [currentFormValues]);
 
     useEffect(() => {
       const hasToastStore = toastStore !== null && toastStore !== undefined;
@@ -359,19 +277,16 @@ export const useBlogMediaStepIntegration =
         imageGalleryStore !== null && imageGalleryStore !== undefined;
       const isHybridMode = imageGalleryStore?.getIsHybridMode?.() || false;
 
-      console.log(
-        '✅ useBlogMediaStepIntegration 초기화 완료 - 하이브리드 연동 + 슬라이더 선택:',
-        {
-          hasToastStore,
-          hasImageGalleryStore,
-          initialFormValues: currentFormValues,
-          hybridSyncEnabled: true,
-          isHybridMode,
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
+      console.log('✅ [INTEGRATION] 단순화된 통합 훅 초기화 완료:', {
+        hasToastStore,
+        hasImageGalleryStore,
+        initialFormValues: currentFormValues,
+        simplifiedSyncEnabled: true,
+        isHybridMode,
+        noComplexAutoSync: true,
+        timestamp: new Date().toLocaleTimeString(),
+      });
 
-      // 🆕 자동 이미지 복원 초기화
       if (
         hasImageGalleryStore &&
         typeof imageGalleryStore.initializeStoredImages === 'function'
@@ -380,7 +295,7 @@ export const useBlogMediaStepIntegration =
         const isNotInitialized = !isInitialized;
 
         if (isNotInitialized) {
-          console.log('🔄 [COMPONENT_INIT] 컴포넌트에서 이미지 자동 복원 시작');
+          console.log('🔄 [COMPONENT_INIT] 컴포넌트에서 이미지 단순 복원 시작');
           imageGalleryStore
             .initializeStoredImages()
             .then(() => {
@@ -405,11 +320,10 @@ export const useBlogMediaStepIntegration =
       setMediaValue,
       setMainImageValue,
       setSliderImagesValue,
-      setSelectedSliderIndicesValue, // ✅ 새로 추가
+      setSelectedSliderIndicesValue,
       currentFormValues,
       addToast,
 
-      // ✅ 수정: 하이브리드 갤러리 스토어 관련
       imageGalleryStore,
       syncToImageGalleryStore,
     };

@@ -1,4 +1,4 @@
-// blogMediaStep/hooks/useBlogMediaStepOrchestrator.ts
+// 📁 blogMediaStep/hooks/useBlogMediaStepOrchestrator.ts
 
 import { useCallback } from 'react';
 import { useBlogMediaStepIntegration } from './useBlogMediaStepIntegration';
@@ -36,27 +36,25 @@ interface BlogMediaStepOrchestratorResult {
     inSlider: boolean;
   };
 
-  // ✅ 새로 추가: Zustand 관련 기능
   saveCurrentConfigAsGalleryView: (viewName?: string) => InteractionResult;
   syncCurrentStateToGalleryStore: () => InteractionResult;
 }
 
 export const useBlogMediaStepOrchestrator =
   (): BlogMediaStepOrchestratorResult => {
-    console.log('🔧 useBlogMediaStepOrchestrator 훅 초기화 - Zustand연동');
+    console.log('🔧 [ORCHESTRATOR] 단순화된 오케스트레이터 훅 초기화');
 
     const {
       currentFormValues,
       setMainImageValue,
       setSliderImagesValue,
       setMediaValue,
-      imageGalleryStore, // ✅ 추가: 갤러리 스토어
-      syncToImageGalleryStore, // ✅ 추가: 동기화 함수
+      imageGalleryStore,
+      syncToImageGalleryStore,
     } = useBlogMediaStepIntegration();
 
     const { media, mainImage, sliderImages } = currentFormValues;
 
-    // ✅ 새로 추가: 현재 설정을 갤러리 뷰로 저장
     const saveCurrentConfigAsGalleryView = useCallback(
       (viewName?: string): InteractionResult => {
         console.log('💾 [SAVE_GALLERY_VIEW] 현재 설정을 갤러리 뷰로 저장:', {
@@ -64,6 +62,7 @@ export const useBlogMediaStepOrchestrator =
           mediaCount: media.length,
           hasMainImage: !!mainImage,
           sliderCount: sliderImages.length,
+          simplifiedSave: true,
         });
 
         if (!imageGalleryStore) {
@@ -76,7 +75,6 @@ export const useBlogMediaStepOrchestrator =
         }
 
         try {
-          // 타입 안전한 메서드 접근
           const addCustomGalleryView = Reflect.get(
             imageGalleryStore,
             'addCustomGalleryView'
@@ -86,7 +84,6 @@ export const useBlogMediaStepOrchestrator =
             throw new Error('addCustomGalleryView 함수를 찾을 수 없습니다');
           }
 
-          // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
           let clickOrderArray = media.map((_, imageIndex) => imageIndex);
 
           if (mainImage) {
@@ -127,6 +124,7 @@ export const useBlogMediaStepOrchestrator =
             viewId: newGalleryView.id,
             viewName: galleryViewName,
             result,
+            simplifiedSaveCompleted: true,
           });
 
           return result;
@@ -147,20 +145,19 @@ export const useBlogMediaStepOrchestrator =
       [media, mainImage, sliderImages, imageGalleryStore]
     );
 
-    // ✅ 새로 추가: 현재 상태를 갤러리 스토어에 동기화
     const syncCurrentStateToGalleryStore =
       useCallback((): InteractionResult => {
         console.log(
-          '🔄 [SYNC_TO_GALLERY] 현재 상태를 갤러리 스토어에 동기화:',
+          '🔄 [SYNC_TO_GALLERY] 현재 상태를 갤러리 스토어에 직접 동기화:',
           {
             mediaCount: media.length,
             hasMainImage: !!mainImage,
+            directSync: true,
             timestamp: new Date().toLocaleTimeString(),
           }
         );
 
         try {
-          // 메인 이미지가 있는 경우 해당 인덱스를 첫 번째로 설정
           let clickOrderArray = media.map((_, imageIndex) => imageIndex);
 
           if (mainImage) {
@@ -191,10 +188,10 @@ export const useBlogMediaStepOrchestrator =
             affectedImages: ['갤러리 스토어'],
           };
 
-          console.log(
-            '✅ [SYNC_TO_GALLERY] 갤러리 스토어 동기화 완료:',
-            result
-          );
+          console.log('✅ [SYNC_TO_GALLERY] 갤러리 스토어 직접 동기화 완료:', {
+            result,
+            directSyncCompleted: true,
+          });
           return result;
         } catch (syncError) {
           const result: InteractionResult = {
@@ -213,7 +210,7 @@ export const useBlogMediaStepOrchestrator =
 
     const getImageState = useCallback(
       (imageUrl: string, imageIndex: number): ImageState => {
-        console.log('🔧 getImageState 호출:', {
+        console.log('🔧 [GET_IMAGE_STATE] 이미지 상태 조회:', {
           imageUrl: imageUrl.slice(0, 30) + '...',
           imageIndex,
         });
@@ -230,20 +227,22 @@ export const useBlogMediaStepOrchestrator =
           canAddToSlider: !isMainImage && !isInSlider,
         };
 
-        console.log('✅ getImageState 결과:', state);
+        console.log('✅ [GET_IMAGE_STATE] 이미지 상태 조회 완료:', state);
         return state;
       },
       [mainImage, sliderImages]
     );
 
     const getAllImageStates = useCallback((): ImageState[] => {
-      console.log('🔧 getAllImageStates 호출:', { mediaCount: media.length });
+      console.log('🔧 [GET_ALL_STATES] 모든 이미지 상태 조회:', {
+        mediaCount: media.length,
+      });
 
       const states = media.map((imageUrl, index) =>
         getImageState(imageUrl, index)
       );
 
-      console.log('✅ getAllImageStates 결과:', {
+      console.log('✅ [GET_ALL_STATES] 모든 이미지 상태 조회 완료:', {
         totalImages: states.length,
         mainImages: states.filter((s) => s.isMainImage).length,
         sliderImages: states.filter((s) => s.isInSlider).length,
@@ -254,8 +253,9 @@ export const useBlogMediaStepOrchestrator =
 
     const handleImageDeletion = useCallback(
       (imageUrl: string): InteractionResult => {
-        console.log('🔧 handleImageDeletion 호출 - Zustand연동:', {
+        console.log('🔧 [HANDLE_DELETE] 이미지 삭제 처리 - 단순화된 로직:', {
           imageUrl: imageUrl.slice(0, 30) + '...',
+          directProcessing: true,
         });
 
         const affectedImages: string[] = [];
@@ -266,7 +266,7 @@ export const useBlogMediaStepOrchestrator =
           affectedImages.push('메인 이미지');
           message += ' 메인 이미지가 해제되었습니다.';
 
-          console.log('📸 메인 이미지 해제됨:', {
+          console.log('📸 [HANDLE_DELETE] 메인 이미지 해제됨:', {
             imageUrl: imageUrl.slice(0, 30) + '...',
           });
         }
@@ -279,17 +279,11 @@ export const useBlogMediaStepOrchestrator =
           affectedImages.push('슬라이더');
           message += ' 슬라이더에서 제거되었습니다.';
 
-          console.log('🎠 슬라이더에서 제거됨:', {
+          console.log('🎠 [HANDLE_DELETE] 슬라이더에서 제거됨:', {
             imageUrl: imageUrl.slice(0, 30) + '...',
             remainingCount: newSliderImages.length,
           });
         }
-
-        // ✅ 새로 추가: 갤러리 스토어 동기화
-        setTimeout(() => {
-          syncCurrentStateToGalleryStore();
-          console.log('🔄 [DELETE_SYNC] 삭제 후 갤러리 스토어 동기화 완료');
-        }, 100);
 
         const result: InteractionResult = {
           success: true,
@@ -297,23 +291,27 @@ export const useBlogMediaStepOrchestrator =
           affectedImages,
         };
 
-        console.log('✅ handleImageDeletion 완료 - Zustand연동:', result);
+        console.log(
+          '✅ [HANDLE_DELETE] 이미지 삭제 처리 완료 - 단순화된 로직:',
+          {
+            result,
+            directProcessingCompleted: true,
+          }
+        );
         return result;
       },
-      [
-        mainImage,
-        sliderImages,
-        setMainImageValue,
-        setSliderImagesValue,
-        syncCurrentStateToGalleryStore,
-      ]
+      [mainImage, sliderImages, setMainImageValue, setSliderImagesValue]
     );
 
     const handleMainImageChange = useCallback(
       (newMainImage: string): InteractionResult => {
-        console.log('🔧 handleMainImageChange 호출 - Zustand연동:', {
-          newMainImage: newMainImage.slice(0, 30) + '...',
-        });
+        console.log(
+          '🔧 [HANDLE_MAIN_CHANGE] 메인 이미지 변경 처리 - 단순화된 로직:',
+          {
+            newMainImage: newMainImage.slice(0, 30) + '...',
+            directProcessing: true,
+          }
+        );
 
         let message = '메인 이미지가 설정되었습니다.';
         const affectedImages: string[] = ['메인 이미지'];
@@ -326,7 +324,7 @@ export const useBlogMediaStepOrchestrator =
           affectedImages.push('슬라이더');
           message += ' 슬라이더에서 자동 제거되었습니다.';
 
-          console.log('🎠 슬라이더에서 자동 제거:', {
+          console.log('🎠 [HANDLE_MAIN_CHANGE] 슬라이더에서 자동 제거:', {
             newMainImage: newMainImage.slice(0, 30) + '...',
             remainingSliderCount: newSliderImages.length,
           });
@@ -334,34 +332,27 @@ export const useBlogMediaStepOrchestrator =
 
         setMainImageValue(newMainImage);
 
-        // ✅ 새로 추가: 갤러리 스토어 동기화
-        setTimeout(() => {
-          syncCurrentStateToGalleryStore();
-          console.log(
-            '🔄 [MAIN_IMAGE_SYNC] 메인 이미지 변경 후 갤러리 스토어 동기화 완료'
-          );
-        }, 100);
-
         const result: InteractionResult = {
           success: true,
           message,
           affectedImages,
         };
 
-        console.log('✅ handleMainImageChange 완료 - Zustand연동:', result);
+        console.log(
+          '✅ [HANDLE_MAIN_CHANGE] 메인 이미지 변경 처리 완료 - 단순화된 로직:',
+          {
+            result,
+            directProcessingCompleted: true,
+          }
+        );
         return result;
       },
-      [
-        sliderImages,
-        setMainImageValue,
-        setSliderImagesValue,
-        syncCurrentStateToGalleryStore,
-      ]
+      [sliderImages, setMainImageValue, setSliderImagesValue]
     );
 
     const handleSliderImageToggle = useCallback(
       (imageUrl: string): InteractionResult => {
-        console.log('🔧 handleSliderImageToggle 호출:', {
+        console.log('🔧 [HANDLE_SLIDER_TOGGLE] 슬라이더 이미지 토글:', {
           imageUrl: imageUrl.slice(0, 30) + '...',
         });
 
@@ -371,7 +362,10 @@ export const useBlogMediaStepOrchestrator =
             message: '메인 이미지는 슬라이더에 추가할 수 없습니다.',
           };
 
-          console.log('⚠️ 메인 이미지 슬라이더 추가 방지:', result);
+          console.log(
+            '⚠️ [HANDLE_SLIDER_TOGGLE] 메인 이미지 슬라이더 추가 방지:',
+            result
+          );
           return result;
         }
 
@@ -390,7 +384,7 @@ export const useBlogMediaStepOrchestrator =
           affectedImages: ['슬라이더'],
         };
 
-        console.log('✅ handleSliderImageToggle 완료:', {
+        console.log('✅ [HANDLE_SLIDER_TOGGLE] 슬라이더 토글 완료:', {
           action: isCurrentlyInSlider ? 'removed' : 'added',
           newSliderCount: newSliderImages.length,
           result,
@@ -403,9 +397,13 @@ export const useBlogMediaStepOrchestrator =
 
     const handleBulkImageDeletion = useCallback(
       (imageUrls: string[]): InteractionResult => {
-        console.log('🔧 handleBulkImageDeletion 호출 - Zustand연동:', {
-          count: imageUrls.length,
-        });
+        console.log(
+          '🔧 [HANDLE_BULK_DELETE] 대량 이미지 삭제 처리 - 단순화된 로직:',
+          {
+            count: imageUrls.length,
+            directProcessing: true,
+          }
+        );
 
         let totalAffectedImages: string[] = [];
         let hasMainImageDeleted = false;
@@ -436,14 +434,6 @@ export const useBlogMediaStepOrchestrator =
         const newMediaFiles = media.filter((img) => !imageUrls.includes(img));
         setMediaValue(newMediaFiles);
 
-        // ✅ 새로 추가: 갤러리 스토어 동기화
-        setTimeout(() => {
-          syncCurrentStateToGalleryStore();
-          console.log(
-            '🔄 [BULK_DELETE_SYNC] 대량 삭제 후 갤러리 스토어 동기화 완료'
-          );
-        }, 200);
-
         let message = `${imageUrls.length}개의 이미지가 삭제되었습니다.`;
         if (hasMainImageDeleted) message += ' 메인 이미지가 해제되었습니다.';
         if (sliderImagesRemoved > 0)
@@ -455,13 +445,17 @@ export const useBlogMediaStepOrchestrator =
           affectedImages: totalAffectedImages,
         };
 
-        console.log('✅ handleBulkImageDeletion 완료 - Zustand연동:', {
-          deletedCount: imageUrls.length,
-          hasMainImageDeleted,
-          sliderImagesRemoved,
-          remainingMediaCount: newMediaFiles.length,
-          result,
-        });
+        console.log(
+          '✅ [HANDLE_BULK_DELETE] 대량 삭제 처리 완료 - 단순화된 로직:',
+          {
+            deletedCount: imageUrls.length,
+            hasMainImageDeleted,
+            sliderImagesRemoved,
+            remainingMediaCount: newMediaFiles.length,
+            result,
+            directProcessingCompleted: true,
+          }
+        );
 
         return result;
       },
@@ -472,12 +466,11 @@ export const useBlogMediaStepOrchestrator =
         setMainImageValue,
         setSliderImagesValue,
         setMediaValue,
-        syncCurrentStateToGalleryStore,
       ]
     );
 
     const validateImageConfiguration = useCallback(() => {
-      console.log('🔧 validateImageConfiguration 호출');
+      console.log('🔧 [VALIDATE_CONFIG] 이미지 설정 검증');
 
       const issues: string[] = [];
 
@@ -500,7 +493,10 @@ export const useBlogMediaStepOrchestrator =
 
       const isValid = issues.length === 0;
 
-      console.log('✅ validateImageConfiguration 결과:', { isValid, issues });
+      console.log('✅ [VALIDATE_CONFIG] 이미지 설정 검증 완료:', {
+        isValid,
+        issues,
+      });
       return { isValid, issues };
     }, [mainImage, sliderImages, media]);
 
@@ -508,7 +504,7 @@ export const useBlogMediaStepOrchestrator =
       (imageUrl: string): boolean => {
         const inUse = mainImage === imageUrl || sliderImages.includes(imageUrl);
 
-        console.log('🔧 isImageInUse:', {
+        console.log('🔧 [IS_IMAGE_IN_USE] 이미지 사용 여부 확인:', {
           imageUrl: imageUrl.slice(0, 30) + '...',
           inUse,
         });
@@ -525,7 +521,7 @@ export const useBlogMediaStepOrchestrator =
           inSlider: sliderImages.includes(imageUrl),
         };
 
-        console.log('🔧 getImageUsageInfo:', {
+        console.log('🔧 [GET_USAGE_INFO] 이미지 사용 정보 조회:', {
           imageUrl: imageUrl.slice(0, 30) + '...',
           usage,
         });
@@ -535,12 +531,13 @@ export const useBlogMediaStepOrchestrator =
       [mainImage, sliderImages]
     );
 
-    console.log('✅ useBlogMediaStepOrchestrator 초기화 완료 - Zustand연동:', {
+    console.log('✅ [ORCHESTRATOR] 단순화된 오케스트레이터 훅 초기화 완료:', {
       mediaCount: media.length,
       hasMainImage: !!mainImage,
       sliderCount: sliderImages.length,
       hasImageGalleryStore: !!imageGalleryStore,
-      zustandSyncEnabled: true,
+      simplifiedLogicEnabled: true,
+      directProcessingEnabled: true,
       timestamp: new Date().toLocaleTimeString(),
     });
 
@@ -555,7 +552,6 @@ export const useBlogMediaStepOrchestrator =
       isImageInUse,
       getImageUsageInfo,
 
-      // ✅ 새로 추가: Zustand 관련 기능
       saveCurrentConfigAsGalleryView,
       syncCurrentStateToGalleryStore,
     };

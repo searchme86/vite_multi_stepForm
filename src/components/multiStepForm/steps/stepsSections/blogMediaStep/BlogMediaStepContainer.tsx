@@ -1,6 +1,6 @@
 // 📁 blogMediaStep/BlogMediaStepContainer.tsx
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useBlogMediaStepState } from './hooks/useBlogMediaStepState';
 
 import ImageUploadContainer from './imageUpload/ImageUploadContainer';
@@ -10,10 +10,39 @@ import ImageGalleryContainer from './imageGallery/ImageGalleryContainer';
 
 type ActiveSectionType = 'mainImage' | 'imageGallery' | 'imageSlider';
 
+interface SafeFormValues {
+  media?: string[];
+  mainImage?: string | null;
+  sliderImages?: string[];
+}
+
+const isValidActiveSectionType = (
+  value: string
+): value is ActiveSectionType => {
+  return (
+    value === 'mainImage' || value === 'imageGallery' || value === 'imageSlider'
+  );
+};
+
+interface NavigationMenuItem {
+  sectionType: ActiveSectionType;
+  displayLabel: string;
+  iconEmoji: string;
+  iconBackgroundColor: string;
+  statusType: string;
+}
+
+interface MobileTabItem {
+  sectionType: ActiveSectionType;
+  displayLabel: string;
+  shortLabel: string;
+}
+
 function BlogMediaStepContainer(): React.ReactNode {
-  console.log('🚀 BlogMediaStepContainer 렌더링 시작 - Phase3&4 최종완성:', {
+  console.log('🚀 [CONTAINER] 타입 안전성 강화된 컨테이너 렌더링 시작:', {
     timestamp: new Date().toLocaleTimeString(),
     componentName: 'BlogMediaStepContainer',
+    typeSafeVersion: true,
   });
 
   const [activeSectionType, setActiveSectionType] =
@@ -22,60 +51,96 @@ function BlogMediaStepContainer(): React.ReactNode {
   const blogMediaStepStateHook = useBlogMediaStepState();
   const { formValues: currentFormValuesData } = blogMediaStepStateHook;
 
-  const safeFormValues = currentFormValuesData ?? {};
+  const createSafeFormValues = (formData: unknown): SafeFormValues => {
+    const hasFormData = formData !== null && formData !== undefined;
+    const isFormDataObject = hasFormData && typeof formData === 'object';
+
+    if (!isFormDataObject) {
+      return {
+        media: [],
+        mainImage: null,
+        sliderImages: [],
+      };
+    }
+
+    const mediaProperty = Reflect.get(formData, 'media');
+    const mainImageProperty = Reflect.get(formData, 'mainImage');
+    const sliderImagesProperty = Reflect.get(formData, 'sliderImages');
+
+    const safeMedia = Array.isArray(mediaProperty) ? mediaProperty : [];
+    const safeMainImage =
+      typeof mainImageProperty === 'string' && mainImageProperty.length > 0
+        ? mainImageProperty
+        : null;
+    const safeSliderImages = Array.isArray(sliderImagesProperty)
+      ? sliderImagesProperty
+      : [];
+
+    return {
+      media: safeMedia,
+      mainImage: safeMainImage,
+      sliderImages: safeSliderImages,
+    };
+  };
+
+  const safeFormValues = createSafeFormValues(currentFormValuesData);
+
   const {
-    media: rawUploadedMediaFileList,
-    mainImage: rawSelectedMainImageUrl,
-    sliderImages: rawConfiguredSliderImageList,
+    media: rawUploadedMediaFileList = [],
+    mainImage: rawSelectedMainImageUrl = null,
+    sliderImages: rawConfiguredSliderImageList = [],
   } = safeFormValues;
 
-  const uploadedMediaFileList = rawUploadedMediaFileList ?? [];
-  const selectedMainImageUrl = rawSelectedMainImageUrl ?? null;
-  const configuredSliderImageList = rawConfiguredSliderImageList ?? [];
+  const uploadedMediaFileList = Array.isArray(rawUploadedMediaFileList)
+    ? rawUploadedMediaFileList
+    : [];
+  const selectedMainImageUrl =
+    rawSelectedMainImageUrl !== null &&
+    rawSelectedMainImageUrl !== undefined &&
+    rawSelectedMainImageUrl !== ''
+      ? rawSelectedMainImageUrl
+      : null;
+  const configuredSliderImageList = Array.isArray(rawConfiguredSliderImageList)
+    ? rawConfiguredSliderImageList
+    : [];
 
-  console.log('📊 BlogMediaStepState 데이터 로드 완료 - Phase3&4:', {
+  console.log('📊 [CONTAINER] 타입 안전성 강화된 상태 데이터 로드:', {
     uploadedMediaFileCount: uploadedMediaFileList.length,
-    hasSelectedMainImage:
-      selectedMainImageUrl !== null && selectedMainImageUrl !== '',
+    hasSelectedMainImage: selectedMainImageUrl !== null,
     configuredSliderImageCount: configuredSliderImageList.length,
     currentActiveSection: activeSectionType,
     selectedMainImagePreview: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : 'none',
+    typeSafeStateAccess: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  const checkShouldShowImageManagementSections = useCallback((): boolean => {
-    const mediaFileCount = uploadedMediaFileList.length;
-    const hasMediaFiles = mediaFileCount > 0;
+  const hasUploadedImages = uploadedMediaFileList.length > 0;
 
-    console.log('🔍 checkShouldShowImageManagementSections:', {
-      mediaFileCount,
-      hasMediaFiles,
+  console.log('🔍 [CONTAINER] 이미지 존재 여부 확인:', {
+    mediaFileCount: uploadedMediaFileList.length,
+    hasUploadedImages,
+    typeSafeCheck: true,
+  });
+
+  const handleNavigationSectionChange = (newSectionType: ActiveSectionType) => {
+    console.log('🔧 [CONTAINER] 네비게이션 섹션 변경:', {
+      previousSection: activeSectionType,
+      newSectionType,
+      directStateUpdate: true,
+      timestamp: new Date().toLocaleTimeString(),
     });
 
-    return hasMediaFiles;
-  }, [uploadedMediaFileList]);
+    setActiveSectionType(newSectionType);
 
-  const handleNavigationSectionChange = useCallback(
-    (newSectionType: ActiveSectionType) => {
-      console.log('🔧 handleNavigationSectionChange 호출:', {
-        previousSection: activeSectionType,
-        newSectionType,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      setActiveSectionType(newSectionType);
-
-      console.log('✅ 네비게이션 섹션 변경 완료:', {
-        newActiveSection: newSectionType,
-      });
-    },
-    [activeSectionType]
-  );
+    console.log('✅ [CONTAINER] 네비게이션 섹션 변경 완료:', {
+      newActiveSection: newSectionType,
+    });
+  };
 
   const renderDragAndDropUploadSection = () => {
-    console.log('🔄 renderDragAndDropUploadSection 호출 - Phase3&4');
+    console.log('🔄 [RENDER] 업로드 섹션 렌더링 - 타입 안전성 강화');
 
     return (
       <section
@@ -96,30 +161,28 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderDesktopSidebarNavigation = () => {
-    console.log('🔄 renderDesktopSidebarNavigation 호출:', {
+    console.log('🔄 [RENDER] 데스크톱 사이드바 네비게이션 렌더링:', {
       currentActiveSection: activeSectionType,
+      typeSafeRendering: true,
     });
 
-    const navigationMenuItemList = [
+    const navigationMenuItemList: NavigationMenuItem[] = [
       {
-        sectionType: 'mainImage' as ActiveSectionType,
+        sectionType: 'mainImage',
         displayLabel: '메인 이미지',
         iconEmoji: '🖼️',
         iconBackgroundColor: 'bg-orange-500',
-        statusType:
-          selectedMainImageUrl !== null && selectedMainImageUrl !== ''
-            ? 'complete'
-            : 'pending',
+        statusType: selectedMainImageUrl !== null ? 'complete' : 'pending',
       },
       {
-        sectionType: 'imageGallery' as ActiveSectionType,
+        sectionType: 'imageGallery',
         displayLabel: '이미지 갤러리',
         iconEmoji: '🎨',
         iconBackgroundColor: 'bg-blue-500',
         statusType: 'progress',
       },
       {
-        sectionType: 'imageSlider' as ActiveSectionType,
+        sectionType: 'imageSlider',
         displayLabel: '이미지 슬라이더',
         iconEmoji: '🎬',
         iconBackgroundColor: 'bg-purple-500',
@@ -142,22 +205,29 @@ function BlogMediaStepContainer(): React.ReactNode {
               } = menuItem;
               const isActiveSection = activeSectionType === sectionType;
 
-              const statusColorMapData = new Map([
+              const statusColorMapData = new Map<string, string>([
                 ['complete', 'bg-green-500'],
                 ['progress', 'bg-orange-500'],
                 ['pending', 'bg-gray-300'],
               ]);
 
-              const statusColor =
-                statusColorMapData.get(statusType) ??
-                statusColorMapData.get('pending') ??
-                'bg-gray-300';
+              const statusColor = statusColorMapData.get(statusType);
+              const finalStatusColor =
+                statusColor !== undefined ? statusColor : 'bg-gray-300';
+
+              const handleSectionClick = () => {
+                if (isValidActiveSectionType(sectionType)) {
+                  handleNavigationSectionChange(sectionType);
+                } else {
+                  console.error('Invalid section type:', sectionType);
+                }
+              };
 
               return (
                 <li key={sectionType}>
                   <button
                     type="button"
-                    onClick={() => handleNavigationSectionChange(sectionType)}
+                    onClick={handleSectionClick}
                     className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center gap-3 ${
                       isActiveSection
                         ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -172,7 +242,7 @@ function BlogMediaStepContainer(): React.ReactNode {
                     </div>
                     <span className="flex-1">{displayLabel}</span>
                     <div
-                      className={`w-2 h-2 rounded-full ${statusColor}`}
+                      className={`w-2 h-2 rounded-full ${finalStatusColor}`}
                     ></div>
                   </button>
                 </li>
@@ -185,23 +255,24 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderMobileTabNavigation = () => {
-    console.log('🔄 renderMobileTabNavigation 호출:', {
+    console.log('🔄 [RENDER] 모바일 탭 네비게이션 렌더링:', {
       currentActiveSection: activeSectionType,
+      typeSafeRendering: true,
     });
 
-    const mobileTabItemList = [
+    const mobileTabItemList: MobileTabItem[] = [
       {
-        sectionType: 'mainImage' as ActiveSectionType,
+        sectionType: 'mainImage',
         displayLabel: '🖼️ 메인',
         shortLabel: '메인',
       },
       {
-        sectionType: 'imageGallery' as ActiveSectionType,
+        sectionType: 'imageGallery',
         displayLabel: '🎨 갤러리',
         shortLabel: '갤러리',
       },
       {
-        sectionType: 'imageSlider' as ActiveSectionType,
+        sectionType: 'imageSlider',
         displayLabel: '🎬 슬라이더',
         shortLabel: '슬라이더',
       },
@@ -218,11 +289,19 @@ function BlogMediaStepContainer(): React.ReactNode {
             const { sectionType, displayLabel, shortLabel } = tabItem;
             const isActiveTab = activeSectionType === sectionType;
 
+            const handleTabClick = () => {
+              if (isValidActiveSectionType(sectionType)) {
+                handleNavigationSectionChange(sectionType);
+              } else {
+                console.error('Invalid section type:', sectionType);
+              }
+            };
+
             return (
               <button
                 key={sectionType}
                 type="button"
-                onClick={() => handleNavigationSectionChange(sectionType)}
+                onClick={handleTabClick}
                 className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 ${
                   isActiveTab
                     ? 'border-blue-500 text-blue-700'
@@ -241,15 +320,14 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderActiveMainContent = () => {
-    console.log('🔄 renderActiveMainContent 호출 - Phase3&4:', {
+    console.log('🔄 [RENDER] 메인 콘텐츠 렌더링 - 타입 안전성 강화:', {
       activeSectionType,
-      hasImages: checkShouldShowImageManagementSections(),
+      hasImages: hasUploadedImages,
+      typeSafeRendering: true,
     });
 
-    const hasUploadedImages = checkShouldShowImageManagementSections();
-
     if (!hasUploadedImages) {
-      console.log('📋 업로드된 이미지 없음 - 안내 메시지 표시');
+      console.log('📋 [RENDER] 업로드된 이미지 없음 - 안내 메시지 표시');
 
       return (
         <div className="flex items-center justify-center p-6 w-full lg:w-[calc(100%-16rem)]">
@@ -283,8 +361,10 @@ function BlogMediaStepContainer(): React.ReactNode {
       );
     }
 
-    const contentComponentMap = {
-      mainImage: (
+    let selectedContent: React.ReactNode = null;
+
+    if (activeSectionType === 'mainImage') {
+      selectedContent = (
         <div className="space-y-6">
           <header>
             <h2 className="mb-2 text-xl font-semibold text-gray-900">
@@ -298,24 +378,28 @@ function BlogMediaStepContainer(): React.ReactNode {
           </header>
           <MainImageContainer />
         </div>
-      ),
-      imageGallery: (
+      );
+    } else if (activeSectionType === 'imageGallery') {
+      selectedContent = (
         <ImageGalleryContainer
           mediaFiles={uploadedMediaFileList}
           mainImage={selectedMainImageUrl}
           sliderImages={configuredSliderImageList}
         />
-      ),
-      imageSlider: <ImageSliderContainer />,
-    };
+      );
+    } else if (activeSectionType === 'imageSlider') {
+      selectedContent = <ImageSliderContainer />;
+    }
 
-    const selectedContent = contentComponentMap[activeSectionType];
-
-    console.log('✅ renderActiveMainContent 컴포넌트 선택 완료 - Phase3&4:', {
-      activeSectionType,
-      hasSelectedContent: selectedContent ? true : false,
-      renderingMainImageAsPreview: activeSectionType === 'mainImage',
-    });
+    console.log(
+      '✅ [RENDER] 메인 콘텐츠 컴포넌트 선택 완료 - 타입 안전성 강화:',
+      {
+        activeSectionType,
+        hasSelectedContent: selectedContent !== null,
+        renderingMainImageAsPreview: activeSectionType === 'mainImage',
+        typeSafeContentSelection: true,
+      }
+    );
 
     return (
       <main className="p-6 w-full lg:w-[calc(100%-16rem)]">
@@ -324,17 +408,16 @@ function BlogMediaStepContainer(): React.ReactNode {
     );
   };
 
-  const shouldShowManagementSections = checkShouldShowImageManagementSections();
-
-  console.log('🎨 BlogMediaStepContainer 최종 렌더링 준비 - Phase3&4 완성:', {
-    shouldShowManagementSections,
+  console.log('🎨 [CONTAINER] 타입 안전성 강화된 컨테이너 최종 렌더링 준비:', {
+    shouldShowManagementSections: hasUploadedImages,
     activeSectionType,
     uploadedImageCount: uploadedMediaFileList.length,
-    hasMainImage: selectedMainImageUrl !== null && selectedMainImageUrl !== '',
+    hasMainImage: selectedMainImageUrl !== null,
     sliderImageCount: configuredSliderImageList.length,
     selectedMainImagePreview: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : 'none',
+    typeSafeContainerCompleted: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 

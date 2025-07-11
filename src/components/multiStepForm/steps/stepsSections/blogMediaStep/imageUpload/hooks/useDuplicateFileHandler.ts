@@ -15,7 +15,6 @@ export const useDuplicateFileHandler = () => {
       animationKey: 0,
     });
 
-  // 🛡️ 메모리 누수 방지: 타이머 관리 개선
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,30 +26,27 @@ export const useDuplicateFileHandler = () => {
     animationKey: duplicateMessageState.animationKey,
   });
 
-  // 🛡️ 메모리 누수 방지: 안전한 타이머 정리 함수
   const clearAllActiveTimers = useCallback(() => {
-    const timersToClean = [showTimerRef, hideTimerRef, cleanupTimerRef];
+    // 🔧 Race Condition 해결: 개별 타이머 안전하게 정리
+    if (showTimerRef.current !== null) {
+      clearTimeout(showTimerRef.current);
+      showTimerRef.current = null;
+      logger.debug('show 타이머 정리 완료');
+    }
 
-    timersToClean.forEach((timerRef) => {
-      const { current: currentTimer } = timerRef;
+    if (hideTimerRef.current !== null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+      logger.debug('hide 타이머 정리 완료');
+    }
 
-      if (currentTimer !== null) {
-        clearTimeout(currentTimer);
-        timerRef.current = null;
-
-        logger.debug('타이머 정리 완료', {
-          timerType:
-            timerRef === showTimerRef
-              ? 'show'
-              : timerRef === hideTimerRef
-              ? 'hide'
-              : 'cleanup',
-        });
-      }
-    });
+    if (cleanupTimerRef.current !== null) {
+      clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+      logger.debug('cleanup 타이머 정리 완료');
+    }
   }, []);
 
-  // 🛡️ 메모리 누수 방지: 안전한 상태 업데이트 함수
   const safeUpdateDuplicateState = useCallback(
     (stateUpdater: (prev: DuplicateMessageState) => DuplicateMessageState) => {
       const { current: isMounted } = isMountedRef;
@@ -69,20 +65,17 @@ export const useDuplicateFileHandler = () => {
     []
   );
 
-  // 🚀 성능 최적화: 애니메이션 키 생성 함수
   const generateAnimationKey = useCallback((): number => {
     const currentTime = Date.now();
     const randomValue = Math.random();
     const newKey = currentTime + randomValue;
 
     animationKeyRef.current = newKey;
-
     logger.debug('새로운 애니메이션 키 생성', { newKey });
 
     return newKey;
   }, []);
 
-  // 🔧 중복 파일 메시지 생성 함수
   const createDuplicateMessage = useCallback(
     (duplicateFilesList: File[]): string => {
       const { length: duplicateFileCount } = duplicateFilesList;
@@ -96,7 +89,6 @@ export const useDuplicateFileHandler = () => {
     []
   );
 
-  // 🔧 파일 이름 목록 생성 함수
   const extractFileNamesList = useCallback(
     (duplicateFilesList: File[]): string[] => {
       return duplicateFilesList.map(({ name: fileName }) => fileName);
@@ -125,7 +117,7 @@ export const useDuplicateFileHandler = () => {
         newAnimationKey,
       });
 
-      // 🛡️ 메모리 누수 방지: 기존 타이머들 정리
+      // 🚨 Race Condition 수정: 새 타이머 설정 전에 기존 타이머들 완전히 정리
       clearAllActiveTimers();
 
       // 즉시 숨김 처리 (기존 메시지가 있는 경우)
@@ -134,7 +126,7 @@ export const useDuplicateFileHandler = () => {
         isVisible: false,
       }));
 
-      // 🚀 성능 최적화: 애니메이션 시작 지연
+      // 새 타이머 설정
       showTimerRef.current = setTimeout(() => {
         const { current: isMountedAfterDelay } = isMountedRef;
 
@@ -151,7 +143,7 @@ export const useDuplicateFileHandler = () => {
           animationKey: newAnimationKey,
         }));
 
-        // 🛡️ 메모리 누수 방지: 자동 숨김 타이머 설정
+        // 자동 숨김 타이머 설정
         hideTimerRef.current = setTimeout(() => {
           const { current: isMountedAfterHide } = isMountedRef;
 
@@ -195,7 +187,6 @@ export const useDuplicateFileHandler = () => {
     ]
   );
 
-  // 🛡️ 메모리 누수 방지: 언마운트 시 정리
   useEffect(() => {
     isMountedRef.current = true;
 

@@ -1,9 +1,8 @@
-// 📁 blogMediaStep/imageSlider/ImageSliderContainer.tsx
+// blogMediaStep/imageSlider/ImageSliderContainer.tsx
 
 import React, { useCallback, useMemo } from 'react';
 import { Icon } from '@iconify/react';
-import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
-import { useBlogMediaStepIntegration } from '../hooks/useBlogMediaStepIntegration';
+import { useImageGalleryStore } from '../../../../../../store/imageGallery/imageGalleryStore';
 import { useImageSlider } from './hooks/useImageSlider';
 import { useSliderSelection } from './hooks/useSliderSelection';
 import { useSliderOrder } from './hooks/useSliderOrder';
@@ -12,9 +11,10 @@ import SliderImageSelector from './parts/SliderImageSelector';
 import SelectedSliderImages from './parts/SelectedSliderImages';
 import SliderAddButton from './parts/SliderAddButton';
 
-interface FormValues {
-  media?: string[] | null;
-  mainImage?: string;
+interface ToastConfig {
+  title: string;
+  description: string;
+  color: 'success' | 'warning' | 'error' | 'info';
 }
 
 function ImageSliderContainer(): React.ReactNode {
@@ -22,36 +22,49 @@ function ImageSliderContainer(): React.ReactNode {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  const blogMediaStepState = useBlogMediaStepState();
-  const { formValues, addToast } = blogMediaStepState || {};
+  // Zustand 스토어에서 직접 상태 가져오기
+  const imageGalleryStore = useImageGalleryStore();
+  const { imageViewConfig } = imageGalleryStore;
 
-  const defaultFormValues: FormValues = { media: null, mainImage: undefined };
-  const safeFormValues = formValues || defaultFormValues;
-  const {
-    media: rawMediaFileList = null,
-    mainImage: rawMainImageUrl = undefined,
-  } = safeFormValues;
+  // Reflect.get을 사용하여 안전한 속성 접근
+  const rawSelectedImages = Reflect.get(
+    imageViewConfig || {},
+    'selectedImages'
+  );
+  const rawMainImage = Reflect.get(imageViewConfig || {}, 'mainImage');
+  const rawSliderImages = Reflect.get(imageViewConfig || {}, 'sliderImages');
 
-  const availableMediaFileList =
-    rawMediaFileList !== null && rawMediaFileList !== undefined
-      ? rawMediaFileList
-      : [];
+  const availableMediaFileList = Array.isArray(rawSelectedImages)
+    ? rawSelectedImages
+    : [];
   const selectedMainImageUrl =
-    rawMainImageUrl !== undefined ? rawMainImageUrl : null;
+    typeof rawMainImage === 'string' ? rawMainImage : null;
+  const currentSliderImageUrlList = Array.isArray(rawSliderImages)
+    ? rawSliderImages
+    : [];
 
-  console.log('📊 BlogMediaStepState 불러오기 완료:', {
+  const addToastMessage = useCallback((toastConfig: ToastConfig) => {
+    // TODO: 실제 토스트 스토어 연결 필요
+    console.log(
+      '📢 토스트 메시지:',
+      toastConfig.title,
+      '-',
+      toastConfig.description
+    );
+  }, []);
+
+  console.log('📊 갤러리 상태 불러오기 완료:', {
     availableMediaCount: availableMediaFileList.length,
-    hasMainImage:
-      selectedMainImageUrl !== null && selectedMainImageUrl !== undefined,
+    hasMainImage: selectedMainImageUrl !== null,
     mainImageUrl: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : null,
+    sliderImageCount: currentSliderImageUrlList.length,
     timestamp: new Date().toLocaleTimeString(),
   });
 
   const imageSliderHook = useImageSlider();
   const {
-    localSliderImages: currentSliderImageUrlList = [],
     removeFromSlider: removeImageFromSliderByUrl,
     addSelectedToSlider: addSelectedImageListToSlider,
     clearSliderImages: clearAllSliderImageList,
@@ -70,9 +83,6 @@ function ImageSliderContainer(): React.ReactNode {
     moveToFirst: moveImageToFirstPosition,
     moveToLast: moveImageToLastPosition,
   } = sliderOrderHook || {};
-
-  const blogMediaIntegrationResult = useBlogMediaStepIntegration();
-  const { setSelectedSliderIndicesValue } = blogMediaIntegrationResult || {};
 
   console.log('🔧 훅 초기화 완료:', {
     sliderImageCount: currentSliderImageUrlList.length,
@@ -112,42 +122,22 @@ function ImageSliderContainer(): React.ReactNode {
 
   const handleImageSelectionToggleByIndex = useCallback(
     (imageIndex: number) => {
-      console.log(
-        '🔧 handleImageSelectionToggleByIndex 호출 - 양방향 동기화:',
-        {
-          imageIndex,
-          currentSelectedCount: selectedImageIndexList.length,
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
-
-      originalHandleSliderImageSelect?.(imageIndex);
-
-      const isCurrentlySelected = selectedImageIndexList.includes(imageIndex);
-      const newSelectedIndices = isCurrentlySelected
-        ? selectedImageIndexList.filter((index: number) => index !== imageIndex)
-        : [...selectedImageIndexList, imageIndex];
-
-      console.log('🔧 React Hook Form 동기화 실행:', {
+      console.log('🔧 handleImageSelectionToggleByIndex 호출:', {
         imageIndex,
-        isCurrentlySelected,
-        previousCount: selectedImageIndexList.length,
-        newCount: newSelectedIndices.length,
-        newIndices: newSelectedIndices,
+        currentSelectedCount: selectedImageIndexList.length,
+        timestamp: new Date().toLocaleTimeString(),
       });
 
-      setSelectedSliderIndicesValue?.(newSelectedIndices);
+      if (originalHandleSliderImageSelect) {
+        originalHandleSliderImageSelect(imageIndex);
+      }
 
-      console.log('✅ 양방향 동기화 완료:', {
+      console.log('✅ 이미지 선택 토글 완료:', {
         imageIndex,
-        finalSelectedCount: newSelectedIndices.length,
+        finalSelectedCount: selectedImageIndexList.length,
       });
     },
-    [
-      originalHandleSliderImageSelect,
-      selectedImageIndexList,
-      setSelectedSliderIndicesValue,
-    ]
+    [originalHandleSliderImageSelect, selectedImageIndexList.length]
   );
 
   const getSelectedImageUrlListFromIndexList = useCallback(
@@ -181,11 +171,13 @@ function ImageSliderContainer(): React.ReactNode {
 
   const clearCurrentImageSelection = useCallback(() => {
     console.log('🔄 clearCurrentImageSelection 호출');
-    updateSelectedImageIndexList?.([]);
-    setSelectedSliderIndicesValue?.([]);
 
-    console.log('✅ 선택 목록 초기화 완료 (양방향)');
-  }, [updateSelectedImageIndexList, setSelectedSliderIndicesValue]);
+    if (updateSelectedImageIndexList) {
+      updateSelectedImageIndexList([]);
+    }
+
+    console.log('✅ 선택 목록 초기화 완료');
+  }, [updateSelectedImageIndexList]);
 
   const selectedImageUrlList = useMemo(
     () => getSelectedImageUrlListFromIndexList(availableMediaFileList),
@@ -206,7 +198,7 @@ function ImageSliderContainer(): React.ReactNode {
 
     if (selectedImageCount === 0) {
       console.log('❌ 선택된 이미지 없음 - 토스트 표시');
-      addToast?.({
+      addToastMessage({
         title: '선택된 이미지가 없습니다',
         description: '슬라이더에 추가할 이미지를 먼저 선택해주세요.',
         color: 'warning',
@@ -214,7 +206,10 @@ function ImageSliderContainer(): React.ReactNode {
       return;
     }
 
-    addSelectedImageListToSlider?.(selectedImageUrlList);
+    if (addSelectedImageListToSlider) {
+      addSelectedImageListToSlider(selectedImageUrlList);
+    }
+
     clearCurrentImageSelection();
 
     console.log('✅ 슬라이더에 이미지 추가 완료:', {
@@ -224,7 +219,7 @@ function ImageSliderContainer(): React.ReactNode {
     selectedImageUrlList,
     addSelectedImageListToSlider,
     clearCurrentImageSelection,
-    addToast,
+    addToastMessage,
   ]);
 
   const handleRemoveImageFromSliderByUrl = useCallback(
@@ -233,8 +228,11 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      removeImageFromSliderByUrl?.(targetImageUrl);
-      addToast?.({
+      if (removeImageFromSliderByUrl) {
+        removeImageFromSliderByUrl(targetImageUrl);
+      }
+
+      addToastMessage({
         title: '슬라이더에서 제거',
         description: '이미지가 슬라이더에서 제거되었습니다.',
         color: 'success',
@@ -242,7 +240,7 @@ function ImageSliderContainer(): React.ReactNode {
 
       console.log('✅ 슬라이더에서 이미지 제거 완료');
     },
-    [removeImageFromSliderByUrl, addToast]
+    [removeImageFromSliderByUrl, addToastMessage]
   );
 
   const handleMoveImageToFirstPosition = useCallback(
@@ -251,7 +249,9 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      moveImageToFirstPosition?.(targetImageUrl);
+      if (moveImageToFirstPosition) {
+        moveImageToFirstPosition(targetImageUrl);
+      }
 
       console.log('✅ 이미지 첫 번째 위치로 이동 완료');
     },
@@ -264,7 +264,9 @@ function ImageSliderContainer(): React.ReactNode {
         targetImageUrl: targetImageUrl.slice(0, 30) + '...',
       });
 
-      moveImageToLastPosition?.(targetImageUrl);
+      if (moveImageToLastPosition) {
+        moveImageToLastPosition(targetImageUrl);
+      }
 
       console.log('✅ 이미지 마지막 위치로 이동 완료');
     },
@@ -274,14 +276,19 @@ function ImageSliderContainer(): React.ReactNode {
   const handleClearAllSliderImageList = useCallback(() => {
     console.log('🔧 handleClearAllSliderImageList 호출');
 
-    clearAllSliderImageList?.();
+    if (clearAllSliderImageList) {
+      clearAllSliderImageList();
+    }
+
     clearCurrentImageSelection();
 
     console.log('✅ 모든 슬라이더 이미지 초기화 완료');
   }, [clearAllSliderImageList, clearCurrentImageSelection]);
 
   const totalAvailableForSliderImageCount = availableForSliderImageList.length;
-  const currentSliderImageTotalCount = getCurrentSliderImageTotalCount?.() || 0;
+  const currentSliderImageTotalCount = getCurrentSliderImageTotalCount
+    ? getCurrentSliderImageTotalCount()
+    : 0;
   const { length: sliderImageCount } = currentSliderImageUrlList;
   const hasSelectedSliderImages = sliderImageCount > 0;
   const hasAvailableImageFiles = availableMediaFileList.length > 0;
@@ -296,8 +303,7 @@ function ImageSliderContainer(): React.ReactNode {
   console.log('📊 렌더링 준비 상태:', {
     totalAvailableForSliderImageCount,
     totalOriginalImages: availableMediaFileList.length,
-    mainImageExists:
-      selectedMainImageUrl !== null && selectedMainImageUrl !== undefined,
+    mainImageExists: selectedMainImageUrl !== null,
     currentSliderImageTotalCount,
     sliderImageCount,
     hasSelectedSliderImages,
