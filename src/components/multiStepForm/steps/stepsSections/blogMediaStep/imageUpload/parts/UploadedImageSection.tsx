@@ -26,7 +26,7 @@ function UploadedImageSection(): React.ReactNode {
     hasMainImageHandlers: mainImageHandlers !== null,
   });
 
-  // 🚀 성능 최적화: 업로드된 이미지 존재 여부 메모이제이션
+  // 🚀 성능 최적화: 모든 useMemo를 early return 전에 호출 (React Hooks Rules 준수)
   const hasUploadedImages = useMemo(() => {
     const imageCount = uploadedImages.length;
     const hasImages = imageCount > 0;
@@ -39,13 +39,6 @@ function UploadedImageSection(): React.ReactNode {
     return hasImages;
   }, [uploadedImages.length]);
 
-  // 🔧 early return으로 중첩 방지
-  if (!hasUploadedImages) {
-    logger.debug('업로드된 이미지가 없어서 렌더링 안함');
-    return null;
-  }
-
-  // 🚀 성능 최적화: 푸터 높이 계산 메모이제이션
   const footerConfiguration = useMemo(() => {
     const { isVisible: isDeleteConfirmVisible } = deleteConfirmState;
     const minimumHeight = isDeleteConfirmVisible ? '120px' : '60px';
@@ -61,7 +54,6 @@ function UploadedImageSection(): React.ReactNode {
     };
   }, [deleteConfirmState.isVisible]);
 
-  // 🚀 성능 최적화: 메인 이미지 기능 상태 메모이제이션
   const mainImageFeatureInfo = useMemo(() => {
     const isMainImageFeatureAvailable = mainImageHandlers !== null;
 
@@ -75,29 +67,74 @@ function UploadedImageSection(): React.ReactNode {
     };
   }, [mainImageHandlers]);
 
+  const sectionConfiguration = useMemo(() => {
+    const baseClassName = 'p-4 border border-gray-200 rounded-lg bg-gray-50';
+    const headerClassName = 'flex items-center justify-between mb-4';
+    const headingClassName = 'text-lg font-semibold text-gray-800';
+    const statusBadgeClassName =
+      'px-2 py-1 ml-2 text-xs text-blue-700 bg-blue-100 rounded-full';
+
+    return {
+      baseClassName,
+      headerClassName,
+      headingClassName,
+      statusBadgeClassName,
+    };
+  }, []);
+
+  const accessibilityAttributes = useMemo(() => {
+    const imageCount = uploadedImages.length;
+    const headingId = 'uploaded-images-heading';
+    const regionLabel = `업로드된 이미지 관리 영역 (${imageCount}개)`;
+
+    return {
+      role: 'region' as const,
+      'aria-labelledby': headingId,
+      'aria-live': 'polite' as const,
+      'aria-label': regionLabel,
+      headingId,
+    };
+  }, [uploadedImages.length]);
+
+  // 🔧 React Hooks Rules 준수: 모든 hooks 호출 후 early return
+  if (!hasUploadedImages) {
+    logger.debug('업로드된 이미지가 없어서 렌더링 안함');
+    return null;
+  }
+
   // 🔧 구조분해할당으로 설정값 접근
   const { minimumHeight: footerMinHeight } = footerConfiguration;
   const {
     isAvailable: isMainImageFeatureAvailable,
     statusLabel: mainImageStatusLabel,
   } = mainImageFeatureInfo;
+  const {
+    baseClassName,
+    headerClassName,
+    headingClassName,
+    statusBadgeClassName,
+  } = sectionConfiguration;
+  const {
+    role,
+    'aria-labelledby': ariaLabelledBy,
+    'aria-live': ariaLive,
+    'aria-label': ariaLabel,
+    headingId,
+  } = accessibilityAttributes;
 
   return (
     <section
-      className="p-4 border border-gray-200 rounded-lg bg-gray-50"
-      role="region"
-      aria-labelledby="uploaded-images-heading"
+      className={baseClassName}
+      role={role}
+      aria-labelledby={ariaLabelledBy}
+      aria-live={ariaLive}
+      aria-label={ariaLabel}
     >
-      <header className="flex items-center justify-between mb-4">
-        <h3
-          id="uploaded-images-heading"
-          className="text-lg font-semibold text-gray-800"
-        >
+      <header className={headerClassName}>
+        <h3 id={headingId} className={headingClassName}>
           업로드된 이미지들 ({uploadedImages.length}개)
           {isMainImageFeatureAvailable ? (
-            <span className="px-2 py-1 ml-2 text-xs text-blue-700 bg-blue-100 rounded-full">
-              {mainImageStatusLabel}
-            </span>
+            <span className={statusBadgeClassName}>{mainImageStatusLabel}</span>
           ) : null}
         </h3>
         {/* ✅ Props 없이 Component 사용 */}
