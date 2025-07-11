@@ -18,6 +18,28 @@ export interface ImageGalleryHybridStorageOptions {
   readonly compressionQuality: number;
 }
 
+// 🔧 트랜잭션 상태 관리
+interface TransactionState {
+  readonly isActive: boolean;
+  readonly operationId: string;
+  readonly operationType: 'SAVE' | 'DELETE' | 'LOAD';
+  readonly timestamp: number;
+  readonly rollbackData?: {
+    readonly previousMetadata: ImageGalleryMetadata[];
+    readonly previousIndexedDBKeys: string[];
+  };
+}
+
+// 🔧 작업 큐 시스템
+interface StorageOperation {
+  readonly id: string;
+  readonly type: 'SAVE' | 'DELETE' | 'LOAD';
+  readonly priority: number;
+  readonly payload: any;
+  readonly resolve: (result: any) => void;
+  readonly reject: (error: Error) => void;
+}
+
 // 타입 가드 함수 추가 (타입 단언 제거)
 const isValidImageGalleryLocalStorageData = (
   data: unknown
@@ -27,7 +49,6 @@ const isValidImageGalleryLocalStorageData = (
     return false;
   }
 
-  // Reflect.get을 사용하여 타입 단언 제거
   const version = Reflect.get(data, 'version');
   const imageMetadataList = Reflect.get(data, 'imageMetadataList');
   const lastUpdated = Reflect.get(data, 'lastUpdated');
@@ -39,12 +60,18 @@ const isValidImageGalleryLocalStorageData = (
   return hasVersion && hasImageMetadataList && hasLastUpdated;
 };
 
-// 🔧 간소화된 IndexedDB 직접 연동 (어댑터 제거)
+// 🚨 Race Condition 해결: 트랜잭션 기반 하이브리드 스토리지
 export class ImageGalleryHybridStorage {
   private readonly config: ImageGalleryStorageConfig;
   private readonly localStorageKey: string;
   private readonly options: ImageGalleryHybridStorageOptions;
   private databaseInstance: IDBDatabase | null = null;
+
+  // 🔧 트랜잭션 및 락 관리
+  private currentTransaction: TransactionState | null = null;
+  private readonly operationQueue: StorageOperation[] = [];
+  private isProcessingQueue = false;
+  private readonly maxRetries = 3;
 
   constructor(
     config: ImageGalleryStorageConfig,
@@ -54,27 +81,527 @@ export class ImageGalleryHybridStorage {
     this.localStorageKey = `${config.dbName}_metadata`;
     this.options = options;
 
-    console.log('🔧 [HYBRID_STORAGE] 간소화된 하이브리드 스토리지 생성:', {
+    console.log('🔧 [HYBRID_STORAGE] 트랜잭션 기반 하이브리드 스토리지 생성:', {
       dbName: config.dbName,
       localStorageKey: this.localStorageKey,
       enableCompression: options.enableCompression,
+      transactionSupport: true,
+      queueSystem: true,
     });
   }
 
   async initializeHybridStorage(): Promise<void> {
-    console.log('🚀 [HYBRID_INIT] 하이브리드 스토리지 초기화');
+    console.log('🚀 [HYBRID_INIT] 트랜잭션 기반 초기화');
 
     try {
       await this.initializeIndexedDB();
       this.initializeLocalStorageData();
-      console.log('✅ [HYBRID_INIT] 하이브리드 스토리지 초기화 완료');
+      this.startQueueProcessor();
+      console.log('✅ [HYBRID_INIT] 트랜잭션 기반 초기화 완료');
     } catch (initError) {
       console.error('❌ [HYBRID_INIT] 초기화 실패:', { error: initError });
       throw new Error(`Hybrid storage initialization failed: ${initError}`);
     }
   }
 
-  // 🔧 IndexedDB 직접 초기화 (어댑터 없이)
+  // 🔧 트랜잭션 관리 함수들
+  private beginTransaction(
+    operationType: TransactionState['operationType'],
+    rollbackData?: TransactionState['rollbackData']
+  ): string {
+    const operationId = `txn_${operationType.toLowerCase()}_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    if (this.currentTransaction?.isActive) {
+      throw new Error(
+        `Transaction already active: ${this.currentTransaction.operationId}`
+      );
+    }
+
+    this.currentTransaction = {
+      isActive: true,
+      operationId,
+      operationType,
+      timestamp: Date.now(),
+      rollbackData,
+    };
+
+    console.log('🔐 [TRANSACTION] 트랜잭션 시작:', {
+      operationId,
+      operationType,
+      hasRollbackData: rollbackData !== undefined,
+    });
+
+    return operationId;
+  }
+
+  private async commitTransaction(operationId: string): Promise<void> {
+    if (!this.currentTransaction?.isActive) {
+      throw new Error('No active transaction to commit');
+    }
+
+    if (this.currentTransaction.operationId !== operationId) {
+      throw new Error(
+        `Transaction ID mismatch: expected ${this.currentTransaction.operationId}, got ${operationId}`
+      );
+    }
+
+    this.currentTransaction = null;
+
+    console.log('✅ [TRANSACTION] 트랜잭션 커밋:', {
+      operationId,
+      commitSuccessful: true,
+    });
+  }
+
+  private async rollbackTransaction(
+    operationId: string,
+    error: Error
+  ): Promise<void> {
+    if (!this.currentTransaction?.isActive) {
+      console.log('⚠️ [TRANSACTION] 롤백할 활성 트랜잭션 없음');
+      return;
+    }
+
+    if (this.currentTransaction.operationId !== operationId) {
+      console.error('❌ [TRANSACTION] 트랜잭션 ID 불일치:', {
+        expected: this.currentTransaction.operationId,
+        received: operationId,
+      });
+      return;
+    }
+
+    console.log('🔄 [TRANSACTION] 트랜잭션 롤백 시작:', {
+      operationId,
+      error: error.message,
+    });
+
+    try {
+      const { rollbackData } = this.currentTransaction;
+
+      if (rollbackData) {
+        // LocalStorage 롤백
+        const rollbackLocalData: ImageGalleryLocalStorageData = {
+          version: '1.0.0',
+          imageMetadataList: rollbackData.previousMetadata,
+          lastUpdated: new Date().toISOString(),
+        };
+
+        this.saveLocalStorageData(rollbackLocalData);
+
+        // IndexedDB 롤백 (새로 추가된 키들 삭제)
+        const { previousIndexedDBKeys } = rollbackData;
+        const currentMetadata =
+          this.getLocalStorageData()?.imageMetadataList || [];
+        const currentIndexedDBKeys = currentMetadata.map(
+          ({ indexedDBKey }) => indexedDBKey
+        );
+
+        const keysToDelete = currentIndexedDBKeys.filter(
+          (key) => !previousIndexedDBKeys.includes(key)
+        );
+
+        await Promise.allSettled(
+          keysToDelete.map((key) => this.deleteFromIndexedDB(key))
+        );
+
+        console.log('✅ [TRANSACTION] 롤백 완료:', {
+          metadataRolledBack: rollbackData.previousMetadata.length,
+          keysDeleted: keysToDelete.length,
+        });
+      }
+    } catch (rollbackError) {
+      console.error('❌ [TRANSACTION] 롤백 실패:', {
+        operationId,
+        rollbackError,
+        originalError: error.message,
+      });
+    } finally {
+      this.currentTransaction = null;
+    }
+  }
+
+  // 🔧 큐 처리 시스템
+  private startQueueProcessor(): void {
+    if (this.isProcessingQueue) {
+      return;
+    }
+
+    const processQueue = async () => {
+      this.isProcessingQueue = true;
+
+      try {
+        while (this.operationQueue.length > 0) {
+          // 우선순위 정렬 (숫자가 낮을수록 높은 우선순위)
+          this.operationQueue.sort((a, b) => a.priority - b.priority);
+
+          const operation = this.operationQueue.shift();
+          if (!operation) continue;
+
+          try {
+            await this.executeOperation(operation);
+          } catch (operationError) {
+            console.error('❌ [QUEUE_PROCESSOR] 작업 실행 실패:', {
+              operationId: operation.id,
+              operationType: operation.type,
+              error: operationError,
+            });
+            operation.reject(
+              operationError instanceof Error
+                ? operationError
+                : new Error(String(operationError))
+            );
+          }
+
+          // 다음 작업과의 간격 보장
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      } catch (processingError) {
+        console.error('❌ [QUEUE_PROCESSOR] 큐 처리 실패:', {
+          error: processingError,
+        });
+      } finally {
+        this.isProcessingQueue = false;
+
+        // 큐에 남은 작업이 있으면 다시 시작
+        if (this.operationQueue.length > 0) {
+          setTimeout(() => this.startQueueProcessor(), 100);
+        }
+      }
+    };
+
+    processQueue();
+  }
+
+  private async executeOperation(operation: StorageOperation): Promise<void> {
+    console.log('⚡ [OPERATION] 작업 실행:', {
+      operationId: operation.id,
+      operationType: operation.type,
+      priority: operation.priority,
+    });
+
+    const { type, payload, resolve, reject } = operation;
+
+    try {
+      let result: any;
+
+      switch (type) {
+        case 'SAVE':
+          result = await this.executeTransactionalSave(
+            payload.file,
+            payload.metadataId
+          );
+          break;
+        case 'DELETE':
+          result = await this.executeTransactionalDelete(payload.metadataId);
+          break;
+        case 'LOAD':
+          result = await this.executeTransactionalLoad(payload.metadataId);
+          break;
+        default:
+          throw new Error(`Unknown operation type: ${type}`);
+      }
+
+      resolve(result);
+
+      console.log('✅ [OPERATION] 작업 완료:', {
+        operationId: operation.id,
+        operationType: operation.type,
+      });
+    } catch (executionError) {
+      console.error('❌ [OPERATION] 작업 실패:', {
+        operationId: operation.id,
+        operationType: operation.type,
+        error: executionError,
+      });
+      reject(
+        executionError instanceof Error
+          ? executionError
+          : new Error(String(executionError))
+      );
+    }
+  }
+
+  // 🚨 Race Condition 해결: 트랜잭션 기반 저장
+  async saveImageToHybridStorage(
+    file: File,
+    metadataId: string
+  ): Promise<ImageGalleryHybridData> {
+    console.log('💾 [HYBRID_SAVE] 트랜잭션 기반 저장 요청:', {
+      fileName: file.name,
+      fileSize: file.size,
+      metadataId,
+    });
+
+    return new Promise((resolve, reject) => {
+      const operation: StorageOperation = {
+        id: `save_${metadataId}_${Date.now()}`,
+        type: 'SAVE',
+        priority: 1, // 저장은 높은 우선순위
+        payload: { file, metadataId },
+        resolve,
+        reject,
+      };
+
+      this.operationQueue.push(operation);
+      this.startQueueProcessor();
+
+      console.log('📝 [HYBRID_SAVE] 저장 작업 큐 추가:', {
+        operationId: operation.id,
+        queueLength: this.operationQueue.length,
+      });
+    });
+  }
+
+  private async executeTransactionalSave(
+    file: File,
+    metadataId: string
+  ): Promise<ImageGalleryHybridData> {
+    // 롤백용 현재 상태 백업
+    const currentLocalData = this.getLocalStorageData();
+    const previousMetadata = currentLocalData?.imageMetadataList || [];
+    const previousIndexedDBKeys = previousMetadata.map(
+      ({ indexedDBKey }) => indexedDBKey
+    );
+
+    const operationId = this.beginTransaction('SAVE', {
+      previousMetadata,
+      previousIndexedDBKeys,
+    });
+
+    try {
+      // 1단계: 이미지 처리
+      const { enableCompression, compressionQuality } = this.options;
+      const compressionResult = await this.processImageFile(
+        file,
+        enableCompression,
+        compressionQuality
+      );
+
+      // 2단계: 메타데이터 생성
+      const imageMetadata = this.createImageMetadata(
+        metadataId,
+        file,
+        compressionResult
+      );
+
+      // 3단계: IndexedDB에 바이너리 저장 (원자적 연산)
+      await this.storeToIndexedDB(
+        imageMetadata.indexedDBKey,
+        compressionResult.compressedBlob
+      );
+
+      // 4단계: LocalStorage에 메타데이터 저장 (원자적 연산)
+      await this.addMetadataToLocalStorage(imageMetadata);
+
+      // 트랜잭션 커밋
+      await this.commitTransaction(operationId);
+
+      const hybridData: ImageGalleryHybridData = {
+        metadata: imageMetadata,
+        binaryKey: imageMetadata.indexedDBKey,
+        localStorageKey: this.localStorageKey,
+      };
+
+      console.log('✅ [TRANSACTIONAL_SAVE] 트랜잭션 저장 완료:', {
+        metadataId,
+        operationId,
+        compressionRatio: `${compressionResult.compressionRatio.toFixed(2)}%`,
+      });
+
+      return hybridData;
+    } catch (saveError) {
+      console.error('❌ [TRANSACTIONAL_SAVE] 저장 실패, 롤백 실행:', {
+        metadataId,
+        operationId,
+        error: saveError,
+      });
+
+      await this.rollbackTransaction(
+        operationId,
+        saveError instanceof Error ? saveError : new Error(String(saveError))
+      );
+      throw new Error(`Transactional save failed: ${file.name}`);
+    }
+  }
+
+  // 🚨 Race Condition 해결: 트랜잭션 기반 삭제
+  async deleteImageFromHybridStorage(metadataId: string): Promise<void> {
+    console.log('🗑️ [HYBRID_DELETE] 트랜잭션 기반 삭제 요청:', { metadataId });
+
+    return new Promise((resolve, reject) => {
+      const operation: StorageOperation = {
+        id: `delete_${metadataId}_${Date.now()}`,
+        type: 'DELETE',
+        priority: 2, // 삭제는 중간 우선순위
+        payload: { metadataId },
+        resolve,
+        reject,
+      };
+
+      this.operationQueue.push(operation);
+      this.startQueueProcessor();
+
+      console.log('📝 [HYBRID_DELETE] 삭제 작업 큐 추가:', {
+        operationId: operation.id,
+        queueLength: this.operationQueue.length,
+      });
+    });
+  }
+
+  private async executeTransactionalDelete(metadataId: string): Promise<void> {
+    // 롤백용 현재 상태 백업
+    const currentLocalData = this.getLocalStorageData();
+    if (!currentLocalData) {
+      console.log('ℹ️ [TRANSACTIONAL_DELETE] 삭제할 데이터 없음');
+      return;
+    }
+
+    const { imageMetadataList = [] } = currentLocalData;
+    const targetMetadata = imageMetadataList.find(
+      (metadata) => metadata.id === metadataId
+    );
+
+    if (!targetMetadata) {
+      console.log('ℹ️ [TRANSACTIONAL_DELETE] 대상 메타데이터 없음:', {
+        metadataId,
+      });
+      return;
+    }
+
+    const operationId = this.beginTransaction('DELETE', {
+      previousMetadata: imageMetadataList,
+      previousIndexedDBKeys: imageMetadataList.map(
+        ({ indexedDBKey }) => indexedDBKey
+      ),
+    });
+
+    try {
+      const { indexedDBKey } = targetMetadata;
+
+      // 1단계: IndexedDB에서 바이너리 삭제
+      await this.deleteFromIndexedDB(indexedDBKey);
+
+      // 2단계: LocalStorage에서 메타데이터 제거
+      const updatedMetadataList = imageMetadataList.filter(
+        (metadata) => metadata.id !== metadataId
+      );
+      const updatedLocalData: ImageGalleryLocalStorageData = {
+        ...currentLocalData,
+        imageMetadataList: updatedMetadataList,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      this.saveLocalStorageData(updatedLocalData);
+
+      // 트랜잭션 커밋
+      await this.commitTransaction(operationId);
+
+      console.log('✅ [TRANSACTIONAL_DELETE] 트랜잭션 삭제 완료:', {
+        metadataId,
+        operationId,
+      });
+    } catch (deleteError) {
+      console.error('❌ [TRANSACTIONAL_DELETE] 삭제 실패, 롤백 실행:', {
+        metadataId,
+        operationId,
+        error: deleteError,
+      });
+
+      await this.rollbackTransaction(
+        operationId,
+        deleteError instanceof Error
+          ? deleteError
+          : new Error(String(deleteError))
+      );
+      throw new Error(`Transactional delete failed: ${metadataId}`);
+    }
+  }
+
+  // 🚨 Race Condition 해결: 트랜잭션 기반 로드
+  async loadImageFromHybridStorage(metadataId: string): Promise<string | null> {
+    console.log('📁 [HYBRID_LOAD] 트랜잭션 기반 로드 요청:', { metadataId });
+
+    return new Promise((resolve, reject) => {
+      const operation: StorageOperation = {
+        id: `load_${metadataId}_${Date.now()}`,
+        type: 'LOAD',
+        priority: 3, // 로드는 낮은 우선순위
+        payload: { metadataId },
+        resolve,
+        reject,
+      };
+
+      this.operationQueue.push(operation);
+      this.startQueueProcessor();
+
+      console.log('📝 [HYBRID_LOAD] 로드 작업 큐 추가:', {
+        operationId: operation.id,
+        queueLength: this.operationQueue.length,
+      });
+    });
+  }
+
+  private async executeTransactionalLoad(
+    metadataId: string
+  ): Promise<string | null> {
+    const operationId = this.beginTransaction('LOAD');
+
+    try {
+      // LocalStorage에서 메타데이터 조회
+      const localData = this.getLocalStorageData();
+      if (!localData) {
+        await this.commitTransaction(operationId);
+        return null;
+      }
+
+      const { imageMetadataList = [] } = localData;
+      const targetMetadata = imageMetadataList.find(
+        (metadata) => metadata.id === metadataId
+      );
+
+      if (!targetMetadata) {
+        await this.commitTransaction(operationId);
+        return null;
+      }
+
+      const { indexedDBKey } = targetMetadata;
+
+      // IndexedDB에서 바이너리 조회
+      const binaryData = await this.retrieveFromIndexedDB(indexedDBKey);
+      if (!binaryData) {
+        await this.commitTransaction(operationId);
+        return null;
+      }
+
+      // Blob을 DataURL로 변환
+      const dataUrl = await this.convertBlobToDataUrl(binaryData);
+
+      await this.commitTransaction(operationId);
+
+      console.log('✅ [TRANSACTIONAL_LOAD] 트랜잭션 로드 완료:', {
+        metadataId,
+        operationId,
+      });
+
+      return dataUrl;
+    } catch (loadError) {
+      console.error('❌ [TRANSACTIONAL_LOAD] 로드 실패:', {
+        metadataId,
+        operationId,
+        error: loadError,
+      });
+
+      await this.rollbackTransaction(
+        operationId,
+        loadError instanceof Error ? loadError : new Error(String(loadError))
+      );
+      return null;
+    }
+  }
+
+  // 기존 IndexedDB 초기화 (변경 없음)
   private async initializeIndexedDB(): Promise<void> {
     const { dbName, dbVersion, storeName } = this.config;
 
@@ -121,6 +648,7 @@ export class ImageGalleryHybridStorage {
     });
   }
 
+  // 기존 LocalStorage 관리 함수들 (변경 없음)
   private getLocalStorageData(): ImageGalleryLocalStorageData | null {
     try {
       const storedDataString = localStorage.getItem(this.localStorageKey);
@@ -132,7 +660,6 @@ export class ImageGalleryHybridStorage {
 
       const parsedData = JSON.parse(storedDataString);
 
-      // 🔧 타입 가드로 타입 단언 제거
       if (!isValidImageGalleryLocalStorageData(parsedData)) {
         console.error('❌ [LOCAL_STORAGE] 유효하지 않은 메타데이터 형식:', {
           parsedData,
@@ -187,65 +714,18 @@ export class ImageGalleryHybridStorage {
     }
   }
 
-  async saveImageToHybridStorage(
-    file: File,
-    metadataId: string
-  ): Promise<ImageGalleryHybridData> {
-    console.log('💾 [HYBRID_SAVE] 하이브리드 저장 시작:', {
-      fileName: file.name,
-      fileSize: file.size,
-      metadataId,
-    });
-
-    try {
-      const { enableCompression, compressionQuality } = this.options;
-
-      // 🔧 간소화된 이미지 처리
-      const compressionResult = await this.processImageFile(
-        file,
-        enableCompression,
-        compressionQuality
-      );
-
-      // 메타데이터 생성
-      const imageMetadata = this.createImageMetadata(
-        metadataId,
-        file,
-        compressionResult
-      );
-
-      // IndexedDB에 바이너리 저장 (직접)
-      await this.storeToIndexedDB(
-        imageMetadata.indexedDBKey,
-        compressionResult.compressedBlob
-      );
-
-      // LocalStorage에 메타데이터 저장
-      await this.addMetadataToLocalStorage(imageMetadata);
-
-      const hybridData: ImageGalleryHybridData = {
-        metadata: imageMetadata,
-        binaryKey: imageMetadata.indexedDBKey,
-        localStorageKey: this.localStorageKey,
-      };
-
-      console.log('✅ [HYBRID_SAVE] 하이브리드 저장 완료:', {
-        metadataId,
-        compressionRatio: `${compressionResult.compressionRatio.toFixed(2)}%`,
-      });
-
-      return hybridData;
-    } catch (saveError) {
-      console.error('❌ [HYBRID_SAVE] 하이브리드 저장 실패:', {
-        fileName: file.name,
-        metadataId,
-        error: saveError,
-      });
-      throw new Error(`Hybrid save failed: ${file.name}`);
+  async getAllImageMetadata(): Promise<ImageGalleryMetadata[]> {
+    const localData = this.getLocalStorageData();
+    const hasLocalData = localData !== null;
+    if (!hasLocalData) {
+      return [];
     }
+
+    const { imageMetadataList = [] } = localData;
+    return imageMetadataList;
   }
 
-  // 🔧 간소화된 이미지 처리 함수 (압축 기능 내장)
+  // 이미지 처리 및 기타 헬퍼 함수들 (기존과 동일하므로 생략)
   private async processImageFile(
     file: File,
     enableCompression: boolean,
@@ -307,7 +787,6 @@ export class ImageGalleryHybridStorage {
     };
   }
 
-  // 🔧 간소화된 이미지 압축 함수
   private async compressImage(
     dataUrl: string,
     quality: number
@@ -320,7 +799,6 @@ export class ImageGalleryHybridStorage {
       imageElement.onload = () => {
         const { naturalWidth, naturalHeight } = imageElement;
 
-        // 최대 크기 제한 (필요시)
         const maxWidth = 1920;
         const maxHeight = 1080;
 
@@ -354,7 +832,6 @@ export class ImageGalleryHybridStorage {
     });
   }
 
-  // 🔧 썸네일 생성 함수
   private async createThumbnail(
     dataUrl: string,
     thumbnailSize: number
@@ -397,7 +874,6 @@ export class ImageGalleryHybridStorage {
     });
   }
 
-  // 🔧 크기 계산 헬퍼 함수
   private calculateResizedDimensions(
     originalWidth: number,
     originalHeight: number,
@@ -426,115 +902,12 @@ export class ImageGalleryHybridStorage {
     };
   }
 
-  // 🔧 DataURL을 Blob으로 변환
   private async dataUrlToBlob(dataUrl: string): Promise<Blob> {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
     return blob;
   }
 
-  async loadImageFromHybridStorage(metadataId: string): Promise<string | null> {
-    console.log('📁 [HYBRID_LOAD] 하이브리드 로드 시작:', { metadataId });
-
-    try {
-      // LocalStorage에서 메타데이터 조회
-      const localData = this.getLocalStorageData();
-      const hasLocalData = localData !== null;
-      if (!hasLocalData) {
-        return null;
-      }
-
-      const { imageMetadataList = [] } = localData;
-      const targetMetadata = imageMetadataList.find(
-        (metadata) => metadata.id === metadataId
-      );
-      const hasTargetMetadata = targetMetadata !== undefined;
-      if (!hasTargetMetadata) {
-        return null;
-      }
-
-      const { indexedDBKey } = targetMetadata;
-
-      // IndexedDB에서 바이너리 조회 (직접)
-      const binaryData = await this.retrieveFromIndexedDB(indexedDBKey);
-      const hasBinaryData = binaryData !== null;
-      if (!hasBinaryData) {
-        return null;
-      }
-
-      // Blob을 DataURL로 변환
-      const dataUrl = await this.convertBlobToDataUrl(binaryData);
-
-      console.log('✅ [HYBRID_LOAD] 하이브리드 로드 완료:', { metadataId });
-      return dataUrl;
-    } catch (loadError) {
-      console.error('❌ [HYBRID_LOAD] 하이브리드 로드 실패:', {
-        metadataId,
-        error: loadError,
-      });
-      return null;
-    }
-  }
-
-  async deleteImageFromHybridStorage(metadataId: string): Promise<void> {
-    console.log('🗑️ [HYBRID_DELETE] 하이브리드 삭제 시작:', { metadataId });
-
-    try {
-      // LocalStorage에서 메타데이터 조회 및 제거
-      const localData = this.getLocalStorageData();
-      const hasLocalData = localData !== null;
-      if (!hasLocalData) {
-        return;
-      }
-
-      const { imageMetadataList = [] } = localData;
-      const targetMetadata = imageMetadataList.find(
-        (metadata) => metadata.id === metadataId
-      );
-      const hasTargetMetadata = targetMetadata !== undefined;
-      if (!hasTargetMetadata) {
-        return;
-      }
-
-      const { indexedDBKey } = targetMetadata;
-
-      // IndexedDB에서 바이너리 삭제 (직접)
-      await this.deleteFromIndexedDB(indexedDBKey);
-
-      // LocalStorage에서 메타데이터 제거
-      const updatedMetadataList = imageMetadataList.filter(
-        (metadata) => metadata.id !== metadataId
-      );
-      const updatedLocalData: ImageGalleryLocalStorageData = {
-        ...localData,
-        imageMetadataList: updatedMetadataList,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      this.saveLocalStorageData(updatedLocalData);
-
-      console.log('✅ [HYBRID_DELETE] 하이브리드 삭제 완료:', { metadataId });
-    } catch (deleteError) {
-      console.error('❌ [HYBRID_DELETE] 하이브리드 삭제 실패:', {
-        metadataId,
-        error: deleteError,
-      });
-      throw new Error(`Hybrid delete failed: ${metadataId}`);
-    }
-  }
-
-  async getAllImageMetadata(): Promise<ImageGalleryMetadata[]> {
-    const localData = this.getLocalStorageData();
-    const hasLocalData = localData !== null;
-    if (!hasLocalData) {
-      return [];
-    }
-
-    const { imageMetadataList = [] } = localData;
-    return imageMetadataList;
-  }
-
-  // 🔧 IndexedDB 직접 저장 (non-null assertion 제거)
   private async storeToIndexedDB(
     binaryKey: string,
     binaryData: Blob
@@ -580,7 +953,6 @@ export class ImageGalleryHybridStorage {
     });
   }
 
-  // 🔧 IndexedDB 직접 조회 (non-null assertion 제거)
   private async retrieveFromIndexedDB(binaryKey: string): Promise<Blob | null> {
     const { databaseInstance } = this;
     const hasDatabase =
@@ -629,7 +1001,6 @@ export class ImageGalleryHybridStorage {
     });
   }
 
-  // 🔧 IndexedDB 직접 삭제 (non-null assertion 제거)
   private async deleteFromIndexedDB(binaryKey: string): Promise<void> {
     const { databaseInstance } = this;
     const hasDatabase =
@@ -663,7 +1034,6 @@ export class ImageGalleryHybridStorage {
     });
   }
 
-  // 🔧 수정된 createImageMetadata 함수 (확장된 타입 사용)
   private createImageMetadata(
     metadataId: string,
     file: File,
@@ -677,7 +1047,6 @@ export class ImageGalleryHybridStorage {
       fileSize: compressionResult.originalSize,
       createdAt: new Date(),
 
-      // 🔧 선택적 필드들 추가
       thumbnailDataUrl: compressionResult.thumbnailDataUrl,
       compressedSize: compressionResult.compressedSize,
       dimensions: compressionResult.dimensions,
