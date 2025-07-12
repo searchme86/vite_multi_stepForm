@@ -3,6 +3,9 @@
 import { useCallback } from 'react';
 import { useImageGalleryStore } from '../../../../../../../store/imageGallery/imageGalleryStore';
 
+// 🆕 실제 사용하는 슬라이더 검증 유틸리티만 import
+import { validateSliderImages } from '../../../../../../ImageGalleryWithContent/utils/sliderValidationUtils';
+
 interface UseImageSliderReturn {
   removeFromSlider: (imageUrl: string) => void;
   addSelectedToSlider: (imageUrls: string[]) => void;
@@ -19,39 +22,70 @@ interface ToastConfig {
   color: 'success' | 'warning' | 'error' | 'info';
 }
 
+interface ImageMetadata {
+  id: string;
+  originalFileName: string;
+  indexedDBKey: string;
+  originalDataUrl: string;
+  fileSize: number;
+  createdAt: Date;
+}
+
+interface ImageViewConfig {
+  sliderImages?: string[];
+  selectedImages?: string[];
+  selectedImageIds?: string[];
+  imageMetadata?: ImageMetadata[];
+}
+
+interface DuplicateRemovalResult {
+  uniqueUrls: string[];
+  duplicateCount: number;
+}
+
+interface ExistingImageFilterResult {
+  newUrls: string[];
+  existingCount: number;
+}
+
 export const useImageSlider = (): UseImageSliderReturn => {
   console.log('🔧 useImageSlider 훅 초기화');
 
   const imageGalleryStore = useImageGalleryStore();
-  const { imageViewConfig } = imageGalleryStore;
+  const { imageViewConfig } = imageGalleryStore || {};
+  const safeImageViewConfig: ImageViewConfig = imageViewConfig || {};
 
   // Reflect.get을 사용하여 안전하게 슬라이더 이미지 접근
-  const rawSliderImages = Reflect.get(imageViewConfig || {}, 'sliderImages');
+  const rawSliderImages = Reflect.get(safeImageViewConfig, 'sliderImages');
   const currentSliderImages = Array.isArray(rawSliderImages)
     ? rawSliderImages
     : [];
 
   // 🚨 데이터 동기화를 위한 메인 배열들 접근
-  const rawSelectedImages = Reflect.get(
-    imageViewConfig || {},
-    'selectedImages'
-  );
+  const rawSelectedImages = Reflect.get(safeImageViewConfig, 'selectedImages');
   const currentSelectedImages = Array.isArray(rawSelectedImages)
     ? rawSelectedImages
     : [];
 
   const rawSelectedImageIds = Reflect.get(
-    imageViewConfig || {},
+    safeImageViewConfig,
     'selectedImageIds'
   );
   const currentSelectedImageIds = Array.isArray(rawSelectedImageIds)
     ? rawSelectedImageIds
     : [];
 
-  const rawImageMetadata = Reflect.get(imageViewConfig || {}, 'imageMetadata');
+  const rawImageMetadata = Reflect.get(safeImageViewConfig, 'imageMetadata');
   const currentImageMetadata = Array.isArray(rawImageMetadata)
     ? rawImageMetadata
     : [];
+
+  console.log('🔧 useImageSlider 데이터 상태:', {
+    sliderImagesCount: currentSliderImages.length,
+    selectedImagesCount: currentSelectedImages.length,
+    selectedImageIdsCount: currentSelectedImageIds.length,
+    metadataCount: currentImageMetadata.length,
+  });
 
   const addToastMessage = useCallback((toastConfig: ToastConfig) => {
     // TODO: 실제 토스트 스토어 연결 필요
@@ -67,6 +101,13 @@ export const useImageSlider = (): UseImageSliderReturn => {
   const updateSliderImagesWithSync = useCallback(
     (newSliderImages: string[]) => {
       const currentConfig = imageGalleryStore.getImageViewConfig();
+      const safeCurrentConfig = currentConfig || {};
+
+      console.log('🔧 updateSliderImagesWithSync 시작:', {
+        newSliderImagesCount: newSliderImages.length,
+        currentConfigExists:
+          currentConfig !== null && currentConfig !== undefined,
+      });
 
       // 슬라이더에 새로 추가되는 이미지들이 메인 배열에 없으면 추가
       const missingImages = newSliderImages.filter(
@@ -79,30 +120,36 @@ export const useImageSlider = (): UseImageSliderReturn => {
           : currentSelectedImages;
 
       // 🔧 데이터 무결성: selectedImages와 selectedImageIds 길이 동기화
-      const updatedSelectedImageIds =
-        currentSelectedImageIds.length === currentSelectedImages.length
-          ? currentSelectedImageIds
-          : currentSelectedImages.map(
-              (_, index) => `temp-id-${index}-${Date.now()}`
-            );
+      const needsSyncIds =
+        currentSelectedImageIds.length !== currentSelectedImages.length;
+      const updatedSelectedImageIds = needsSyncIds
+        ? currentSelectedImages.map(
+            (_, index) => `temp-id-${index}-${Date.now()}`
+          )
+        : currentSelectedImageIds;
 
       // 🔧 imageMetadata도 길이에 맞춰 동기화
-      const updatedImageMetadata =
-        currentImageMetadata.length === currentSelectedImages.length
-          ? currentImageMetadata
-          : currentSelectedImages.map((imageUrl, index) => ({
-              id:
-                updatedSelectedImageIds[index] ||
-                `temp-id-${index}-${Date.now()}`,
-              originalFileName: `image-${index + 1}`,
-              indexedDBKey: `temp-key-${index}`,
-              originalDataUrl: imageUrl,
-              fileSize: 0,
-              createdAt: new Date(),
-            }));
+      const needsSyncMetadata =
+        currentImageMetadata.length !== currentSelectedImages.length;
+
+      const createMetadataItem = (
+        imageUrl: string,
+        index: number
+      ): ImageMetadata => ({
+        id: updatedSelectedImageIds[index] || `temp-id-${index}-${Date.now()}`,
+        originalFileName: `image-${index + 1}`,
+        indexedDBKey: `temp-key-${index}`,
+        originalDataUrl: imageUrl,
+        fileSize: 0,
+        createdAt: new Date(),
+      });
+
+      const updatedImageMetadata = needsSyncMetadata
+        ? currentSelectedImages.map(createMetadataItem)
+        : currentImageMetadata;
 
       const updatedConfig = {
-        ...currentConfig,
+        ...safeCurrentConfig,
         sliderImages: newSliderImages,
         selectedImages: updatedSelectedImages,
         selectedImageIds: updatedSelectedImageIds,
@@ -173,7 +220,7 @@ export const useImageSlider = (): UseImageSliderReturn => {
   }, []);
 
   const removeDuplicateUrls = useCallback(
-    (imageUrls: string[]): { uniqueUrls: string[]; duplicateCount: number } => {
+    (imageUrls: string[]): DuplicateRemovalResult => {
       const uniqueUrlsSet = new Set(imageUrls);
       const uniqueUrls = Array.from(uniqueUrlsSet);
       const duplicateCount = imageUrls.length - uniqueUrls.length;
@@ -184,7 +231,7 @@ export const useImageSlider = (): UseImageSliderReturn => {
   );
 
   const filterExistingImages = useCallback(
-    (imageUrls: string[]): { newUrls: string[]; existingCount: number } => {
+    (imageUrls: string[]): ExistingImageFilterResult => {
       const newUrls = imageUrls.filter(
         (imageUrl: string) => !currentSliderImages.includes(imageUrl)
       );
@@ -202,6 +249,26 @@ export const useImageSlider = (): UseImageSliderReturn => {
         currentSliderCount: currentSliderImages.length,
       });
 
+      // 🆕 향상된 검증: 입력 데이터 유효성 검증
+      const validationResult = validateSliderImages(selectedImageUrls);
+
+      if (!validationResult.isValid) {
+        console.log('❌ 선택된 이미지 검증 실패:', {
+          errorCode: validationResult.errorCode,
+          errorMessage: validationResult.errorMessage,
+          imageCount: validationResult.imageCount,
+          requiredCount: validationResult.requiredCount,
+        });
+
+        addToastMessage({
+          title: '이미지 검증 실패',
+          description: validationResult.errorMessage,
+          color: 'error',
+        });
+        return;
+      }
+
+      // 기존 로직 계속...
       const areValidUrls = validateImageUrls(selectedImageUrls);
 
       if (!areValidUrls) {
@@ -255,6 +322,24 @@ export const useImageSlider = (): UseImageSliderReturn => {
       }
 
       const updatedSliderImages = [...currentSliderImages, ...newUrls];
+
+      // 🆕 최종 슬라이더 이미지 검증
+      const finalValidationResult = validateSliderImages(updatedSliderImages);
+
+      if (!finalValidationResult.isValid) {
+        console.log('❌ 최종 슬라이더 이미지 검증 실패:', {
+          errorCode: finalValidationResult.errorCode,
+          totalImages: updatedSliderImages.length,
+        });
+
+        addToastMessage({
+          title: '슬라이더 조건 미충족',
+          description: finalValidationResult.errorMessage,
+          color: 'error',
+        });
+        return;
+      }
+
       updateSliderImagesWithSync(updatedSliderImages);
 
       addToastMessage({
@@ -266,6 +351,7 @@ export const useImageSlider = (): UseImageSliderReturn => {
       console.log('✅ addSelectedToSlider 완료:', {
         addedCount: newUrls.length,
         totalSliderCount: updatedSliderImages.length,
+        validationPassed: true,
       });
     },
     [
@@ -370,13 +456,14 @@ export const useImageSlider = (): UseImageSliderReturn => {
       }
 
       const newSliderImages = [...currentSliderImages];
-      const [movedImage] = newSliderImages.splice(fromIndex, 1);
+      const movedImage = newSliderImages[fromIndex];
 
       if (movedImage === undefined) {
         console.log('⚠️ 이동할 이미지를 찾을 수 없음');
         return;
       }
 
+      newSliderImages.splice(fromIndex, 1);
       newSliderImages.splice(toIndex, 0, movedImage);
       updateSliderImagesWithSync(newSliderImages);
 

@@ -4,6 +4,9 @@ import React from 'react';
 import { Card, CardBody, Checkbox } from '@heroui/react';
 import { Icon } from '@iconify/react';
 
+// 🆕 슬라이더 상수 import
+import { SLIDER_CONFIG } from '../../../../../../ImageGalleryWithContent/utils/sliderConstants';
+
 interface SliderImageSelectorProps {
   mediaFiles: string[];
   mainImage: string | null;
@@ -53,13 +56,14 @@ function SliderImageSelector({
     return isNotMainImage;
   });
 
-  const canCreateSlider = availableForSliderImages.length >= 3;
+  const canCreateSlider =
+    availableForSliderImages.length >= SLIDER_CONFIG.MIN_IMAGES;
 
   console.log('🎯 SliderImageSelector 메인이미지 제외 로직 확인:', {
     totalImages: safeMediaFiles.length,
     availableForSlider: availableForSliderImages.length,
     canCreateSlider,
-    minimumRequired: 3,
+    minimumRequired: SLIDER_CONFIG.MIN_IMAGES,
     mainImageUrl: mainImage ? mainImage.slice(0, 30) + '...' : 'none',
     hasMainImage: mainImage !== null && mainImage !== undefined,
   });
@@ -232,7 +236,7 @@ function SliderImageSelector({
                             className="w-3 h-3"
                             aria-hidden="true"
                           />
-                          <span>3개 필요</span>
+                          <span>{SLIDER_CONFIG.MIN_IMAGES}개 필요</span>
                         </div>
                       </div>
                     ) : (
@@ -259,7 +263,7 @@ function SliderImageSelector({
                           이미지 {imageIndex + 1}
                           {!canCreateSlider ? (
                             <span className="block text-warning-300 text-[10px]">
-                              최소 3개 필요
+                              최소 {SLIDER_CONFIG.MIN_IMAGES}개 필요
                             </span>
                           ) : isAlreadyInSlider ? (
                             <span className="block text-green-300 text-[10px]">
@@ -299,8 +303,8 @@ function SliderImageSelector({
               aria-hidden="true"
             />
             <span>
-              슬라이더 생성을 위해 메인 이미지 외 최소 3개의 이미지가
-              필요합니다.
+              슬라이더 생성을 위해 메인 이미지 외 최소{' '}
+              {SLIDER_CONFIG.MIN_IMAGES}개의 이미지가 필요합니다.
               {mainImage !== null && mainImage !== undefined ? (
                 <> (현재 {availableForSliderImages.length}개 사용 가능)</>
               ) : (

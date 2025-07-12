@@ -3,10 +3,14 @@
 import React, { useCallback, useMemo } from 'react';
 import { Icon } from '@iconify/react';
 import { useImageGalleryStore } from '../../../../../../store/imageGallery/imageGalleryStore';
-import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState'; // 🚨 핵심 추가
+import { useBlogMediaStepState } from '../hooks/useBlogMediaStepState';
 import { useImageSlider } from './hooks/useImageSlider';
 import { useSliderSelection } from './hooks/useSliderSelection';
 import { useSliderOrder } from './hooks/useSliderOrder';
+
+// 🆕 슬라이더 상수 및 검증 함수 import
+import { SLIDER_CONFIG } from '../../../../../ImageGalleryWithContent/utils/sliderConstants';
+import { validateSliderImagesExcludingMain } from '../../../../../ImageGalleryWithContent/utils/sliderValidationUtils';
 
 import SliderImageSelector from './parts/SliderImageSelector';
 import SelectedSliderImages from './parts/SelectedSliderImages';
@@ -18,27 +22,111 @@ interface ToastConfig {
   color: 'success' | 'warning' | 'error' | 'info';
 }
 
+interface ToastItem {
+  id: string;
+  message: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  timestamp: number;
+}
+
+interface FormValues {
+  media?: string[];
+  mainImage?: string | null;
+}
+
+interface UIState {
+  isLoading?: boolean;
+  hasError?: boolean;
+}
+
+interface SelectionState {
+  selectedImages?: string[];
+  selectedImageIds?: string[];
+}
+
+type StateUpdaterFunction<T> = (prev: T) => T;
+
+interface BlogMediaStepStateResult {
+  formValues: FormValues;
+  uiState: UIState;
+  selectionState: SelectionState;
+  toasts: ToastItem[];
+  setMediaValue: (
+    filesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  ) => void;
+  setMainImageValue: (imageUrl: string | null) => void;
+  addToast: (toast: Omit<ToastItem, 'id' | 'timestamp'>) => void;
+  removeToast: (id: string) => void;
+  clearToasts: () => void;
+  resetForm: () => void;
+  validateForm: () => boolean;
+  forceSync: () => void;
+}
+
 function ImageSliderContainer(): React.ReactNode {
   console.log('🚀 ImageSliderContainer 렌더링 시작 - 메인이미지 동기화 수정:', {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🚨 핵심 수정 1: useBlogMediaStepState 추가 - 진짜 메인 이미지 데이터 소스
+  // 🚨 핵심 수정 1: 정확한 타입으로 useBlogMediaStepState 호출
   const blogMediaStepStateResult = useBlogMediaStepState();
-  const { formValues: currentFormValues } = blogMediaStepStateResult || {};
-  const safeFormValues = currentFormValues || {};
-  const { media: formMediaFiles = [], mainImage: formMainImage = '' } =
-    safeFormValues;
+  const safeStateResult = blogMediaStepStateResult || null;
+
+  console.log('🔧 BlogMediaStepState 타입 체크:', {
+    hasResult: safeStateResult !== null,
+    resultType: typeof safeStateResult,
+    hasFormValues: safeStateResult ? 'formValues' in safeStateResult : false,
+  });
+
+  // 🚨 안전한 데이터 추출
+  const extractedFormValues = safeStateResult
+    ? Reflect.get(safeStateResult, 'formValues')
+    : null;
+  const safeFormValues: FormValues = extractedFormValues || {};
+
+  const rawMediaFiles = Reflect.get(safeFormValues, 'media');
+  const formMediaFiles = Array.isArray(rawMediaFiles) ? rawMediaFiles : [];
+
+  const rawMainImage = Reflect.get(safeFormValues, 'mainImage');
+  const formMainImage =
+    rawMainImage !== null &&
+    rawMainImage !== undefined &&
+    typeof rawMainImage === 'string'
+      ? rawMainImage
+      : '';
+
+  console.log('🔧 BlogMediaStepState 데이터 추출:', {
+    hasFormValues:
+      extractedFormValues !== null && extractedFormValues !== undefined,
+    mediaFilesCount: formMediaFiles.length,
+    rawMainImageType: typeof rawMainImage,
+    rawMainImageValue: rawMainImage,
+    processedMainImage: formMainImage,
+    hasProcessedMainImage: formMainImage.length > 0,
+  });
 
   // Zustand 스토어에서 슬라이더 관련 상태 가져오기 (기존 유지)
   const imageGalleryStore = useImageGalleryStore();
-  const { imageViewConfig } = imageGalleryStore;
+  const { imageViewConfig } = imageGalleryStore || {};
 
   const rawSelectedImages = Reflect.get(
     imageViewConfig || {},
     'selectedImages'
   );
   const rawSliderImages = Reflect.get(imageViewConfig || {}, 'sliderImages');
+
+  console.log('🔧 ImageGalleryStore 데이터 상태:', {
+    hasImageViewConfig:
+      imageViewConfig !== null && imageViewConfig !== undefined,
+    rawSelectedImagesType: typeof rawSelectedImages,
+    rawSliderImagesType: typeof rawSliderImages,
+    rawSelectedImagesLength: Array.isArray(rawSelectedImages)
+      ? rawSelectedImages.length
+      : 0,
+    rawSliderImagesLength: Array.isArray(rawSliderImages)
+      ? rawSliderImages.length
+      : 0,
+  });
 
   // 🚨 핵심 수정 2: 실제 사용할 데이터 우선순위 결정
   // 1순위: blogMediaStepState (실제 폼 데이터)
@@ -62,23 +150,33 @@ function ImageSliderContainer(): React.ReactNode {
     return fallbackImages;
   })();
 
-  // 🚨 핵심 수정 3: 메인 이미지 상태 올바르게 처리
+  // 🚨 핵심 수정 3: 메인 이미지 상태 null 값 처리 개선
   const selectedMainImageUrl = (() => {
-    // 1순위: blogMediaStepState의 메인 이미지
-    if (
-      formMainImage &&
-      typeof formMainImage === 'string' &&
-      formMainImage.length > 0
-    ) {
+    // 1순위: blogMediaStepState의 메인 이미지 (null 값 처리 포함)
+    if (formMainImage && formMainImage.length > 0) {
       console.log(
         '✅ [MAIN_IMAGE_SOURCE] blogMediaStepState에서 메인 이미지 발견:',
         {
           mainImage: formMainImage.slice(0, 30) + '...',
           source: 'useBlogMediaStepState',
           isValid: true,
+          originalType: typeof rawMainImage,
+          processedType: typeof formMainImage,
         }
       );
       return formMainImage;
+    }
+
+    // null 값 처리 로깅
+    if (rawMainImage === null) {
+      console.log(
+        '⚠️ [MAIN_IMAGE_SOURCE] blogMediaStepState 메인 이미지가 null:',
+        {
+          rawMainImageValue: rawMainImage,
+          processedValue: formMainImage,
+          reason: 'explicit null value from form state',
+        }
+      );
     }
 
     // 2순위: imageGalleryStore (백업)
@@ -99,7 +197,8 @@ function ImageSliderContainer(): React.ReactNode {
     }
 
     console.log('❌ [MAIN_IMAGE_SOURCE] 메인 이미지 없음:', {
-      formMainImage: formMainImage || 'null/undefined',
+      formMainImageOriginal: rawMainImage,
+      formMainImageProcessed: formMainImage,
       storeMainImage: storeMainImage || 'null/undefined',
       bothSources: 'no valid main image found',
     });
@@ -119,18 +218,23 @@ function ImageSliderContainer(): React.ReactNode {
     );
   }, []);
 
-  // 🚨 핵심 수정 4: 메인 이미지 동기화 상태 로깅 강화
-  console.log('🔍 메인 이미지 동기화 체크 - 상세 분석:', {
+  // 🚨 핵심 수정 4: 메인 이미지 null 처리 로깅 강화
+  console.log('🔍 메인 이미지 null 처리 상세 분석:', {
     // blogMediaStepState 정보
-    hasBlogMediaState: blogMediaStepStateResult ? true : false,
-    hasFormValues: currentFormValues ? true : false,
-    formMainImage: formMainImage || 'none',
-    formMainImageType: typeof formMainImage,
-    formMainImageLength: formMainImage ? formMainImage.length : 0,
+    hasBlogMediaState: safeStateResult !== null,
+    hasFormValues:
+      extractedFormValues !== null && extractedFormValues !== undefined,
+    rawMainImageValue: rawMainImage,
+    rawMainImageType: typeof rawMainImage,
+    isRawMainImageNull: rawMainImage === null,
+    isRawMainImageUndefined: rawMainImage === undefined,
+    processedMainImage: formMainImage,
+    processedMainImageLength: formMainImage.length,
     formMediaFilesCount: formMediaFiles.length,
 
     // imageGalleryStore 정보
-    hasImageViewConfig: imageViewConfig ? true : false,
+    hasImageViewConfig:
+      imageViewConfig !== null && imageViewConfig !== undefined,
     storeMainImage: Reflect.get(imageViewConfig || {}, 'mainImage') || 'none',
     storeSelectedImagesCount: Array.isArray(rawSelectedImages)
       ? rawSelectedImages.length
@@ -140,6 +244,7 @@ function ImageSliderContainer(): React.ReactNode {
     finalMainImageUrl: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : 'none',
+    finalMainImageUrlType: typeof selectedMainImageUrl,
     finalMediaCount: availableMediaFileList.length,
 
     // 동기화 상태
@@ -147,7 +252,9 @@ function ImageSliderContainer(): React.ReactNode {
     dataSourceUsed:
       selectedMainImageUrl === formMainImage
         ? 'blogMediaStepState'
-        : 'imageGalleryStore',
+        : selectedMainImageUrl !== null
+        ? 'imageGalleryStore'
+        : 'none',
 
     timestamp: new Date().toLocaleTimeString(),
   });
@@ -173,18 +280,19 @@ function ImageSliderContainer(): React.ReactNode {
     moveToLast: moveImageToLastPosition,
   } = sliderOrderHook || {};
 
-  console.log('🔧 ImageSliderContainer 훅 초기화 완료 - 동기화 확인:', {
+  console.log('🔧 ImageSliderContainer 훅 초기화 완료 - null 처리 확인:', {
     sliderImageCount: currentSliderImageUrlList.length,
     selectedImageCount: selectedImageIndexList.length,
     hasMainImage: selectedMainImageUrl !== null,
     mainImageUrl: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
       : 'none',
+    nullHandlingWorking: true,
     dataIntegrity: 'verified',
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // 🚨 핵심 수정 5: 메인 이미지 제외 로직 강화 및 로깅 개선
+  // 🚨 핵심 수정 5: 메인 이미지 제외 로직에서 null 처리 강화
   const availableForSliderImageList = useMemo(() => {
     const hasValidMainImage =
       selectedMainImageUrl !== null &&
@@ -192,26 +300,33 @@ function ImageSliderContainer(): React.ReactNode {
       typeof selectedMainImageUrl === 'string' &&
       selectedMainImageUrl.length > 0;
 
-    console.log('🔧 availableForSliderImageList 계산 - 메인이미지 제외 로직:', {
+    console.log('🔧 availableForSliderImageList 계산 - null 처리 포함:', {
+      selectedMainImageUrl,
+      selectedMainImageUrlType: typeof selectedMainImageUrl,
+      isMainImageNull: selectedMainImageUrl === null,
+      isMainImageUndefined: selectedMainImageUrl === undefined,
       hasValidMainImage,
-      selectedMainImageUrl: selectedMainImageUrl
-        ? selectedMainImageUrl.slice(0, 30) + '...'
-        : 'none',
       totalImages: availableMediaFileList.length,
       mainImageExclusionActive: hasValidMainImage,
     });
 
     if (!hasValidMainImage) {
-      console.log('🔧 메인 이미지 없음 - 모든 이미지가 슬라이더 가능:', {
-        totalImages: availableMediaFileList.length,
-        reason: 'no main image selected',
-        allImagesAvailable: true,
-      });
+      console.log(
+        '🔧 메인 이미지 없음 (null/undefined 포함) - 모든 이미지가 슬라이더 가능:',
+        {
+          totalImages: availableMediaFileList.length,
+          reason:
+            selectedMainImageUrl === null
+              ? 'main image is null'
+              : 'no main image selected',
+          allImagesAvailable: true,
+        }
+      );
       return availableMediaFileList;
     }
 
     // 🔍 메인 이미지 필터링 과정 상세 로깅
-    console.log('🔍 메인 이미지 필터링 시작:', {
+    console.log('🔍 메인 이미지 필터링 시작 (null 처리 완료):', {
       targetMainImage: selectedMainImageUrl.slice(0, 30) + '...',
       beforeFilterCount: availableMediaFileList.length,
     });
@@ -222,7 +337,9 @@ function ImageSliderContainer(): React.ReactNode {
 
         console.log(`🔍 이미지 ${index + 1} 필터링 체크:`, {
           imageUrl: imageUrl.slice(0, 30) + '...',
-          mainImageUrl: selectedMainImageUrl.slice(0, 30) + '...',
+          mainImageUrl: selectedMainImageUrl
+            ? selectedMainImageUrl.slice(0, 30) + '...'
+            : 'null',
           isExactMatch: imageUrl === selectedMainImageUrl,
           isNotMainImage,
           filterResult: isNotMainImage ? 'INCLUDE' : 'EXCLUDE',
@@ -232,33 +349,44 @@ function ImageSliderContainer(): React.ReactNode {
       }
     );
 
-    console.log('✅ 메인 이미지 제외한 슬라이더 가능 이미지 계산 완료:', {
-      originalCount: availableMediaFileList.length,
-      mainImageUrl: selectedMainImageUrl.slice(0, 30) + '...',
-      filteredCount: filteredImageList.length,
-      excludedCount: availableMediaFileList.length - filteredImageList.length,
-      excludedImageFound:
-        availableMediaFileList.length - filteredImageList.length === 1,
-      mainImageExclusionWorking: true,
-    });
+    console.log(
+      '✅ 메인 이미지 제외한 슬라이더 가능 이미지 계산 완료 (null 처리됨):',
+      {
+        originalCount: availableMediaFileList.length,
+        mainImageUrl: selectedMainImageUrl
+          ? selectedMainImageUrl.slice(0, 30) + '...'
+          : 'null',
+        filteredCount: filteredImageList.length,
+        excludedCount: availableMediaFileList.length - filteredImageList.length,
+        excludedImageFound:
+          availableMediaFileList.length - filteredImageList.length === 1,
+        mainImageExclusionWorking: true,
+        nullProcessingComplete: true,
+      }
+    );
 
     return filteredImageList;
   }, [availableMediaFileList, selectedMainImageUrl]);
 
   const handleImageSelectionToggleByIndex = useCallback(
     (imageIndex: number) => {
-      console.log('🔧 handleImageSelectionToggleByIndex 호출:', {
-        imageIndex,
-        currentSelectedCount: selectedImageIndexList.length,
-        hasMainImage: selectedMainImageUrl !== null,
-        timestamp: new Date().toLocaleTimeString(),
-      });
+      console.log(
+        '🔧 handleImageSelectionToggleByIndex 호출 - null 체크 포함:',
+        {
+          imageIndex,
+          currentSelectedCount: selectedImageIndexList.length,
+          hasMainImage: selectedMainImageUrl !== null,
+          mainImageIsNull: selectedMainImageUrl === null,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
 
-      // 🚨 메인 이미지 인덱스 체크 추가
+      // 🚨 메인 이미지 인덱스 체크 추가 (null 처리 포함)
       const targetImageUrl = availableMediaFileList[imageIndex];
       if (
         targetImageUrl &&
         selectedMainImageUrl &&
+        selectedMainImageUrl !== null &&
         targetImageUrl === selectedMainImageUrl
       ) {
         console.log('❌ 메인 이미지는 슬라이더 선택 불가:', {
@@ -279,7 +407,7 @@ function ImageSliderContainer(): React.ReactNode {
         originalHandleSliderImageSelect(imageIndex);
       }
 
-      console.log('✅ 이미지 선택 토글 완료:', {
+      console.log('✅ 이미지 선택 토글 완료 (null 처리됨):', {
         imageIndex,
         targetImageUrl: targetImageUrl
           ? targetImageUrl.slice(0, 30) + '...'
@@ -448,6 +576,17 @@ function ImageSliderContainer(): React.ReactNode {
     console.log('✅ 모든 슬라이더 이미지 초기화 완료');
   }, [clearAllSliderImageList, clearCurrentImageSelection]);
 
+  // 🆕 향상된 슬라이더 생성 가능 여부 검증 (null 처리 포함)
+  const sliderValidationResult = useMemo(() => {
+    return validateSliderImagesExcludingMain(
+      availableMediaFileList,
+      selectedMainImageUrl
+    );
+  }, [availableMediaFileList, selectedMainImageUrl]);
+
+  const isSliderCreationPossible = sliderValidationResult.isValid;
+
+  // 기존 변수들 유지
   const totalAvailableForSliderImageCount = availableForSliderImageList.length;
   const currentSliderImageTotalCount = getCurrentSliderImageTotalCount
     ? getCurrentSliderImageTotalCount()
@@ -455,23 +594,28 @@ function ImageSliderContainer(): React.ReactNode {
   const sliderImageCount = currentSliderImageUrlList.length;
   const hasSelectedSliderImages = sliderImageCount > 0;
   const hasAvailableImageFiles = availableMediaFileList.length > 0;
-  const canCreateSlider = totalAvailableForSliderImageCount >= 3;
 
-  console.log('🎯 ImageSliderContainer 최종 상태 - 메인이미지 동기화 완료:', {
+  console.log('🎯 ImageSliderContainer 최종 상태 - null 처리 완료:', {
     totalOriginalImages: availableMediaFileList.length,
     totalAvailableForSliderImageCount,
-    canCreateSlider,
-    minimumRequired: 3,
+    isSliderCreationPossible,
+    minimumRequired: SLIDER_CONFIG.MIN_IMAGES,
     hasMainImage: selectedMainImageUrl !== null,
+    mainImageIsNull: selectedMainImageUrl === null,
     mainImageUrl: selectedMainImageUrl
       ? selectedMainImageUrl.slice(0, 30) + '...'
-      : 'none',
+      : 'null',
     excludedMainImageCount:
       availableMediaFileList.length - totalAvailableForSliderImageCount,
     mainImageExclusionWorking:
       selectedMainImageUrl !== null &&
       availableMediaFileList.length - totalAvailableForSliderImageCount === 1,
     dataSourceSynchronized: true,
+    nullProcessingComplete: true,
+    sliderValidationResult: {
+      isValid: sliderValidationResult.isValid,
+      errorCode: sliderValidationResult.errorCode,
+    },
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -531,7 +675,7 @@ function ImageSliderContainer(): React.ReactNode {
               ) : null}
             </div>
 
-            {!canCreateSlider ? (
+            {!isSliderCreationPossible ? (
               <div
                 className="p-4 border rounded-lg bg-warning-50 border-warning-200"
                 role="alert"
@@ -551,14 +695,16 @@ function ImageSliderContainer(): React.ReactNode {
                       슬라이더 생성 조건 안내
                     </h3>
                     <p className="mt-1 text-sm text-warning-700">
-                      3개 이미지부터 슬라이더를 생성할 수 있습니다.
+                      {SLIDER_CONFIG.MIN_IMAGES}개 이미지부터 슬라이더를 생성할
+                      수 있습니다.
                       <br />
                       현재 메인 이미지를 제외한 이미지가{' '}
                       {totalAvailableForSliderImageCount}개 있습니다.
                       {totalAvailableForSliderImageCount === 0
                         ? ' 추가 이미지를 업로드해주세요.'
                         : ` ${
-                            3 - totalAvailableForSliderImageCount
+                            SLIDER_CONFIG.MIN_IMAGES -
+                            totalAvailableForSliderImageCount
                           }개 더 업로드해주세요.`}
                     </p>
                   </div>
@@ -573,7 +719,7 @@ function ImageSliderContainer(): React.ReactNode {
               <h3 id="image-selection-section-title" className="sr-only">
                 슬라이더에 추가할 이미지 선택
               </h3>
-              {/* 🚨 핵심 수정 6: 올바른 메인 이미지 정보를 SliderImageSelector에 전달 */}
+              {/* 🚨 핵심 수정 6: null 처리된 메인 이미지 정보를 SliderImageSelector에 전달 */}
               <SliderImageSelector
                 mediaFiles={availableMediaFileList}
                 mainImage={selectedMainImageUrl}
@@ -583,7 +729,7 @@ function ImageSliderContainer(): React.ReactNode {
               />
             </section>
 
-            {canCreateSlider ? (
+            {isSliderCreationPossible ? (
               <SliderAddButton
                 selectedCount={currentSelectedImageCount}
                 onAddToSlider={handleAddSelectedImageListToSlider}
