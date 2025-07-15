@@ -1,10 +1,10 @@
 // 📁 imageUpload/hooks/useFileProcessing.ts
 
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { createLogger } from '../utils/loggerUtils';
-import { validateFile } from '../../utils/fileValidationUtils';
+import { validateFile } from '../utils/fileValidationUtils';
 import { generateSecureFileId } from '../utils/fileIdUtils';
-import { filterDuplicateFiles } from '../utils/duplicateFileUtils';
+import { filterDuplicateFilesWithProcessing } from '../utils/duplicateFileUtils';
 import {
   createFileReader,
   convertFilesToFileList,
@@ -12,37 +12,52 @@ import {
 
 const logger = createLogger('FILE_PROCESSING');
 
+// 🔑 타입 정의들
 type StateUpdaterFunction<T> = (previousValue: T) => T;
 
 interface FileProcessingCallbacks {
-  updateMediaValue: (
-    filesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  readonly updateMediaValue: (
+    filesOrUpdater: readonly string[] | StateUpdaterFunction<readonly string[]>
   ) => void;
-  updateSelectedFileNames: (
-    namesOrUpdater: string[] | StateUpdaterFunction<string[]>
+  readonly updateSelectedFileNames: (
+    namesOrUpdater: readonly string[] | StateUpdaterFunction<readonly string[]>
   ) => void;
-  showToastMessage: (toast: unknown) => void;
-  showDuplicateMessage: (files: File[]) => void;
-  startFileUpload: (fileId: string, fileName: string) => void;
-  updateFileProgress: (fileId: string, progress: number) => void;
-  completeFileUpload: (fileId: string, fileName: string) => void;
-  failFileUpload: (fileId: string, fileName: string) => void;
+  readonly showToastMessage: (toast: unknown) => void;
+  readonly showDuplicateMessage: (files: readonly File[]) => void;
+  readonly startFileUpload: (fileId: string, fileName: string) => void;
+  readonly updateFileProgress: (fileId: string, progress: number) => void;
+  readonly completeFileUpload: (fileId: string, fileName: string) => void;
+  readonly failFileUpload: (fileId: string, fileName: string) => void;
 }
 
 interface CurrentStateRef {
-  mediaFiles: string[];
-  fileNames: string[];
+  mediaFiles: readonly string[];
+  fileNames: readonly string[];
 }
 
+interface ProcessingFileInfo {
+  readonly fileId: string;
+  readonly fileName: string;
+  readonly placeholderIndex: number;
+  readonly startTime: number;
+  readonly status: 'pending' | 'processing' | 'completed' | 'failed';
+}
+
+interface FileProcessingResult {
+  readonly processFiles: (files: FileList) => void;
+  readonly handleFilesDropped: (files: File[]) => void;
+  readonly handleFileChange: (files: FileList) => void;
+  readonly validateProcessingState: () => boolean;
+}
+
+// 🔑 FileList를 File[] 배열로 안전하게 변환
 const convertFileListToMutableArray = (fileList: FileList): File[] => {
   const fileArray: File[] = [];
-  const fileListLength = fileList.length;
 
-  for (let fileIndex = 0; fileIndex < fileListLength; fileIndex++) {
+  for (let fileIndex = 0; fileIndex < fileList.length; fileIndex++) {
     const currentFile = fileList[fileIndex];
-    const isValidFile = currentFile !== null && currentFile !== undefined;
 
-    if (isValidFile) {
+    if (currentFile) {
       fileArray.push(currentFile);
     }
   }
@@ -56,15 +71,37 @@ const convertFileListToMutableArray = (fileList: FileList): File[] => {
   return fileArray;
 };
 
+// 🔑 안전한 Toast 메시지 생성
+const createSafeToastMessage = (toast: {
+  title: string;
+  description: string;
+  color: 'success' | 'warning' | 'danger' | 'primary';
+}): unknown => {
+  return {
+    title: toast.title,
+    description: toast.description,
+    color: toast.color,
+  };
+};
+
 export const useFileProcessing = (
-  currentMediaFilesList: string[],
-  currentSelectedFileNames: string[],
+  currentMediaFilesList: readonly string[],
+  currentSelectedFileNames: readonly string[],
   callbacks: FileProcessingCallbacks
-) => {
+): FileProcessingResult => {
   const currentStateRef = useRef<CurrentStateRef>({
     mediaFiles: currentMediaFilesList,
     fileNames: currentSelectedFileNames,
   });
+
+  // 🔑 핵심: 현재 처리 중인 파일들 추적 (Race Condition 해결)
+  const [processingFiles, setProcessingFiles] = useState<
+    Map<string, ProcessingFileInfo>
+  >(new Map());
+
+  // 🔑 처리 상태 동기화를 위한 락 메커니즘
+  const processingLockRef = useRef<boolean>(false);
+  const pendingOperationsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     currentStateRef.current = {
@@ -73,571 +110,369 @@ export const useFileProcessing = (
     };
   }, [currentMediaFilesList, currentSelectedFileNames]);
 
-  logger.debug('useFileProcessing 초기화 - 순차처리 모드 활성화', {
+  logger.debug('useFileProcessing 초기화 - Race Condition 해결 강화', {
     currentMediaFilesCount: currentMediaFilesList.length,
     currentSelectedFileNamesCount: currentSelectedFileNames.length,
-    sequentialProcessingEnabled: true,
     raceConditionFixed: true,
+    lockMechanismEnabled: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  const processIndividualFileAsync = useCallback(
-    (file: File): Promise<void> => {
-      return new Promise((resolveFileProcessing, rejectFileProcessing) => {
-        const fileId = generateSecureFileId(file.name);
-        const { name: fileName } = file;
+  // 🔑 처리 중인 파일 목록 관리
+  const addProcessingFile = useCallback(
+    (fileInfo: ProcessingFileInfo): void => {
+      setProcessingFiles((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(fileInfo.fileName, fileInfo);
 
-        console.log('🔍 [SEQUENTIAL_DEBUG] 순차 처리 - 개별 파일 시작:', {
+        console.log('🔒 [PROCESSING_LOCK] 파일 처리 등록:', {
+          파일명: fileInfo.fileName,
+          파일ID: fileInfo.fileId,
+          플레이스홀더인덱스: fileInfo.placeholderIndex,
+          처리중파일개수: newMap.size,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        return newMap;
+      });
+    },
+    []
+  );
+
+  const removeProcessingFile = useCallback((fileName: string): void => {
+    setProcessingFiles((prev) => {
+      const newMap = new Map(prev);
+      const removed = newMap.delete(fileName);
+
+      if (removed) {
+        console.log('🔓 [PROCESSING_UNLOCK] 파일 처리 완료:', {
           파일명: fileName,
-          파일ID: fileId,
-          파일크기: file.size,
-          파일타입: file.type,
-          현재저장된파일개수: currentStateRef.current.mediaFiles.length,
-          순차처리모드: true,
+          남은처리파일개수: newMap.size,
           timestamp: new Date().toLocaleTimeString(),
         });
+      }
 
-        logger.debug('순차 파일 처리 시작', {
-          fileName,
-          fileId,
-          fileSize: file.size,
-          sequentialMode: true,
-          timestamp: new Date().toLocaleTimeString(),
-        });
+      return newMap;
+    });
+  }, []);
 
-        const validationResult = validateFile(file);
-        const { isValid: fileIsValid, errorMessage: validationError } =
-          validationResult;
+  const getProcessingFileNames = useCallback((): string[] => {
+    return Array.from(processingFiles.keys());
+  }, [processingFiles]);
 
-        console.log('🔍 [SEQUENTIAL_DEBUG] 파일 검증 결과:', {
+  // 🔑 개별 파일 백그라운드 처리 (상태 예약 후)
+  const processFileInBackground = useCallback(
+    (file: File, placeholderIndex: number): void => {
+      const fileId = generateSecureFileId(file.name);
+      const { name: fileName } = file;
+
+      console.log('🔍 [BACKGROUND_PROCESS] 백그라운드 파일 처리 시작:', {
+        파일명: fileName,
+        파일ID: fileId,
+        플레이스홀더인덱스: placeholderIndex,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+
+      // 🔑 처리 정보 등록
+      const processingInfo: ProcessingFileInfo = {
+        fileId,
+        fileName,
+        placeholderIndex,
+        startTime: Date.now(),
+        status: 'processing',
+      };
+
+      addProcessingFile(processingInfo);
+
+      const validationResult = validateFile(file);
+      const { isValid: fileIsValid, errorMessage: validationError } =
+        validationResult;
+
+      if (!fileIsValid) {
+        const errorMessage = validationError || 'unknown';
+
+        console.log('🔍 [BACKGROUND_PROCESS] 파일 검증 실패:', {
           파일명: fileName,
-          검증결과: fileIsValid ? '✅ 유효' : '❌ 무효',
-          에러메시지:
-            validationError !== null && validationError !== undefined
-              ? validationError
-              : '없음',
-          timestamp: new Date().toLocaleTimeString(),
+          에러메시지: errorMessage,
         });
 
-        if (!fileIsValid) {
-          const errorMessage =
-            validationError !== null && validationError !== undefined
-              ? validationError
-              : 'unknown';
+        // 🚨 검증 실패 시 해당 슬롯 제거
+        callbacks.updateMediaValue((prev) =>
+          prev.filter((_, index) => index !== placeholderIndex)
+        );
+        callbacks.updateSelectedFileNames((prev) =>
+          prev.filter((_, index) => index !== placeholderIndex)
+        );
 
-          console.log('🔍 [SEQUENTIAL_DEBUG] 파일 검증 실패로 처리 중단:', {
-            파일명: fileName,
-            에러메시지: errorMessage,
-            timestamp: new Date().toLocaleTimeString(),
-          });
+        // 처리 중 목록에서 제거
+        removeProcessingFile(fileName);
 
-          logger.error('파일 검증 실패', {
-            fileName,
-            error: errorMessage,
-          });
-
-          callbacks.failFileUpload(fileId, fileName);
-          callbacks.showToastMessage({
+        callbacks.showToastMessage(
+          createSafeToastMessage({
             title: '업로드 실패',
             description:
               errorMessage !== 'unknown'
                 ? errorMessage
                 : `${fileName} 파일 검증에 실패했습니다.`,
             color: 'danger',
-          });
-
-          rejectFileProcessing(new Error(`파일 검증 실패: ${errorMessage}`));
-          return;
-        }
-
-        console.log('🔍 [SEQUENTIAL_DEBUG] 파일 처리 진행:', {
-          파일명: fileName,
-          파일ID: fileId,
-          다음단계: 'FileReader 생성 및 처리 시작',
-          timestamp: new Date().toLocaleTimeString(),
-        });
-
-        callbacks.startFileUpload(fileId, fileName);
-
-        const handleProgressUpdate = (progress: number) => {
-          console.log('🔍 [SEQUENTIAL_PROGRESS] 파일 처리 진행률:', {
-            파일명: fileName,
-            진행률: `${progress}%`,
-            timestamp: new Date().toLocaleTimeString(),
-          });
-          callbacks.updateFileProgress(fileId, progress);
-        };
-
-        const handleSuccessfulProcessing = (result: string) => {
-          console.log('🔍 [SEQUENTIAL_SUCCESS] 파일 처리 성공:', {
-            파일명: fileName,
-            파일ID: fileId,
-            결과URL길이: result.length,
-            결과URL미리보기: result.slice(0, 50) + '...',
-            순차처리완료: true,
-            timestamp: new Date().toLocaleTimeString(),
-          });
-
-          setTimeout(() => {
-            console.log('🔍 [SEQUENTIAL_SUCCESS] 상태 업데이트 실행:', {
-              파일명: fileName,
-              파일ID: fileId,
-              업데이트방식: '함수형 상태 업데이트',
-              순차처리모드: true,
-              timestamp: new Date().toLocaleTimeString(),
-            });
-
-            logger.debug('순차 처리 - 상태 업데이트 실행', {
-              fileName,
-              fileId,
-              updateMethod: 'functional',
-              sequentialMode: true,
-              timestamp: new Date().toLocaleTimeString(),
-            });
-
-            try {
-              console.log('🔍 [SEQUENTIAL_SUCCESS] 함수형 업데이트 시작:', {
-                파일명: fileName,
-                파일ID: fileId,
-                이전방식: '동시 처리로 인한 Race Condition',
-                새방식: '순차 처리로 Race Condition 해결',
-                timestamp: new Date().toLocaleTimeString(),
-              });
-
-              callbacks.updateMediaValue((previousMediaFiles: string[]) => {
-                const updatedMediaFiles = [...previousMediaFiles, result];
-
-                console.log(
-                  '🔍 [SEQUENTIAL_UPDATE] 미디어 파일 순차 업데이트:',
-                  {
-                    파일명: fileName,
-                    이전파일개수: previousMediaFiles.length,
-                    새파일개수: updatedMediaFiles.length,
-                    추가된파일: result.slice(0, 30) + '...',
-                    순차처리완료: true,
-                    raceConditionFixed: true,
-                    timestamp: new Date().toLocaleTimeString(),
-                  }
-                );
-
-                return updatedMediaFiles;
-              });
-
-              callbacks.updateSelectedFileNames(
-                (previousFileNames: string[]) => {
-                  const updatedFileNames = [...previousFileNames, fileName];
-
-                  console.log('🔍 [SEQUENTIAL_UPDATE] 파일명 순차 업데이트:', {
-                    파일명: fileName,
-                    이전파일명개수: previousFileNames.length,
-                    새파일명개수: updatedFileNames.length,
-                    추가된파일명: fileName,
-                    순차처리완료: true,
-                    raceConditionFixed: true,
-                    timestamp: new Date().toLocaleTimeString(),
-                  });
-
-                  return updatedFileNames;
-                }
-              );
-
-              callbacks.completeFileUpload(fileId, fileName);
-
-              console.log('🔍 [SEQUENTIAL_SUCCESS] 순차 처리 완료:', {
-                파일명: fileName,
-                updateMediaValue호출: '함수형 업데이트 완료',
-                updateSelectedFileNames호출: '함수형 업데이트 완료',
-                completeFileUpload호출: '완료',
-                순차처리완료: true,
-                raceConditionResolved: true,
-                timestamp: new Date().toLocaleTimeString(),
-              });
-
-              callbacks.showToastMessage({
-                title: '업로드 완료',
-                description: `${fileName} 파일이 성공적으로 업로드되었습니다.`,
-                color: 'success',
-              });
-
-              logger.info('순차 파일 업로드 완료', {
-                fileName,
-                fileId,
-                sequentialProcessingCompleted: true,
-                raceConditionFixed: true,
-              });
-
-              resolveFileProcessing();
-            } catch (uploadError) {
-              const errorMessage =
-                uploadError instanceof Error
-                  ? uploadError.message
-                  : 'Unknown upload error';
-
-              console.error('🔍 [SEQUENTIAL_ERROR] 업로드 처리 중 오류:', {
-                파일명: fileName,
-                파일ID: fileId,
-                오류: errorMessage,
-                timestamp: new Date().toLocaleTimeString(),
-              });
-
-              logger.error('순차 업로드 처리 중 오류', {
-                fileName,
-                fileId,
-                error: errorMessage,
-              });
-
-              callbacks.failFileUpload(fileId, fileName);
-              callbacks.showToastMessage({
-                title: '파일 추가 실패',
-                description: '파일을 추가하는 중 오류가 발생했습니다.',
-                color: 'danger',
-              });
-
-              rejectFileProcessing(
-                uploadError instanceof Error
-                  ? uploadError
-                  : new Error(errorMessage)
-              );
-            }
-          }, 1500);
-        };
-
-        const handleProcessingError = (error: Error) => {
-          const errorMessage =
-            error instanceof Error ? error.message : 'FileReader 에러';
-
-          console.error('🔍 [SEQUENTIAL_ERROR] FileReader 에러:', {
-            파일명: fileName,
-            파일ID: fileId,
-            오류: errorMessage,
-            timestamp: new Date().toLocaleTimeString(),
-          });
-
-          logger.error('순차 처리 - FileReader 에러', {
-            fileName,
-            fileId,
-            error: errorMessage,
-          });
-
-          callbacks.failFileUpload(fileId, fileName);
-          callbacks.showToastMessage({
-            title: '업로드 실패',
-            description: '파일 읽기 중 오류가 발생했습니다.',
-            color: 'danger',
-          });
-
-          rejectFileProcessing(error);
-        };
-
-        console.log('🔍 [SEQUENTIAL_DEBUG] createFileReader 호출:', {
-          파일명: fileName,
-          파일ID: fileId,
-          순차처리모드: true,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-
-        createFileReader(
-          file,
-          fileId,
-          handleProgressUpdate,
-          handleSuccessfulProcessing,
-          handleProcessingError
+          })
         );
-      });
-    },
-    [callbacks]
-  );
-
-  const processFiles = useCallback(
-    async (files: FileList) => {
-      console.log('🔍 [SEQUENTIAL_PROCESS] 순차 파일 처리 시작:', {
-        입력파일개수: files.length,
-        입력파일명들: Array.from(files).map((file) => file.name),
-        현재저장된이미지개수: currentMediaFilesList.length,
-        순차처리모드: true,
-        raceConditionFix: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      logger.debug('순차 파일 처리 시작', {
-        fileCount: files.length,
-        sequentialMode: true,
-        raceConditionFixed: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      const mutableFilesArray = convertFileListToMutableArray(files);
-
-      const duplicateFilterResult = filterDuplicateFiles(
-        mutableFilesArray,
-        currentSelectedFileNames
-      );
-
-      const uniqueFiles: File[] = [];
-      const duplicateFiles: File[] = [];
-
-      const {
-        uniqueFiles: resultUniqueFiles,
-        duplicateFiles: resultDuplicateFiles,
-      } = duplicateFilterResult;
-
-      const hasUniqueFiles =
-        resultUniqueFiles !== null && resultUniqueFiles !== undefined;
-      if (hasUniqueFiles) {
-        const uniqueFilesLength = resultUniqueFiles.length;
-        for (
-          let uniqueIndex = 0;
-          uniqueIndex < uniqueFilesLength;
-          uniqueIndex++
-        ) {
-          const uniqueFile = resultUniqueFiles[uniqueIndex];
-          const isValidUniqueFile =
-            uniqueFile !== null && uniqueFile !== undefined;
-
-          if (isValidUniqueFile) {
-            uniqueFiles.push(uniqueFile);
-          }
-        }
-      }
-
-      const hasDuplicateFiles =
-        resultDuplicateFiles !== null && resultDuplicateFiles !== undefined;
-      if (hasDuplicateFiles) {
-        const duplicateFilesLength = resultDuplicateFiles.length;
-        for (
-          let duplicateIndex = 0;
-          duplicateIndex < duplicateFilesLength;
-          duplicateIndex++
-        ) {
-          const duplicateFile = resultDuplicateFiles[duplicateIndex];
-          const isValidDuplicateFile =
-            duplicateFile !== null && duplicateFile !== undefined;
-
-          if (isValidDuplicateFile) {
-            duplicateFiles.push(duplicateFile);
-          }
-        }
-      }
-
-      console.log('🔍 [SEQUENTIAL_PROCESS] 중복 파일 필터링 완료:', {
-        입력파일개수: mutableFilesArray.length,
-        고유파일개수: uniqueFiles.length,
-        중복파일개수: duplicateFiles.length,
-        고유파일명들: uniqueFiles.map((file) => file.name),
-        중복파일명들: duplicateFiles.map((file) => file.name),
-        현재저장된파일명들: currentSelectedFileNames,
-        순차처리예정: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      const hasDuplicatesFound = duplicateFiles.length > 0;
-
-      if (hasDuplicatesFound) {
-        logger.debug('중복 파일 발견! 애니메이션 표시', {
-          duplicateFileNames: duplicateFiles.map((file) => file.name),
-          duplicateCount: duplicateFiles.length,
-        });
-
-        callbacks.showDuplicateMessage(duplicateFiles);
-        callbacks.showToastMessage({
-          title: '중복 파일 발견',
-          description: `${duplicateFiles.length}개의 중복 파일이 제외되었습니다`,
-          color: 'warning',
-        });
-      }
-
-      const hasNoUniqueFiles = uniqueFiles.length === 0;
-
-      if (hasNoUniqueFiles) {
-        console.log('🔍 [SEQUENTIAL_PROCESS] 처리할 고유 파일이 없음:', {
-          uniqueFiles개수: uniqueFiles.length,
-          중복제거후결과: '모든 파일이 중복되어 처리할 파일 없음',
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        logger.warn('처리할 고유 파일이 없음');
         return;
       }
 
-      console.log(
-        '🚀 [SEQUENTIAL_PROCESS] 순차 처리 시작 - Race Condition 해결:',
-        {
-          처리할파일개수: uniqueFiles.length,
-          처리할파일명들: uniqueFiles.map((file) => file.name),
-          이전방식: 'forEach 동시 처리 (Race Condition 발생)',
-          새방식: 'for...of 순차 처리 (Race Condition 해결)',
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
+      callbacks.startFileUpload(fileId, fileName);
 
-      logger.info('순차 파일 처리 시작 - Race Condition 해결', {
-        uniqueFilesCount: uniqueFiles.length,
-        uniqueFileNames: uniqueFiles.map((file) => file.name),
-        processingMethod: 'sequential',
-        raceConditionFixed: true,
-      });
+      const handleProgressUpdate = (progress: number): void => {
+        console.log('🔍 [BACKGROUND_PROGRESS] 백그라운드 진행률 업데이트:', {
+          파일명: fileName,
+          진행률: `${progress}%`,
+        });
+        callbacks.updateFileProgress(fileId, progress);
+      };
+
+      const handleSuccessfulProcessing = (result: string): void => {
+        console.log('🔍 [BACKGROUND_SUCCESS] 백그라운드 처리 성공:', {
+          파일명: fileName,
+          플레이스홀더인덱스: placeholderIndex,
+          결과URL길이: result.length,
+        });
+
+        // 🎯 플레이스홀더를 실제 URL로 교체
+        callbacks.updateMediaValue((prev) => {
+          const newArray = [...prev];
+          newArray[placeholderIndex] = result;
+
+          console.log('🔄 [BACKGROUND_SUCCESS] 플레이스홀더 URL 교체:', {
+            파일명: fileName,
+            인덱스: placeholderIndex,
+            이전값: prev[placeholderIndex]?.slice(0, 30) + '...',
+            새값: result.slice(0, 30) + '...',
+          });
+
+          return newArray;
+        });
+
+        // 처리 중 목록에서 제거
+        removeProcessingFile(fileName);
+
+        callbacks.completeFileUpload(fileId, fileName);
+        callbacks.showToastMessage(
+          createSafeToastMessage({
+            title: '업로드 완료',
+            description: `${fileName} 파일이 성공적으로 업로드되었습니다.`,
+            color: 'success',
+          })
+        );
+
+        logger.info('백그라운드 파일 업로드 완료', {
+          fileName,
+          placeholderIndex,
+          raceConditionFixed: true,
+        });
+      };
+
+      const handleProcessingError = (error: Error): void => {
+        const errorMessage = error.message || 'FileReader 에러';
+
+        console.error('🔍 [BACKGROUND_ERROR] 백그라운드 처리 실패:', {
+          파일명: fileName,
+          플레이스홀더인덱스: placeholderIndex,
+          오류: errorMessage,
+        });
+
+        // 🚨 에러 시 해당 슬롯 제거
+        callbacks.updateMediaValue((prev) =>
+          prev.filter((_, index) => index !== placeholderIndex)
+        );
+        callbacks.updateSelectedFileNames((prev) =>
+          prev.filter((_, index) => index !== placeholderIndex)
+        );
+
+        // 처리 중 목록에서 제거
+        removeProcessingFile(fileName);
+
+        callbacks.failFileUpload(fileId, fileName);
+        callbacks.showToastMessage(
+          createSafeToastMessage({
+            title: '업로드 실패',
+            description: '파일 읽기 중 오류가 발생했습니다.',
+            color: 'danger',
+          })
+        );
+      };
+
+      createFileReader(
+        file,
+        fileId,
+        handleProgressUpdate,
+        handleSuccessfulProcessing,
+        handleProcessingError
+      );
+    },
+    [callbacks, addProcessingFile, removeProcessingFile]
+  );
+
+  // 🔑 핵심: 원자적 상태 예약 시스템 (Race Condition 완전 해결)
+  const processFiles = useCallback(
+    (files: FileList): void => {
+      // 🔒 락 메커니즘으로 동시 처리 방지
+      if (processingLockRef.current) {
+        console.warn('🚫 [RACE_PREVENTION] 이미 처리 중이므로 무시:', {
+          현재처리중: true,
+          요청파일개수: files.length,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        return;
+      }
+
+      processingLockRef.current = true;
 
       try {
-        for (const file of uniqueFiles) {
-          console.log('🔍 [SEQUENTIAL_LOOP] 순차 처리 - 파일 처리 시작:', {
-            파일명: file.name,
-            파일크기: file.size,
-            파일타입: file.type,
-            처리방식: '순차 처리 (Race Condition 해결)',
-            timestamp: new Date().toLocaleTimeString(),
+        console.log('🔍 [ATOMIC_RESERVATION] 원자적 상태 예약 시스템 시작:', {
+          입력파일개수: files.length,
+          현재저장된이미지개수: currentMediaFilesList.length,
+          원자적처리: true,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        const mutableFilesArray = convertFileListToMutableArray(files);
+
+        // 🔑 핵심: 현재 처리 중인 파일들도 포함해서 중복 체크
+        const processingFileNames = getProcessingFileNames();
+
+        console.log('🔧 [ATOMIC_RESERVATION] 처리 상태 정보:', {
+          현재미디어파일개수: currentSelectedFileNames.length,
+          처리중파일개수: processingFileNames.length,
+          처리중파일목록: processingFileNames,
+          새로입력된파일개수: mutableFilesArray.length,
+        });
+
+        // 🔧 중복 필터링 (처리 중인 파일들도 고려)
+        const duplicateFilterResult = filterDuplicateFilesWithProcessing(
+          mutableFilesArray,
+          [...currentSelectedFileNames], // readonly를 mutable로 변환
+          processingFileNames
+        );
+
+        // 🔧 readonly를 mutable로 변환
+        const uniqueFiles: File[] = [...duplicateFilterResult.uniqueFiles];
+        const duplicateFiles: File[] = [
+          ...duplicateFilterResult.duplicateFiles,
+        ];
+
+        console.log('🔍 [ATOMIC_RESERVATION] 강화된 중복 체크 완료:', {
+          입력파일개수: mutableFilesArray.length,
+          고유파일개수: uniqueFiles.length,
+          중복파일개수: duplicateFiles.length,
+          현재처리중파일개수: processingFileNames.length,
+          원자적처리적용: true,
+        });
+
+        if (duplicateFiles.length > 0) {
+          logger.debug('중복 파일 발견', {
+            duplicateFileNames: duplicateFiles.map((file) => file.name),
           });
 
-          await processIndividualFileAsync(file);
-
-          console.log('🔍 [SEQUENTIAL_LOOP] 순차 처리 - 파일 처리 완료:', {
-            파일명: file.name,
-            처리완료: true,
-            다음파일준비: true,
-            raceConditionAvoided: true,
-            timestamp: new Date().toLocaleTimeString(),
-          });
+          callbacks.showDuplicateMessage(duplicateFiles);
+          callbacks.showToastMessage(
+            createSafeToastMessage({
+              title: '중복 파일 발견',
+              description: `${duplicateFiles.length}개의 중복 파일이 제외되었습니다`,
+              color: 'warning',
+            })
+          );
         }
 
-        console.log('✅ [SEQUENTIAL_COMPLETE] 모든 파일 순차 처리 완료:', {
-          처리된파일개수: uniqueFiles.length,
-          처리된파일명들: uniqueFiles.map((file) => file.name),
-          raceConditionResolved: true,
-          sequentialProcessingSuccess: true,
-          timestamp: new Date().toLocaleTimeString(),
+        if (uniqueFiles.length === 0) {
+          console.log('🔍 [ATOMIC_RESERVATION] 처리할 고유 파일이 없음');
+          return;
+        }
+
+        console.log('🚀 [ATOMIC_RESERVATION] 원자적 상태 예약 실행:', {
+          고유파일개수: uniqueFiles.length,
+          고유파일명들: uniqueFiles.map((file) => file.name),
         });
 
-        logger.info('모든 파일 순차 처리 완료', {
-          processedFilesCount: uniqueFiles.length,
+        // 🔒 즉시 상태에 플레이스홀더 추가 (원자적 처리)
+        const placeholderUrls = uniqueFiles.map(
+          (_, index) => `placeholder-${Date.now()}-${index}-processing`
+        );
+        const fileNames = uniqueFiles.map((file) => file.name);
+
+        // 🎯 동시에 두 상태 업데이트 (원자적 예약)
+        callbacks.updateMediaValue((prev) => [...prev, ...placeholderUrls]);
+        callbacks.updateSelectedFileNames((prev) => [...prev, ...fileNames]);
+
+        console.log('✅ [ATOMIC_RESERVATION] 상태 예약 완료:', {
+          플레이스홀더개수: placeholderUrls.length,
+          예약된파일명들: fileNames,
+          원자적예약완료: true,
           raceConditionFixed: true,
-          sequentialProcessingCompleted: true,
-        });
-      } catch (sequentialError) {
-        const errorMessage =
-          sequentialError instanceof Error
-            ? sequentialError.message
-            : 'Unknown sequential processing error';
-
-        console.error('❌ [SEQUENTIAL_ERROR] 순차 처리 중 오류:', {
-          오류: errorMessage,
-          처리중이던파일개수: uniqueFiles.length,
-          timestamp: new Date().toLocaleTimeString(),
         });
 
-        logger.error('순차 처리 중 오류', {
-          error: errorMessage,
-          uniqueFilesCount: uniqueFiles.length,
+        // 🎯 백그라운드에서 실제 파일 처리 (비동기)
+        uniqueFiles.forEach((file, index) => {
+          const placeholderIndex = currentMediaFilesList.length + index;
+
+          console.log('🔄 [ATOMIC_RESERVATION] 백그라운드 처리 시작:', {
+            파일명: file.name,
+            플레이스홀더인덱스: placeholderIndex,
+          });
+
+          // 비동기적으로 백그라운드 처리
+          setTimeout(() => {
+            processFileInBackground(file, placeholderIndex);
+          }, 100 + index * 50); // 순차적 처리를 위한 지연
         });
 
-        callbacks.showToastMessage({
-          title: '순차 처리 실패',
-          description: '파일 순차 처리 중 오류가 발생했습니다.',
-          color: 'danger',
+        logger.info('원자적 상태 예약 시스템 완료', {
+          reservedFilesCount: uniqueFiles.length,
+          atomicReservationCompleted: true,
+          raceConditionFixed: true,
         });
+      } finally {
+        // 🔓 락 해제 (일정 시간 후)
+        setTimeout(() => {
+          processingLockRef.current = false;
+          console.log('🔓 [RACE_PREVENTION] 처리 락 해제');
+        }, 500);
       }
     },
     [
       currentSelectedFileNames,
-      callbacks,
       currentMediaFilesList,
-      processIndividualFileAsync,
+      getProcessingFileNames,
+      callbacks,
+      processFileInBackground,
     ]
   );
 
   const handleFilesDropped = useCallback(
-    (droppedFilesList: File[]) => {
-      console.log(
-        '🔍 [DROP_HANDLER_DEBUG] handleFilesDropped 호출 - 순차처리:',
-        {
-          입력파일개수: droppedFilesList.length,
-          입력파일명들: droppedFilesList.map((file) => file.name),
-          현재저장된이미지개수: currentStateRef.current.mediaFiles.length,
-          순차처리모드: true,
-          raceConditionFixed: true,
-          timestamp: new Date().toLocaleTimeString(),
-        }
-      );
-
-      logger.debug('handleFilesDropped - 순차 처리 모드', {
-        fileCount: droppedFilesList.length,
-        fileNames: droppedFilesList.map((file) => file.name),
-        sequentialMode: true,
-        timestamp: new Date().toLocaleTimeString(),
+    (droppedFilesList: File[]): void => {
+      console.log('🔍 [DROP_HANDLER] 드롭 파일 처리 - 원자적 예약 시스템:', {
+        입력파일개수: droppedFilesList.length,
+        원자적예약시스템: true,
       });
 
-      const hasNoFiles = droppedFilesList.length === 0;
-
-      if (hasNoFiles) {
-        console.log('🔍 [DROP_HANDLER_DEBUG] 드롭된 파일이 없음:', {
-          파일개수: droppedFilesList.length,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        logger.warn('드롭된 파일이 없음');
+      if (droppedFilesList.length === 0) {
         return;
       }
 
-      console.log('🔍 [DROP_HANDLER_DEBUG] FileList 변환 시작:', {
-        입력파일개수: droppedFilesList.length,
-        변환함수: 'convertFilesToFileList',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
       const fileListObject = convertFilesToFileList(droppedFilesList);
-
-      console.log('🔍 [DROP_HANDLER_DEBUG] 순차 처리 호출 예정:', {
-        변환후FileList길이: fileListObject.length,
-        processFiles호출예정: true,
-        순차처리모드: true,
-        raceConditionFixed: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
       processFiles(fileListObject);
     },
     [processFiles]
   );
 
   const handleFileChange = useCallback(
-    (changedFileList: FileList) => {
-      console.log('🔍 [CHANGE_DEBUG] handleFileChange 호출 - 순차처리:', {
+    (changedFileList: FileList): void => {
+      console.log('🔍 [CHANGE_HANDLER] 파일 변경 처리 - 원자적 예약 시스템:', {
         변경된파일개수: changedFileList.length,
-        변경된파일명들: Array.from(changedFileList).map((file) => file.name),
-        순차처리모드: true,
-        raceConditionFixed: true,
-        timestamp: new Date().toLocaleTimeString(),
+        원자적예약시스템: true,
       });
 
-      logger.debug('handleFileChange - 순차 처리 모드', {
-        fileCount: changedFileList.length,
-        sequentialMode: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-
-      const hasFiles = changedFileList.length > 0;
-
-      const changeAction = hasFiles
-        ? 'process-files-sequential'
-        : 'skip-processing';
-
-      if (hasFiles) {
-        console.log('🔍 [CHANGE_DEBUG] 파일 변경 감지, 순차 처리 시작:', {
-          파일개수: changedFileList.length,
-          changeAction,
-          순차처리사용: true,
-          raceConditionFixed: true,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        logger.debug('파일 변경 감지, 순차 처리 시작', {
-          fileCount: changedFileList.length,
-          changeAction,
-          sequentialMode: true,
-        });
+      if (changedFileList.length > 0) {
         processFiles(changedFileList);
-      } else {
-        console.log('🔍 [CHANGE_DEBUG] 변경된 파일이 없음:', {
-          파일개수: changedFileList.length,
-          changeAction,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        logger.debug('변경된 파일이 없음', { changeAction });
       }
     },
     [processFiles]
@@ -647,37 +482,36 @@ export const useFileProcessing = (
     const { mediaFiles: currentMediaFiles, fileNames: currentFileNames } =
       currentStateRef.current;
 
-    const hasValidMediaFiles = Array.isArray(currentMediaFiles);
-    const hasValidFileNames = Array.isArray(currentFileNames);
-    const hasConsistentLength =
+    const isValidMediaFiles = Array.isArray(currentMediaFiles);
+    const isValidFileNames = Array.isArray(currentFileNames);
+    const isLengthMatching =
       currentMediaFiles.length === currentFileNames.length;
 
-    const isValidState =
-      hasValidMediaFiles && hasValidFileNames && hasConsistentLength;
+    const isValid = isValidMediaFiles && isValidFileNames && isLengthMatching;
 
-    console.log('🔍 [VALIDATE_DEBUG] 순차 처리 상태 검증:', {
-      현재미디어파일개수: currentMediaFiles.length,
-      현재파일명개수: currentFileNames.length,
-      hasValidMediaFiles,
-      hasValidFileNames,
-      hasConsistentLength,
-      isValidState,
-      순차처리모드: true,
-      raceConditionFixed: true,
-      timestamp: new Date().toLocaleTimeString(),
+    logger.debug('처리 상태 검증', {
+      isValidMediaFiles,
+      isValidFileNames,
+      isLengthMatching,
+      mediaFilesLength: currentMediaFiles.length,
+      fileNamesLength: currentFileNames.length,
+      processingFilesCount: processingFiles.size,
+      isValid,
     });
 
-    logger.debug('순차 처리 상태 검증', {
-      hasValidMediaFiles,
-      hasValidFileNames,
-      hasConsistentLength,
-      isValidState,
-      mediaFilesCount: currentMediaFiles.length,
-      fileNamesCount: currentFileNames.length,
-      sequentialMode: true,
-    });
+    return isValid;
+  }, [processingFiles.size]);
 
-    return isValidState;
+  // 🔑 정리 함수 (메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      // 모든 처리 중인 파일 정리
+      setProcessingFiles(new Map());
+      pendingOperationsRef.current.clear();
+      processingLockRef.current = false;
+
+      console.log('🧹 [CLEANUP] useFileProcessing 정리 완료');
+    };
   }, []);
 
   return {

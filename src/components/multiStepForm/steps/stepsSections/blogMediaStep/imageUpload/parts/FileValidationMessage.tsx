@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from '@heroui/react';
 import { Icon } from '@iconify/react';
-import { type FileValidationResult } from '../../utils/fileValidationUtils';
+import { type FileValidationResult } from '../utils/fileValidationUtils';
 
 interface FileValidationMessageProps {
   validationResults: Record<string, FileValidationResult>;

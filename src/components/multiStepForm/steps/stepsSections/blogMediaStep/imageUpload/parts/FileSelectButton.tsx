@@ -2,14 +2,13 @@
 
 import React, {
   useRef,
-  forwardRef,
   useImperativeHandle,
   useCallback,
   useMemo,
 } from 'react';
 import { useImageUploadContext } from '../context/ImageUploadContext';
 import { createLogger } from '../utils/loggerUtils';
-import { generateAcceptString } from '../../utils/fileFormatUtils';
+import { generateAcceptString } from '../utils/fileFormatUtils';
 
 const logger = createLogger('FILE_SELECT_BUTTON');
 
@@ -17,7 +16,8 @@ export interface FileSelectButtonRef {
   clickFileInput: () => void;
 }
 
-const FileSelectButton = forwardRef<FileSelectButtonRef, {}>((_, ref) => {
+// ✅ forwardRef 제거하고 일반 컴포넌트로 변경
+function FileSelectButton(): React.ReactNode {
   // ✅ Context에서 모든 핸들러 가져오기 (Props 0개)
   const { handleFileChange, fileSelectButtonRef } = useImageUploadContext();
 
@@ -50,16 +50,7 @@ const FileSelectButton = forwardRef<FileSelectButtonRef, {}>((_, ref) => {
     }
   }, []);
 
-  // 🔧 외부 ref에 메서드 노출
-  useImperativeHandle(
-    ref,
-    () => ({
-      clickFileInput: triggerFileInputClick,
-    }),
-    [triggerFileInputClick]
-  );
-
-  // 🔧 Context의 ref와 연결
+  // ✅ Context의 ref에만 연결 (forwardRef 제거)
   useImperativeHandle(
     fileSelectButtonRef,
     () => ({
@@ -180,6 +171,7 @@ const FileSelectButton = forwardRef<FileSelectButtonRef, {}>((_, ref) => {
     hasAcceptString: acceptString.length > 0,
     inputAttributesReady: true,
     accessibilityAttributesReady: true,
+    refConnected: true, // ✅ Context ref에 연결됨
   });
 
   return (
@@ -204,8 +196,6 @@ const FileSelectButton = forwardRef<FileSelectButtonRef, {}>((_, ref) => {
       </div>
     </>
   );
-});
-
-FileSelectButton.displayName = 'FileSelectButton';
+}
 
 export default FileSelectButton;

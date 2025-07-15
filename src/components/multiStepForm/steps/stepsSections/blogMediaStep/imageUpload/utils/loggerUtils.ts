@@ -23,6 +23,63 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
+// 🔧 순환 참조 안전한 JSON 변환 함수 추가
+const safeStringify = (data: Record<string, unknown>): string => {
+  const seen = new WeakSet();
+
+  try {
+    return JSON.stringify(
+      data,
+      (key, value) => {
+        // 🔧 HTML 엘리먼트나 React 관련 객체 필터링
+        if (typeof value === 'object' && value !== null) {
+          // React Fiber 관련 속성 제외
+          if (key.startsWith('__react') || key.startsWith('_react')) {
+            return '[React Internal]';
+          }
+
+          // HTML 엘리먼트 필터링
+          if (value instanceof HTMLElement) {
+            return `[HTMLElement: ${value.tagName}]`;
+          }
+
+          // Event 객체 필터링
+          if (value instanceof Event) {
+            return {
+              type: value.type,
+              timeStamp: value.timeStamp,
+              target: '[Event Target]',
+            };
+          }
+
+          // SyntheticEvent 필터링 (React 이벤트)
+          if (value && typeof value === 'object' && 'nativeEvent' in value) {
+            return {
+              type: value.type || 'SyntheticEvent',
+              timeStamp: value.timeStamp || Date.now(),
+              target: '[SyntheticEvent Target]',
+            };
+          }
+
+          // 순환 참조 체크
+          if (seen.has(value)) {
+            return '[Circular Reference]';
+          }
+          seen.add(value);
+        }
+
+        return value;
+      },
+      2
+    );
+  } catch (error) {
+    // JSON 변환 실패 시 안전한 대체
+    return `[Stringify Error: ${
+      error instanceof Error ? error.message : 'Unknown'
+    }]`;
+  }
+};
+
 // 환경에 따른 로그 레벨 설정
 const getCurrentLogLevel = (): LogLevel => {
   // 브라우저 환경에서 개발/프로덕션 구분
@@ -88,7 +145,20 @@ export const createLogger = (defaultCategory: string): LoggerInterface => {
 
       if (typeof logMethod === 'function') {
         if (Object.keys(logData).length > 0) {
-          logMethod(logOutput, logData);
+          // 🔧 안전한 JSON 변환 사용
+          try {
+            // 간단한 데이터는 직접 출력
+            if (Object.keys(logData).length < 5) {
+              logMethod(logOutput, logData);
+            } else {
+              // 복잡한 데이터는 안전한 문자열로 변환
+              const safeDataString = safeStringify(logData);
+              logMethod(`${logOutput}\n${safeDataString}`);
+            }
+          } catch (outputError) {
+            // 최후의 안전장치
+            logMethod(`${logOutput} [Data logging failed: ${outputError}]`);
+          }
         } else {
           logMethod(logOutput);
         }
@@ -105,6 +175,7 @@ export const createLogger = (defaultCategory: string): LoggerInterface => {
     category: defaultCategory,
     currentLogLevel: CURRENT_LOG_LEVEL,
     levelValue: LOG_LEVELS[CURRENT_LOG_LEVEL],
+    safeJsonEnabled: true,
     timestamp: new Date().toLocaleTimeString(),
   });
 

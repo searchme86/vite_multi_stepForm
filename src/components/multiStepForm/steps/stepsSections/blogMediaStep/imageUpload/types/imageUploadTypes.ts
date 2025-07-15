@@ -69,7 +69,13 @@ export interface FileSelectButtonRef {
   readonly clickFileInput: () => void;
 }
 
-// ✅ Context 값 인터페이스 (타입 안전성 완성)
+// 🔧 슬라이더 선택 관련 타입들 (추가)
+export interface SliderSelectionState {
+  readonly selectedSliderIndices: readonly number[];
+  readonly isImageSelectedForSlider: (imageIndex: number) => boolean;
+}
+
+// ✅ Context 값 인터페이스 (타입 안전성 완성 + 누락 속성들 추가)
 export interface ImageUploadContextValue {
   // 🎯 상태 데이터 (읽기 전용)
   readonly uploadedImages: readonly string[];
@@ -82,7 +88,11 @@ export interface ImageUploadContextValue {
   readonly hasActiveUploads: boolean;
   readonly isMobileDevice: boolean;
 
-  // 🎯 파일 처리 핸들러 (메모이제이션됨)
+  // 🎯 슬라이더 선택 상태 (추가)
+  readonly selectedSliderIndices: readonly number[];
+  readonly isImageSelectedForSlider: (imageIndex: number) => boolean;
+
+  // 🎯 파일 처리 핸들러 (메모이제이션됨) - 누락 속성들 추가
   readonly handleFilesDropped: (files: File[]) => void;
   readonly handleFileSelectClick: () => void;
   readonly handleFileChange: (files: FileList) => void;
@@ -210,4 +220,173 @@ export interface ImageUploadProviderProps {
 export interface ContextHookResult {
   readonly contextValue: ImageUploadContextValue;
   readonly isContextAvailable: boolean;
+}
+
+// 🔧 파일 처리 상태 추적 타입들 (추가)
+
+export interface FileProcessingTracker {
+  readonly fileId: string;
+  readonly fileName: string;
+  readonly status: 'pending' | 'processing' | 'completed' | 'failed';
+  readonly progress: number;
+  readonly startTime: number;
+  readonly endTime?: number;
+}
+
+export interface ProcessingFilesState {
+  readonly processingFiles: Map<string, FileProcessingTracker>;
+  readonly completedFiles: Set<string>;
+  readonly failedFiles: Set<string>;
+}
+
+// 🔧 드래그 앤 드롭 관련 타입들 (추가)
+
+export interface DragState {
+  readonly isDragActive: boolean;
+  readonly dragEventCount: number;
+  readonly lastDragEventTime: number;
+}
+
+export interface DropEventData {
+  readonly files: readonly File[];
+  readonly totalSize: number;
+  readonly acceptedFiles: readonly File[];
+  readonly rejectedFiles: readonly File[];
+  readonly dropTime: number;
+}
+
+// 🔧 업로드 통계 관련 타입들 (추가)
+
+export interface UploadStatistics {
+  readonly totalFiles: number;
+  readonly completedFiles: number;
+  readonly failedFiles: number;
+  readonly pendingFiles: number;
+  readonly totalSize: number;
+  readonly uploadedSize: number;
+  readonly averageSpeed: number;
+  readonly estimatedTimeRemaining: number;
+}
+
+// 🔧 에러 처리 관련 타입들 (추가)
+
+export interface UploadError {
+  readonly code: string;
+  readonly message: string;
+  readonly fileName: string;
+  readonly fileSize: number;
+  readonly timestamp: number;
+  readonly retryable: boolean;
+}
+
+export interface ErrorState {
+  readonly errors: readonly UploadError[];
+  readonly hasErrors: boolean;
+  readonly retryableErrors: readonly UploadError[];
+  readonly fatalErrors: readonly UploadError[];
+}
+
+// 🔧 성능 모니터링 관련 타입들 (추가)
+
+export interface PerformanceMetrics {
+  readonly renderCount: number;
+  readonly lastRenderTime: number;
+  readonly averageRenderTime: number;
+  readonly memoryUsage: number;
+  readonly cpuUsage: number;
+}
+
+export interface OptimizationState {
+  readonly shouldOptimize: boolean;
+  readonly optimizationLevel: 'none' | 'basic' | 'aggressive';
+  readonly lastOptimizationTime: number;
+  readonly optimizationHistory: readonly number[];
+}
+
+// 🔧 접근성 관련 타입들 (추가)
+
+export interface AccessibilityState {
+  readonly announcements: readonly string[];
+  readonly focusedElementId: string | null;
+  readonly keyboardNavigationActive: boolean;
+  readonly screenReaderMode: boolean;
+}
+
+export interface A11yAttributes {
+  readonly 'aria-label': string;
+  readonly 'aria-describedby'?: string;
+  readonly 'aria-live'?: 'polite' | 'assertive' | 'off';
+  readonly 'aria-atomic'?: boolean;
+  readonly role?: string;
+  readonly tabIndex?: number;
+}
+
+// 🔧 국제화 관련 타입들 (추가)
+
+export interface LocalizationState {
+  readonly currentLocale: string;
+  readonly supportedLocales: readonly string[];
+  readonly translations: Record<string, string>;
+  readonly rtlMode: boolean;
+}
+
+export interface TranslationKey {
+  readonly key: string;
+  readonly defaultValue: string;
+  readonly interpolation?: Record<string, string | number>;
+}
+
+// 🔧 테마 관련 타입들 (추가)
+
+export interface ThemeState {
+  readonly currentTheme: 'light' | 'dark' | 'auto';
+  readonly customColors: Record<string, string>;
+  readonly animations: boolean;
+  readonly reducedMotion: boolean;
+}
+
+export interface StyleConfiguration {
+  readonly className: string;
+  readonly inlineStyles: React.CSSProperties;
+  readonly cssVariables: Record<string, string>;
+}
+
+// 🔧 디바이스 관련 타입들 (추가)
+
+export interface DeviceState {
+  readonly isMobile: boolean;
+  readonly isTablet: boolean;
+  readonly isDesktop: boolean;
+  readonly touchSupported: boolean;
+  readonly screenSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  readonly orientation: 'portrait' | 'landscape';
+}
+
+export interface BrowserCapabilities {
+  readonly supportsFileAPI: boolean;
+  readonly supportsDragDrop: boolean;
+  readonly supportsWebP: boolean;
+  readonly supportsAVIF: boolean;
+  readonly maxFileSize: number;
+  readonly maxConcurrentUploads: number;
+}
+
+// 🔧 설정 관련 타입들 (추가)
+
+export interface UploadConfiguration {
+  readonly maxFileSize: number;
+  readonly maxFiles: number;
+  readonly acceptedTypes: readonly string[];
+  readonly compressionEnabled: boolean;
+  readonly compressionQuality: number;
+  readonly thumbnailGeneration: boolean;
+  readonly thumbnailSize: number;
+}
+
+export interface ValidationConfiguration {
+  readonly strictModeEnabled: boolean;
+  readonly allowDuplicates: boolean;
+  readonly validateMimeType: boolean;
+  readonly validateFileExtension: boolean;
+  readonly customValidators: readonly ((file: File) => boolean)[];
 }

@@ -136,6 +136,9 @@ UploadProgressSection.displayName = 'UploadProgressSection';
 
 // 🚀 성능 최적화: 메인 콘텐츠 컴포넌트 (React Hooks Rules 준수)
 const ImageUploadContent = memo((): React.ReactNode => {
+  // ✅ Context에서 fileSelectButtonRef 가져오기
+  const { fileSelectButtonRef } = useImageUploadContext();
+
   const contentConfiguration = useMemo(() => {
     const baseClassName = 'space-y-4';
     const regionRole = 'region' as const;
@@ -181,7 +184,7 @@ const ImageUploadContent = memo((): React.ReactNode => {
       </header>
 
       <main className="space-y-4">
-        {/* ✅ Props 완전 제거: Context만 사용 */}
+        {/* ✅ 기존 FileSelectButton을 Context를 통해 제대로 사용 */}
         <FileDropZone />
         <FileSelectButton />
         <UploadProgressSection />
