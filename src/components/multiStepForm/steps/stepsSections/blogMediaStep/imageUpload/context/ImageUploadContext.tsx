@@ -3,656 +3,470 @@
 import React, {
   createContext,
   useContext,
+  useEffect,
+  ReactNode,
   useMemo,
   useRef,
-  type ReactNode,
 } from 'react';
-import { useImageUploadHandlers } from '../hooks/useImageUploadHandlers';
 import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
 import { useBlogMediaStepIntegration } from '../../hooks/useBlogMediaStepIntegration';
+import { useImageUploadHandlers } from '../hooks/useImageUploadHandlers';
 import type {
   ImageUploadContextValue,
-  MainImageHandlers,
-  DeleteConfirmState,
-  DuplicateMessageState,
   FileSelectButtonRef,
+  MainImageHandlers,
 } from '../types/imageUploadTypes';
 
-interface ImageUploadProviderProps {
-  readonly children: ReactNode;
+// 🔧 토스트 메시지 타입 정의
+interface SafeToastMessage {
+  title: string;
+  description: string;
+  color: 'success' | 'warning' | 'danger' | 'primary';
 }
 
-// 🔧 상태 업데이트 함수 타입 정의
-type StateUpdaterFunction<T> = (prev: T) => T;
+// 🔧 타입 안전한 토스트 검증 함수
+const validateToastMessage = (toast: unknown): toast is SafeToastMessage => {
+  if (!toast || typeof toast !== 'object') {
+    return false;
+  }
 
-// 🔑 Context 생성 (타입 안전성 보장)
+  const title = Reflect.get(toast, 'title');
+  const description = Reflect.get(toast, 'description');
+  const color = Reflect.get(toast, 'color');
+
+  const hasValidTitle = typeof title === 'string' && title.length > 0;
+  const hasValidDescription = typeof description === 'string';
+  const hasValidColor =
+    typeof color === 'string' &&
+    ['success', 'warning', 'danger', 'primary'].includes(color);
+
+  return hasValidTitle && hasValidDescription && hasValidColor;
+};
+
 const ImageUploadContext = createContext<ImageUploadContextValue | null>(null);
 
-// 🔧 구체적인 fallback 상태들 (타입 단언 제거)
-const createEmptyMediaFilesList = (): readonly string[] => {
-  return [];
-};
+interface ImageUploadProviderProps {
+  children: ReactNode;
+}
 
-const createEmptySelectedFileNames = (): readonly string[] => {
-  return [];
-};
-
-const createEmptySliderIndices = (): readonly number[] => {
-  return [];
-};
-
-const createEmptyUploadingRecord = (): Record<string, number> => {
-  const emptyRecord: Record<string, number> = {};
-  return emptyRecord;
-};
-
-const createEmptyUploadStatusRecord = (): Record<
-  string,
-  'uploading' | 'success' | 'error'
-> => {
-  const emptyRecord: Record<string, 'uploading' | 'success' | 'error'> = {};
-  return emptyRecord;
-};
-
-const createDefaultDeleteConfirmState = (): DeleteConfirmState => {
-  return {
-    isVisible: false,
-    imageIndex: -1,
-    imageName: '',
-  };
-};
-
-const createDefaultDuplicateMessageState = (): DuplicateMessageState => {
-  return {
-    isVisible: false,
-    message: '',
-    fileNames: createEmptySelectedFileNames(),
-    animationKey: 0,
-  };
-};
-
-const createEmptyTouchActiveImages = (): Set<number> => {
-  return new Set<number>();
-};
-
-// 🔑 안전한 상태 추출 함수들
-const extractMediaState = (
-  blogMediaState: unknown
-): {
-  currentMediaFilesList: readonly string[];
-  currentSelectedFileNames: readonly string[];
-} => {
-  const fallbackState = {
-    currentMediaFilesList: createEmptyMediaFilesList(),
-    currentSelectedFileNames: createEmptySelectedFileNames(),
-  };
-
-  if (!blogMediaState || typeof blogMediaState !== 'object') {
-    return fallbackState;
-  }
-
-  const formValues = Reflect.get(blogMediaState, 'formValues');
-  const selectionState = Reflect.get(blogMediaState, 'selectionState');
-
-  if (!formValues || typeof formValues !== 'object') {
-    return fallbackState;
-  }
-
-  if (!selectionState || typeof selectionState !== 'object') {
-    return fallbackState;
-  }
-
-  const media = Reflect.get(formValues, 'media');
-  const selectedFileNames = Reflect.get(selectionState, 'selectedFileNames');
-
-  const currentMediaFilesList = Array.isArray(media)
-    ? media
-    : createEmptyMediaFilesList();
-  const currentSelectedFileNames = Array.isArray(selectedFileNames)
-    ? selectedFileNames
-    : createEmptySelectedFileNames();
-
-  return {
-    currentMediaFilesList,
-    currentSelectedFileNames,
-  };
-};
-
-const extractSliderState = (
-  blogMediaIntegration: unknown
-): {
-  selectedSliderIndices: readonly number[];
-} => {
-  const fallbackState = {
-    selectedSliderIndices: createEmptySliderIndices(),
-  };
-
-  if (!blogMediaIntegration || typeof blogMediaIntegration !== 'object') {
-    return fallbackState;
-  }
-
-  const currentFormValues = Reflect.get(
-    blogMediaIntegration,
-    'currentFormValues'
-  );
-
-  if (!currentFormValues || typeof currentFormValues !== 'object') {
-    return fallbackState;
-  }
-
-  const selectedSliderIndices = Reflect.get(
-    currentFormValues,
-    'selectedSliderIndices'
-  );
-
-  return {
-    selectedSliderIndices: Array.isArray(selectedSliderIndices)
-      ? selectedSliderIndices
-      : createEmptySliderIndices(),
-  };
-};
-
-// 🔧 안전한 핸들러 상태 추출 함수
-const extractHandlersState = (
-  imageUploadHandlers: unknown,
-  fileSelectButtonRef: React.RefObject<FileSelectButtonRef>
-): {
-  uploading: Record<string, number>;
-  uploadStatus: Record<string, 'uploading' | 'success' | 'error'>;
-  deleteConfirmState: DeleteConfirmState;
-  duplicateMessageState: DuplicateMessageState;
-  touchActiveImages: Set<number>;
-  hasActiveUploads: boolean;
-  isMobileDevice: boolean;
-  fileSelectButtonRef: React.RefObject<FileSelectButtonRef>;
-  handleFilesDropped: (files: File[]) => void;
-  handleFileSelectClick: () => void;
-  handleFileChange: (files: FileList) => void;
-  handleDeleteButtonClick: (index: number, name: string) => void;
-  handleDeleteConfirm: () => void;
-  handleDeleteCancel: () => void;
-  handleImageTouch: (index: number) => void;
-  mainImageHandlers: MainImageHandlers | null;
-} => {
-  const fallbackState = {
-    uploading: createEmptyUploadingRecord(),
-    uploadStatus: createEmptyUploadStatusRecord(),
-    deleteConfirmState: createDefaultDeleteConfirmState(),
-    duplicateMessageState: createDefaultDuplicateMessageState(),
-    touchActiveImages: createEmptyTouchActiveImages(),
-    hasActiveUploads: false,
-    isMobileDevice: false,
-    fileSelectButtonRef,
-    handleFilesDropped: (files: File[]): void => {
-      console.warn('handleFilesDropped fallback called', {
-        filesCount: files.length,
-      });
-    },
-    handleFileSelectClick: (): void => {
-      console.warn('handleFileSelectClick fallback called');
-    },
-    handleFileChange: (files: FileList): void => {
-      console.warn('handleFileChange fallback called', {
-        filesCount: files.length,
-      });
-    },
-    handleDeleteButtonClick: (index: number, name: string): void => {
-      console.warn('handleDeleteButtonClick fallback called', { index, name });
-    },
-    handleDeleteConfirm: (): void => {
-      console.warn('handleDeleteConfirm fallback called');
-    },
-    handleDeleteCancel: (): void => {
-      console.warn('handleDeleteCancel fallback called');
-    },
-    handleImageTouch: (index: number): void => {
-      console.warn('handleImageTouch fallback called', { index });
-    },
-    mainImageHandlers: null,
-  };
-
-  if (!imageUploadHandlers || typeof imageUploadHandlers !== 'object') {
-    return fallbackState;
-  }
-
-  // 안전한 속성 추출
-  const uploading = Reflect.get(imageUploadHandlers, 'uploading');
-  const uploadStatus = Reflect.get(imageUploadHandlers, 'uploadStatus');
-  const deleteConfirmState = Reflect.get(
-    imageUploadHandlers,
-    'deleteConfirmState'
-  );
-  const duplicateMessageState = Reflect.get(
-    imageUploadHandlers,
-    'duplicateMessageState'
-  );
-  const touchActiveImages = Reflect.get(
-    imageUploadHandlers,
-    'touchActiveImages'
-  );
-  const hasActiveUploads = Reflect.get(imageUploadHandlers, 'hasActiveUploads');
-  const isMobileDevice = Reflect.get(imageUploadHandlers, 'isMobileDevice');
-
-  // 핸들러 함수들 추출
-  const handleFilesDropped = Reflect.get(
-    imageUploadHandlers,
-    'handleFilesDropped'
-  );
-  const handleFileSelectClick = Reflect.get(
-    imageUploadHandlers,
-    'handleFileSelectClick'
-  );
-  const handleFileChange = Reflect.get(imageUploadHandlers, 'handleFileChange');
-  const handleDeleteButtonClick = Reflect.get(
-    imageUploadHandlers,
-    'handleDeleteButtonClick'
-  );
-  const handleDeleteConfirm = Reflect.get(
-    imageUploadHandlers,
-    'handleDeleteConfirm'
-  );
-  const handleDeleteCancel = Reflect.get(
-    imageUploadHandlers,
-    'handleDeleteCancel'
-  );
-  const handleImageTouch = Reflect.get(imageUploadHandlers, 'handleImageTouch');
-
-  // 메인 이미지 핸들러들 추출
-  const handleMainImageSet = Reflect.get(
-    imageUploadHandlers,
-    'handleMainImageSet'
-  );
-  const handleMainImageCancel = Reflect.get(
-    imageUploadHandlers,
-    'handleMainImageCancel'
-  );
-  const checkIsMainImage = Reflect.get(imageUploadHandlers, 'checkIsMainImage');
-  const checkCanSetAsMainImage = Reflect.get(
-    imageUploadHandlers,
-    'checkCanSetAsMainImage'
-  );
-
-  // 메인 이미지 핸들러 구성
-  const mainImageHandlers: MainImageHandlers | null =
-    typeof handleMainImageSet === 'function' &&
-    typeof handleMainImageCancel === 'function' &&
-    typeof checkIsMainImage === 'function' &&
-    typeof checkCanSetAsMainImage === 'function'
-      ? {
-          onMainImageSet: handleMainImageSet,
-          onMainImageCancel: handleMainImageCancel,
-          checkIsMainImage: checkIsMainImage,
-          checkCanSetAsMainImage: checkCanSetAsMainImage,
-        }
-      : null;
-
-  return {
-    uploading:
-      uploading && typeof uploading === 'object'
-        ? uploading
-        : fallbackState.uploading,
-    uploadStatus:
-      uploadStatus && typeof uploadStatus === 'object'
-        ? uploadStatus
-        : fallbackState.uploadStatus,
-    deleteConfirmState:
-      deleteConfirmState && typeof deleteConfirmState === 'object'
-        ? deleteConfirmState
-        : fallbackState.deleteConfirmState,
-    duplicateMessageState:
-      duplicateMessageState && typeof duplicateMessageState === 'object'
-        ? duplicateMessageState
-        : fallbackState.duplicateMessageState,
-    touchActiveImages:
-      touchActiveImages instanceof Set
-        ? touchActiveImages
-        : fallbackState.touchActiveImages,
-    hasActiveUploads:
-      typeof hasActiveUploads === 'boolean'
-        ? hasActiveUploads
-        : fallbackState.hasActiveUploads,
-    isMobileDevice:
-      typeof isMobileDevice === 'boolean'
-        ? isMobileDevice
-        : fallbackState.isMobileDevice,
-    fileSelectButtonRef,
-    handleFilesDropped:
-      typeof handleFilesDropped === 'function'
-        ? handleFilesDropped
-        : fallbackState.handleFilesDropped,
-    handleFileSelectClick:
-      typeof handleFileSelectClick === 'function'
-        ? handleFileSelectClick
-        : fallbackState.handleFileSelectClick,
-    handleFileChange:
-      typeof handleFileChange === 'function'
-        ? handleFileChange
-        : fallbackState.handleFileChange,
-    handleDeleteButtonClick:
-      typeof handleDeleteButtonClick === 'function'
-        ? handleDeleteButtonClick
-        : fallbackState.handleDeleteButtonClick,
-    handleDeleteConfirm:
-      typeof handleDeleteConfirm === 'function'
-        ? handleDeleteConfirm
-        : fallbackState.handleDeleteConfirm,
-    handleDeleteCancel:
-      typeof handleDeleteCancel === 'function'
-        ? handleDeleteCancel
-        : fallbackState.handleDeleteCancel,
-    handleImageTouch:
-      typeof handleImageTouch === 'function'
-        ? handleImageTouch
-        : fallbackState.handleImageTouch,
-    mainImageHandlers,
-  };
-};
-
-// 🔧 안전한 배열 변환 함수들
-const convertReadonlyToMutable = (
-  readonlyArray: readonly string[]
-): string[] => {
-  const mutableArray: string[] = [];
-  for (let i = 0; i < readonlyArray.length; i++) {
-    const item = readonlyArray[i];
-    if (item !== undefined) {
-      mutableArray.push(item);
+// 🔧 타입 안전한 값 추출 함수들
+const safeExtractMainImageUrl = (formValues: unknown): string => {
+  try {
+    if (!formValues || typeof formValues !== 'object') {
+      return '';
     }
+    const mainImage = Reflect.get(formValues, 'mainImage');
+    return typeof mainImage === 'string' ? mainImage : '';
+  } catch (error) {
+    console.warn('⚠️ [EXTRACT_MAIN_IMAGE] 추출 실패:', error);
+    return '';
   }
-  return mutableArray;
 };
 
-const createSafeUpdaterFunction = (
-  readonlyUpdater: (prev: readonly string[]) => readonly string[]
-): ((prev: string[]) => string[]) => {
-  return (prev: string[]) => {
-    const readonlyPrev: readonly string[] = prev;
-    const readonlyResult = readonlyUpdater(readonlyPrev);
-    return convertReadonlyToMutable(readonlyResult);
-  };
-};
-
-// 🔧 타입 호환성 어댑터 함수들
-const createMediaValueAdapter = (
-  originalFunction: (
-    filesOrUpdater: string[] | ((prev: string[]) => string[])
-  ) => void
-) => {
-  return (
-    filesOrUpdater: readonly string[] | StateUpdaterFunction<readonly string[]>
-  ) => {
-    if (typeof filesOrUpdater === 'function') {
-      const readonlyUpdater = filesOrUpdater;
-      const mutableUpdater = createSafeUpdaterFunction(readonlyUpdater);
-      originalFunction(mutableUpdater);
-    } else {
-      const readonlyArray = filesOrUpdater;
-      const mutableArray = convertReadonlyToMutable(readonlyArray);
-      originalFunction(mutableArray);
+const safeExtractMediaFilesList = (formValues: unknown): string[] => {
+  try {
+    if (!formValues || typeof formValues !== 'object') {
+      return [];
     }
-  };
-};
-
-const createSelectedFileNamesAdapter = (
-  originalFunction: (
-    namesOrUpdater: string[] | ((prev: string[]) => string[])
-  ) => void
-) => {
-  return (
-    namesOrUpdater: readonly string[] | StateUpdaterFunction<readonly string[]>
-  ) => {
-    if (typeof namesOrUpdater === 'function') {
-      const readonlyUpdater = namesOrUpdater;
-      const mutableUpdater = createSafeUpdaterFunction(readonlyUpdater);
-      originalFunction(mutableUpdater);
-    } else {
-      const readonlyArray = namesOrUpdater;
-      const mutableArray = convertReadonlyToMutable(readonlyArray);
-      originalFunction(mutableArray);
+    const media = Reflect.get(formValues, 'media');
+    if (!Array.isArray(media)) {
+      return [];
     }
-  };
-};
-
-// 🔧 Toast 함수 타입 추론을 위한 헬퍼
-const extractToastFunction = (
-  toastFunction: unknown
-): ((toast: unknown) => void) => {
-  if (typeof toastFunction === 'function') {
-    return (toast: unknown) => {
-      try {
-        const result = toastFunction(toast);
-        // 결과가 함수인 경우 (cleanup 함수) 무시
-        void result;
-      } catch (error) {
-        console.warn('Toast 함수 호출 중 오류:', error);
-      }
-    };
+    return media.filter((item): item is string => typeof item === 'string');
+  } catch (error) {
+    console.warn('⚠️ [EXTRACT_MEDIA] 추출 실패:', error);
+    return [];
   }
-
-  return (toast: unknown) => {
-    console.warn('유효하지 않은 toast 함수:', { toast });
-  };
 };
 
-const createToastMessageAdapter = (originalFunction: unknown) => {
-  const safeToastFunction = extractToastFunction(originalFunction);
-  return safeToastFunction;
+const safeExtractSelectedFileNames = (selectionState: unknown): string[] => {
+  try {
+    if (!selectionState || typeof selectionState !== 'object') {
+      return [];
+    }
+    const selectedFileNames = Reflect.get(selectionState, 'selectedFileNames');
+    if (!Array.isArray(selectedFileNames)) {
+      return [];
+    }
+    return selectedFileNames.filter(
+      (name): name is string => typeof name === 'string'
+    );
+  } catch (error) {
+    console.warn('⚠️ [EXTRACT_FILENAMES] 추출 실패:', error);
+    return [];
+  }
 };
 
-function ImageUploadProvider({
+const safeExtractSliderIndices = (selectionState: unknown): number[] => {
+  try {
+    if (!selectionState || typeof selectionState !== 'object') {
+      return [];
+    }
+    const sliderIndices = Reflect.get(selectionState, 'selectedSliderIndices');
+    if (!Array.isArray(sliderIndices)) {
+      return [];
+    }
+    return sliderIndices.filter(
+      (index): index is number => typeof index === 'number'
+    );
+  } catch (error) {
+    console.warn('⚠️ [EXTRACT_SLIDER] 추출 실패:', error);
+    return [];
+  }
+};
+
+export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
   children,
-}: ImageUploadProviderProps): React.ReactNode {
+}) => {
   console.log(
-    '🏗️ [CONTEXT] ImageUploadProvider 렌더링 시작 - 타입 단언 완전 제거:',
-    {
-      timestamp: new Date().toLocaleTimeString(),
-      noTypeAssertions: true,
-    }
+    '🔧 [IMAGE_UPLOAD_PROVIDER] 에러 해결된 Provider 초기화 - useImageUploadHandlers 통합'
   );
 
-  // ✅ useRef를 컴포넌트 최상단에서 호출 (Hooks Rules 준수)
-  const fileSelectButtonRef = useRef<FileSelectButtonRef>(null);
-
-  // ✅ 모든 hooks를 최상단에서 호출 (Hooks Rules 준수)
-  const blogMediaStepStateResult = useBlogMediaStepState();
+  // 🔧 기본 hooks (에러 없는 순서로 호출)
+  const blogMediaStateResult = useBlogMediaStepState();
   const blogMediaIntegrationResult = useBlogMediaStepIntegration();
 
-  // ✅ 안전한 상태 추출 (hooks 호출 없음)
-  const mediaState = useMemo(
-    () => extractMediaState(blogMediaStepStateResult),
-    [blogMediaStepStateResult]
+  // 🔧 안전한 값 추출
+  const currentMainImageUrl = safeExtractMainImageUrl(
+    blogMediaStateResult.formValues
   );
-  const sliderState = useMemo(
-    () => extractSliderState(blogMediaIntegrationResult),
-    [blogMediaIntegrationResult]
+  const mediaFilesList = safeExtractMediaFilesList(
+    blogMediaStateResult.formValues
   );
-
-  const {
-    formValues: currentFormValues,
-    uiState: currentUiState,
-    selectionState: currentSelectionState,
-    setMediaValue: originalUpdateMediaValue,
-    setMainImageValue: updateMainImageValue,
-    setSelectedFileNames: originalUpdateSelectedFileNames,
-    addToast: originalShowToastMessage,
-    imageGalleryStore: galleryStoreInstance,
-  } = blogMediaStepStateResult;
-
-  const { currentMediaFilesList, currentSelectedFileNames } = mediaState;
-  const { selectedSliderIndices } = sliderState;
-
-  // 🔧 타입 호환성 어댑터 함수들 생성
-  const adaptedUpdateMediaValue = useMemo(
-    () => createMediaValueAdapter(originalUpdateMediaValue),
-    [originalUpdateMediaValue]
+  const selectedFileNames = safeExtractSelectedFileNames(
+    blogMediaStateResult.selectionState
+  );
+  const selectedSliderIndices = safeExtractSliderIndices(
+    blogMediaStateResult.selectionState
   );
 
-  const adaptedUpdateSelectedFileNames = useMemo(
-    () => createSelectedFileNamesAdapter(originalUpdateSelectedFileNames),
-    [originalUpdateSelectedFileNames]
-  );
+  // 🔧 FileSelectButton 참조 생성
+  const fileSelectButtonRef = useRef<FileSelectButtonRef>(null);
 
-  const adaptedShowToastMessage = useMemo(
-    () => createToastMessageAdapter(originalShowToastMessage),
-    [originalShowToastMessage]
-  );
+  // 🔧 메인 이미지 핸들러 생성
+  const mainImageHandlers = useMemo((): MainImageHandlers => {
+    return {
+      onMainImageSet: (imageIndex: number, imageUrl: string) => {
+        try {
+          blogMediaIntegrationResult.setMainImageValue(imageUrl);
+          console.log('✅ [MAIN_IMAGE] 메인 이미지 설정:', {
+            imageIndex,
+            imageUrl: imageUrl.slice(0, 30) + '...',
+          });
+        } catch (error) {
+          console.error('❌ [MAIN_IMAGE] 설정 실패:', error);
+        }
+      },
+      onMainImageCancel: () => {
+        try {
+          blogMediaIntegrationResult.setMainImageValue('');
+          console.log('✅ [MAIN_IMAGE] 메인 이미지 해제');
+        } catch (error) {
+          console.error('❌ [MAIN_IMAGE] 해제 실패:', error);
+        }
+      },
+      checkIsMainImage: (imageUrl: string): boolean => {
+        return imageUrl === currentMainImageUrl;
+      },
+      checkCanSetAsMainImage: (imageUrl: string): boolean => {
+        if (!imageUrl || imageUrl.length === 0) return false;
+        const isPlaceholder =
+          imageUrl.startsWith('placeholder-') &&
+          imageUrl.includes('-processing');
+        const isAlreadyMain = imageUrl === currentMainImageUrl;
+        return !isPlaceholder && !isAlreadyMain;
+      },
+    };
+  }, [currentMainImageUrl, blogMediaIntegrationResult]);
 
-  console.log('🎯 [CONTEXT] 상태 추출 완료:', {
-    mediaFilesCount: currentMediaFilesList.length,
-    selectedFileNamesCount: currentSelectedFileNames.length,
-    selectedSliderIndicesCount: selectedSliderIndices.length,
-    timestamp: new Date().toLocaleTimeString(),
+  // ✅ useImageUploadHandlers 통합 사용
+  const imageUploadHandlers = useImageUploadHandlers({
+    formValues: blogMediaStateResult.formValues,
+    uiState: blogMediaStateResult.uiState,
+    selectionState: blogMediaStateResult.selectionState,
+    updateMediaValue: (filesOrUpdater) => {
+      try {
+        if (typeof filesOrUpdater === 'function') {
+          const currentMedia = mediaFilesList;
+          const updatedMedia = filesOrUpdater(currentMedia);
+          blogMediaStateResult.setMediaValue(Array.from(updatedMedia));
+        } else {
+          blogMediaStateResult.setMediaValue(Array.from(filesOrUpdater));
+        }
+      } catch (error) {
+        console.error('❌ [UPDATE_MEDIA] 업데이트 실패:', error);
+      }
+    },
+    setMainImageValue: (value: string) => {
+      try {
+        blogMediaIntegrationResult.setMainImageValue(value);
+      } catch (error) {
+        console.error('❌ [SET_MAIN_IMAGE] 설정 실패:', error);
+      }
+    },
+    updateSelectedFileNames: (namesOrUpdater) => {
+      try {
+        if (typeof namesOrUpdater === 'function') {
+          const currentNames = selectedFileNames;
+          const updatedNames = namesOrUpdater(currentNames);
+          blogMediaStateResult.setSelectedFileNames(Array.from(updatedNames));
+        } else {
+          blogMediaStateResult.setSelectedFileNames(Array.from(namesOrUpdater));
+        }
+      } catch (error) {
+        console.error('❌ [UPDATE_FILENAMES] 업데이트 실패:', error);
+      }
+    },
+    showToastMessage: (toast: unknown) => {
+      try {
+        if (validateToastMessage(toast)) {
+          blogMediaStateResult.addToast(toast);
+        } else {
+          console.warn('⚠️ [SHOW_TOAST] 유효하지 않은 토스트 메시지:', toast);
+        }
+      } catch (error) {
+        console.error('❌ [SHOW_TOAST] 토스트 표시 실패:', error);
+      }
+    },
+    imageGalleryStore: blogMediaIntegrationResult.imageGalleryStore,
   });
 
-  // ✅ 이미지 업로드 핸들러 초기화 (에러 방지를 위한 try-catch)
-  let imageUploadHandlersResult: unknown = null;
-
-  try {
-    imageUploadHandlersResult = useImageUploadHandlers({
-      formValues: currentFormValues,
-      uiState: currentUiState,
-      selectionState: currentSelectionState,
-      updateMediaValue: adaptedUpdateMediaValue,
-      setMainImageValue: updateMainImageValue,
-      updateSelectedFileNames: adaptedUpdateSelectedFileNames,
-      showToastMessage: adaptedShowToastMessage,
-      imageGalleryStore: galleryStoreInstance,
-    });
-  } catch (handlersError) {
-    console.error('❌ [CONTEXT] useImageUploadHandlers 에러:', handlersError);
-    // fallback으로 null 사용
-    imageUploadHandlersResult = null;
-  }
-
-  // ✅ handlers 상태 추출 (외부에서 생성한 ref 전달)
-  const handlersState = useMemo(
-    () => extractHandlersState(imageUploadHandlersResult, fileSelectButtonRef),
-    [imageUploadHandlersResult, fileSelectButtonRef]
-  );
-
-  // 🔑 슬라이더 선택 확인 함수
-  const checkIsImageSelectedForSlider = useMemo(() => {
+  // 🔧 sliderIndices 관련 함수들
+  const isImageSelectedForSlider = useMemo(() => {
     return (imageIndex: number): boolean => {
-      const isValidIndex = typeof imageIndex === 'number' && imageIndex >= 0;
-
-      if (!isValidIndex) {
-        console.log('⚠️ [CONTEXT] 유효하지 않은 이미지 인덱스:', {
-          imageIndex,
-        });
-        return false;
-      }
-
-      const isSelected = selectedSliderIndices.includes(imageIndex);
-
-      console.log('🔍 [CONTEXT] 슬라이더 선택 상태 확인:', {
-        imageIndex,
-        isSelected,
-        selectedSliderIndices,
-      });
-
-      return isSelected;
+      return selectedSliderIndices.includes(imageIndex);
     };
   }, [selectedSliderIndices]);
 
-  // 🔑 최종 Context 값 생성
+  // 🔧 메모화된 Context 값 생성 (완전한 타입 일치)
   const contextValue = useMemo<ImageUploadContextValue>(() => {
-    const finalContextValue: ImageUploadContextValue = {
-      // 상태 데이터
-      uploadedImages: currentMediaFilesList,
-      selectedFileNames: currentSelectedFileNames,
-      uploading: handlersState.uploading,
-      uploadStatus: handlersState.uploadStatus,
-      deleteConfirmState: handlersState.deleteConfirmState,
-      duplicateMessageState: handlersState.duplicateMessageState,
-      touchActiveImages: handlersState.touchActiveImages,
-      hasActiveUploads: handlersState.hasActiveUploads,
-      isMobileDevice: handlersState.isMobileDevice,
+    return {
+      // ✅ 상태 데이터 (올바른 이름과 타입으로 매핑)
+      uploadedImages: mediaFilesList, // ✅ 이름 수정
+      selectedFileNames: selectedFileNames, // ✅ 추가
+      uploading: imageUploadHandlers.uploading || {}, // ✅ fallback 추가
+      uploadStatus: imageUploadHandlers.uploadStatus || {}, // ✅ fallback 추가
+      deleteConfirmState: imageUploadHandlers.deleteConfirmState, // ✅ 추가
+      duplicateMessageState: imageUploadHandlers.duplicateMessageState, // ✅ 추가
+      touchActiveImages: imageUploadHandlers.touchActiveImages, // ✅ 추가
+      hasActiveUploads: imageUploadHandlers.hasActiveUploads, // ✅ 추가
+      isMobileDevice: imageUploadHandlers.isMobileDevice, // ✅ 추가
 
-      // 슬라이더 선택 상태
-      selectedSliderIndices,
-      isImageSelectedForSlider: checkIsImageSelectedForSlider,
+      // ✅ 슬라이더 선택 상태 추가
+      selectedSliderIndices: selectedSliderIndices, // ✅ 추가
+      isImageSelectedForSlider: isImageSelectedForSlider, // ✅ 추가
 
-      // 파일 처리 핸들러
-      handleFilesDropped: handlersState.handleFilesDropped,
-      handleFileSelectClick: handlersState.handleFileSelectClick,
-      handleFileChange: handlersState.handleFileChange,
+      // ✅ 파일 처리 핸들러 (올바른 매핑)
+      handleFilesDropped: imageUploadHandlers.handleFilesDropped, // ✅ 추가
+      handleFileSelectClick: imageUploadHandlers.handleFileSelectClick, // ✅ 추가
+      handleFileChange: imageUploadHandlers.handleFileChange, // ✅ 추가
 
-      // 이미지 관리 핸들러
-      handleDeleteButtonClick: handlersState.handleDeleteButtonClick,
-      handleDeleteConfirm: handlersState.handleDeleteConfirm,
-      handleDeleteCancel: handlersState.handleDeleteCancel,
-      handleImageTouch: handlersState.handleImageTouch,
+      // ✅ 이미지 관리 핸들러 (올바른 매핑)
+      handleDeleteButtonClick: imageUploadHandlers.handleDeleteButtonClick, // ✅ 추가
+      handleDeleteConfirm: imageUploadHandlers.handleDeleteConfirm, // ✅ 추가
+      handleDeleteCancel: imageUploadHandlers.handleDeleteCancel, // ✅ 추가
+      handleImageTouch: imageUploadHandlers.handleImageTouch, // ✅ 추가
 
-      // 메인 이미지 핸들러
-      mainImageHandlers: handlersState.mainImageHandlers,
+      // ✅ 메인 이미지 핸들러
+      mainImageHandlers: mainImageHandlers, // ✅ 추가
 
-      // 참조 객체
-      fileSelectButtonRef: handlersState.fileSelectButtonRef,
+      // ✅ 참조 객체
+      fileSelectButtonRef: fileSelectButtonRef, // ✅ 추가
     };
-
-    console.log('🎯 [CONTEXT] Context 값 생성 완료 - 타입 단언 완전 제거:', {
-      uploadedImagesCount: finalContextValue.uploadedImages.length,
-      hasActiveUploads: finalContextValue.hasActiveUploads,
-      hasMainImageHandlers: finalContextValue.mainImageHandlers !== null,
-      selectedSliderCount: finalContextValue.selectedSliderIndices.length,
-      noTypeAssertions: true,
-      timestamp: new Date().toLocaleTimeString(),
-    });
-
-    return finalContextValue;
   }, [
-    currentMediaFilesList,
-    currentSelectedFileNames,
-    handlersState.uploading,
-    handlersState.uploadStatus,
-    handlersState.deleteConfirmState,
-    handlersState.duplicateMessageState,
-    handlersState.touchActiveImages,
-    handlersState.hasActiveUploads,
-    handlersState.isMobileDevice,
+    mediaFilesList,
+    selectedFileNames,
     selectedSliderIndices,
-    checkIsImageSelectedForSlider,
-    handlersState.handleFilesDropped,
-    handlersState.handleFileSelectClick,
-    handlersState.handleFileChange,
-    handlersState.handleDeleteButtonClick,
-    handlersState.handleDeleteConfirm,
-    handlersState.handleDeleteCancel,
-    handlersState.handleImageTouch,
-    handlersState.mainImageHandlers,
-    handlersState.fileSelectButtonRef,
+    isImageSelectedForSlider,
+    imageUploadHandlers,
+    mainImageHandlers,
   ]);
 
-  console.log(
-    '✅ [CONTEXT] ImageUploadProvider 렌더링 완료 - 타입 단언 완전 제거:',
-    {
-      contextValueReady: true,
-      noTypeAssertions: true,
-      typeCompatibilityFixed: true,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-  );
+  // 🚨 강화된 메인 이미지 복원 로직 (기존 유지)
+  useEffect(() => {
+    const performSafeMainImageRestore = async () => {
+      console.log('🔄 [SAFE_RESTORE] 에러 안전한 메인 이미지 복원 시작:', {
+        currentMainImageUrl: currentMainImageUrl || 'none',
+        mediaFilesCount: mediaFilesList.length,
+        에러안전복원: true,
+      });
+
+      if (currentMainImageUrl && currentMainImageUrl.length > 0) {
+        console.log('ℹ️ [SAFE_RESTORE] 이미 메인 이미지가 있음, 복원 생략');
+        return;
+      }
+
+      try {
+        // localStorage 백업 확인
+        const backupDataString = localStorage.getItem(
+          'blogMediaMainImageBackup'
+        );
+        if (backupDataString) {
+          try {
+            const backupData = JSON.parse(backupDataString);
+            const backupMainImage = Reflect.get(backupData, 'mainImage');
+            const backupTimestamp = Reflect.get(backupData, 'timestamp');
+
+            if (
+              typeof backupMainImage === 'string' &&
+              typeof backupTimestamp === 'number' &&
+              backupMainImage.length > 0
+            ) {
+              const isRecentBackup =
+                Date.now() - backupTimestamp < 5 * 60 * 1000;
+
+              if (isRecentBackup && mediaFilesList.includes(backupMainImage)) {
+                console.log(
+                  '🔄 [SAFE_RESTORE] localStorage 백업에서 메인 이미지 복원'
+                );
+                mainImageHandlers.onMainImageSet(-1, backupMainImage);
+                return;
+              }
+            }
+          } catch (parseError) {
+            console.warn(
+              '⚠️ [SAFE_RESTORE] localStorage 백업 파싱 실패:',
+              parseError
+            );
+          }
+        }
+
+        // Zustand Store에서 복원
+        try {
+          const imageGalleryStore =
+            blogMediaIntegrationResult.imageGalleryStore;
+          if (imageGalleryStore && typeof imageGalleryStore === 'object') {
+            const getIsInitialized = Reflect.get(
+              imageGalleryStore,
+              'getIsInitialized'
+            );
+            const initializeStoredImages = Reflect.get(
+              imageGalleryStore,
+              'initializeStoredImages'
+            );
+            const getImageViewConfig = Reflect.get(
+              imageGalleryStore,
+              'getImageViewConfig'
+            );
+
+            if (typeof getIsInitialized === 'function') {
+              const isStoreInitialized = Boolean(getIsInitialized());
+
+              if (
+                !isStoreInitialized &&
+                typeof initializeStoredImages === 'function'
+              ) {
+                console.log('🔄 [SAFE_RESTORE] 갤러리 스토어 초기화 중...');
+                await initializeStoredImages();
+              }
+            }
+
+            if (typeof getImageViewConfig === 'function') {
+              const currentGalleryConfig = getImageViewConfig();
+              const storeMainImage = currentGalleryConfig?.mainImage;
+
+              if (
+                typeof storeMainImage === 'string' &&
+                storeMainImage.length > 0 &&
+                mediaFilesList.includes(storeMainImage)
+              ) {
+                console.log(
+                  '🔄 [SAFE_RESTORE] Zustand Store에서 메인 이미지 복원'
+                );
+                mainImageHandlers.onMainImageSet(-1, storeMainImage);
+                return;
+              }
+            }
+          }
+        } catch (storeError) {
+          console.error(
+            '❌ [SAFE_RESTORE] Zustand Store 복원 실패:',
+            storeError
+          );
+        }
+
+        console.log('ℹ️ [SAFE_RESTORE] 복원할 메인 이미지 없음');
+      } catch (restoreError) {
+        console.error('❌ [SAFE_RESTORE] 메인 이미지 복원 실패:', restoreError);
+      }
+    };
+
+    const safeRestoreTimeout = setTimeout(() => {
+      performSafeMainImageRestore().catch((error) => {
+        console.error('❌ [SAFE_RESTORE] 복원 프로세스 실패:', error);
+      });
+    }, 500);
+
+    return () => clearTimeout(safeRestoreTimeout);
+  }, [
+    mediaFilesList,
+    currentMainImageUrl,
+    mainImageHandlers,
+    blogMediaIntegrationResult,
+  ]);
+
+  // 🚨 미디어 목록 변경 시 메인 이미지 유효성 검사 (기존 유지)
+  useEffect(() => {
+    const validateMainImageOnMediaChange = () => {
+      if (!currentMainImageUrl || currentMainImageUrl.length === 0) {
+        return;
+      }
+
+      const isMainImageStillValid =
+        mediaFilesList.includes(currentMainImageUrl);
+
+      if (!isMainImageStillValid) {
+        console.log(
+          '⚠️ [SAFE_VALIDATION] 메인 이미지가 미디어 목록에 없음, 해제'
+        );
+
+        try {
+          mainImageHandlers.onMainImageCancel();
+
+          const clearBackupData = {
+            mainImage: null,
+            timestamp: Date.now(),
+            source: 'safeMediaValidation',
+            reason: 'imageRemovedFromMediaList',
+          };
+          localStorage.setItem(
+            'blogMediaMainImageBackup',
+            JSON.stringify(clearBackupData)
+          );
+        } catch (clearError) {
+          console.warn('⚠️ [SAFE_VALIDATION] 해제 실패:', clearError);
+        }
+      }
+    };
+
+    validateMainImageOnMediaChange();
+  }, [mediaFilesList, currentMainImageUrl, mainImageHandlers]);
+
+  console.log('✅ [IMAGE_UPLOAD_PROVIDER] 에러 해결된 Provider 초기화 완료:', {
+    mediaFilesCount: mediaFilesList.length,
+    selectedFileNamesCount: selectedFileNames.length,
+    hasMainImage: Boolean(currentMainImageUrl),
+    hasActiveUploads: imageUploadHandlers.hasActiveUploads,
+    uploadingCount: Object.keys(imageUploadHandlers.uploading || {}).length,
+    contextValueComplete: true,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   return (
     <ImageUploadContext.Provider value={contextValue}>
       {children}
     </ImageUploadContext.Provider>
   );
-}
+};
 
-// 🔑 안전한 Context Hook
-function useImageUploadContext(): ImageUploadContextValue {
-  const contextResult = useContext(ImageUploadContext);
+export const useImageUploadContext = (): ImageUploadContextValue => {
+  const context = useContext(ImageUploadContext);
 
-  if (!contextResult) {
+  if (!context) {
     throw new Error(
-      'useImageUploadContext must be used within ImageUploadProvider. ' +
-        'Make sure the component is wrapped with <ImageUploadProvider>.'
+      'useImageUploadContext must be used within an ImageUploadProvider'
     );
   }
 
-  return contextResult;
-}
-
-export { ImageUploadProvider, useImageUploadContext };
-export type { ImageUploadContextValue };
+  return context;
+};
