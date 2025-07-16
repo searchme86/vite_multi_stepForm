@@ -480,9 +480,9 @@ button[aria-label='미리보기 패널 토글']:active {
       background-color: rgba(255, 255, 255, 0.4);
     }
 
-    .preview-panel-mobile-header {
+    /* .preview-panel-mobile-header {
       background-color: rgba(26, 26, 26, 0.95);
-    }
+    } */
 
     .preview-panel-mobile-content::-webkit-scrollbar-track {
       background: rgb(64, 64, 64);

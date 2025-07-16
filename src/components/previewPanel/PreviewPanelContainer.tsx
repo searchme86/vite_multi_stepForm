@@ -399,7 +399,7 @@ function PreviewPanelContainer(): ReactNode {
   return (
     <div
       ref={panelElementRef}
-      className="flex flex-col h-full bg-white"
+      className="flex flex-col h-full bg-white rounded-tl-[50px] rounded-tr-[50px]"
       onTouchStart={isMobile ? handleTouchStart : undefined}
       onTouchMove={isMobile ? handleTouchMove : undefined}
       onTouchEnd={isMobile ? handleTouchEnd : undefined}
