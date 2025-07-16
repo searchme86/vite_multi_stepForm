@@ -2,6 +2,7 @@
 
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { FormProvider } from 'react-hook-form';
+import type { StepNumber } from './types/stepTypes';
 import { useMultiStepFormState } from './reactHookForm/useMultiStepFormState';
 import { useBidirectionalBridge } from '../../bridges/hooks/useBidirectionalBridge';
 import PreviewPanelContainer from '../previewPanel/PreviewPanelContainer';
@@ -11,9 +12,7 @@ import StepNavigationWrapper from './layout/shared/StepNavigationWrapper';
 import NavigationButtons from './layout/shared/NavigationButtons';
 import StepContentContainer from './animation/StepContentContainer';
 import ToastManager from '../toaster/ToastManager';
-import { StepNumber, renderStepComponent } from './types/stepTypes';
-
-// Zustand 미리보기 패널 스토어 import
+import { renderStepComponent } from './types/stepTypes';
 import { usePreviewPanelStore } from '../previewPanel/store/previewPanelStore';
 
 function MultiStepFormContainer(): React.ReactNode {
@@ -21,7 +20,6 @@ function MultiStepFormContainer(): React.ReactNode {
   const lastLogTimeRef = useRef<number>(0);
   const logIntervalRef = useRef<number>();
 
-  // 기존 멀티스텝 폼 상태 (showPreview 제거)
   const {
     methods,
     handleSubmit,
@@ -34,19 +32,20 @@ function MultiStepFormContainer(): React.ReactNode {
     updateFormValue,
   } = useMultiStepFormState();
 
-  // Zustand에서 미리보기 패널 상태 구독 (개별 구독으로 최적화)
   const isPreviewPanelOpen = usePreviewPanelStore(
     (state) => state.isPreviewPanelOpen
   );
 
-  // 폼 데이터 가져오기
+  const deviceType = usePreviewPanelStore((state) => state.deviceType);
+
   const currentFormValues = methods.getValues();
-  const editorCompletedContent = currentFormValues.editorCompletedContent || '';
-  const isEditorCompleted = currentFormValues.isEditorCompleted || false;
+  const { editorCompletedContent = '', isEditorCompleted = false } =
+    currentFormValues;
 
   const setEditorCompleted = useCallback(
     (completed: boolean) => {
       updateFormValue('isEditorCompleted', completed);
+      console.log('🎯 [EDITOR_STATUS] 에디터 완료 상태 업데이트:', completed);
     },
     [updateFormValue]
   );
@@ -72,7 +71,9 @@ function MultiStepFormContainer(): React.ReactNode {
       if (!bridgeDebugEnabled) return;
 
       const now = Date.now();
-      if (now - lastLogTimeRef.current > 10000) {
+      const timeDifference = now - lastLogTimeRef.current;
+
+      if (timeDifference > 10000) {
         console.log(message, data);
         lastLogTimeRef.current = now;
       }
@@ -82,10 +83,12 @@ function MultiStepFormContainer(): React.ReactNode {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+      const { ctrlKey, shiftKey, key } = event;
+
+      if (ctrlKey && shiftKey && key === 'D') {
         event.preventDefault();
-        setBridgeDebugEnabled((prev) => {
-          const newMode = !prev;
+        setBridgeDebugEnabled((prevMode) => {
+          const newMode = !prevMode;
           console.log(
             `🔧 [DEBUG] 브릿지 디버그 모드: ${newMode ? '활성화' : '비활성화'}`
           );
@@ -99,28 +102,33 @@ function MultiStepFormContainer(): React.ReactNode {
   }, []);
 
   useEffect(() => {
-    if (bridgeDebugEnabled) {
-      logIntervalRef.current = setInterval(() => {
-        console.log('📈 [BRIDGE_SUMMARY] 브릿지 상태 요약', {
-          isActive: checkCanTransfer(),
-          lastUpdate: new Date().toLocaleTimeString(),
-          status: isTransferInProgress ? 'transferring' : 'idle',
-        });
-      }, 30000);
-    } else {
+    if (!bridgeDebugEnabled) {
       if (logIntervalRef.current) {
         clearInterval(logIntervalRef.current);
+        logIntervalRef.current = undefined;
       }
+      return;
     }
+
+    logIntervalRef.current = window.setInterval(() => {
+      console.log('📈 [BRIDGE_SUMMARY] 브릿지 상태 요약', {
+        isActive: checkCanTransfer(),
+        lastUpdate: new Date().toLocaleTimeString(),
+        status: isTransferInProgress ? 'transferring' : 'idle',
+      });
+    }, 30000);
 
     return () => {
       if (logIntervalRef.current) {
         clearInterval(logIntervalRef.current);
+        logIntervalRef.current = undefined;
       }
     };
   }, [bridgeDebugEnabled, checkCanTransfer, isTransferInProgress]);
 
-  if (bridgeDebugEnabled) {
+  useEffect(() => {
+    if (!bridgeDebugEnabled) return;
+
     logWithThrottle('📊 [BRIDGE_DEBUG] 멀티스텝 브릿지 실시간 상태', {
       transferStatus: isTransferInProgress ? 'active' : 'idle',
       canTransfer: checkCanTransfer(),
@@ -128,21 +136,31 @@ function MultiStepFormContainer(): React.ReactNode {
       warningCount: transferWarnings?.length || 0,
       timestamp: new Date().toLocaleTimeString(),
     });
-  }
+  }, [
+    bridgeDebugEnabled,
+    isTransferInProgress,
+    checkCanTransfer,
+    transferErrors,
+    transferWarnings,
+    logWithThrottle,
+  ]);
 
-  const handleStepChange = React.useCallback(
+  const handleStepChange = useCallback(
     (step: StepNumber) => {
       goToStep(step);
+      console.log('🔄 [STEP_CHANGE] 스텝 변경:', step);
     },
     [goToStep]
   );
 
-  const handleNextStep = React.useCallback(() => {
+  const handleNextStep = useCallback(() => {
     goToNextStep();
+    console.log('➡️ [STEP_NEXT] 다음 스텝으로 이동');
   }, [goToNextStep]);
 
-  const handlePrevStep = React.useCallback(() => {
+  const handlePrevStep = useCallback(() => {
     goToPrevStep();
+    console.log('⬅️ [STEP_PREV] 이전 스텝으로 이동');
   }, [goToPrevStep]);
 
   const handleBridgeDataReceived = useCallback(
@@ -157,60 +175,67 @@ function MultiStepFormContainer(): React.ReactNode {
         });
 
         if (transferredData) {
+          const {
+            transformedContent,
+            transformedIsCompleted,
+            transformationSuccess,
+          } = transferredData;
           console.log('📈 [BRIDGE_DEBUG] 변환된 콘텐츠 정보:', {
-            hasTransformedContent: !!transferredData.transformedContent,
-            contentLength: transferredData.transformedContent?.length || 0,
-            isCompleted: transferredData.transformedIsCompleted || false,
-            transformationSuccess:
-              transferredData.transformationSuccess || false,
+            hasTransformedContent: !!transformedContent,
+            contentLength: transformedContent?.length || 0,
+            isCompleted: transformedIsCompleted || false,
+            transformationSuccess: transformationSuccess || false,
           });
         }
         console.groupEnd();
       }
 
-      if (transferredData?.transformedContent) {
+      const { transformedContent, transformedIsCompleted } =
+        transferredData || {};
+
+      if (!transformedContent) {
         if (bridgeDebugEnabled) {
-          console.log('🔄 [BRIDGE_DEBUG] 폼 데이터 업데이트 시작');
+          console.warn('⚠️ [BRIDGE_DEBUG] 수신된 데이터에 변환된 콘텐츠 없음');
         }
+        return;
+      }
 
-        updateFormValue(
-          'editorCompletedContent',
-          transferredData.transformedContent
-        );
+      if (bridgeDebugEnabled) {
+        console.log('🔄 [BRIDGE_DEBUG] 폼 데이터 업데이트 시작');
+      }
 
-        const completionStatus =
-          transferredData.transformedIsCompleted || false;
-        setEditorCompleted(completionStatus);
+      updateFormValue('editorCompletedContent', transformedContent);
 
-        if (transferredData.transformedIsCompleted) {
-          goToNextStep();
-        }
-      } else if (bridgeDebugEnabled) {
-        console.warn('⚠️ [BRIDGE_DEBUG] 수신된 데이터에 변환된 콘텐츠 없음');
+      const completionStatus = transformedIsCompleted || false;
+      setEditorCompleted(completionStatus);
+
+      if (transformedIsCompleted) {
+        goToNextStep();
       }
     },
     [updateFormValue, setEditorCompleted, goToNextStep, bridgeDebugEnabled]
   );
 
-  const renderCurrentStep = React.useCallback(() => {
+  const renderCurrentStep = useCallback(() => {
     return renderStepComponent(currentStep);
   }, [currentStep]);
 
   useEffect(() => {
-    if (
-      lastTransferResult?.operationSuccess &&
-      lastTransferResult.transferredData
-    ) {
-      handleBridgeDataReceived(lastTransferResult.transferredData);
-    } else if (
-      lastTransferResult &&
-      !lastTransferResult.operationSuccess &&
-      bridgeDebugEnabled
-    ) {
+    if (!lastTransferResult) return;
+
+    const { operationSuccess, transferredData, operationErrors } =
+      lastTransferResult;
+
+    if (operationSuccess && transferredData) {
+      handleBridgeDataReceived(transferredData);
+      return;
+    }
+
+    if (!operationSuccess && bridgeDebugEnabled) {
       console.error('❌ [BRIDGE_DEBUG] 브릿지 데이터 수신 실패:', {
-        operationSuccess: lastTransferResult.operationSuccess,
-        errorCount: lastTransferResult.operationErrors.length,
-        errors: lastTransferResult.operationErrors,
+        operationSuccess,
+        errorCount: operationErrors.length,
+        errors: operationErrors,
       });
     }
   }, [lastTransferResult, handleBridgeDataReceived, bridgeDebugEnabled]);
@@ -228,108 +253,238 @@ function MultiStepFormContainer(): React.ReactNode {
     bridgeDebugEnabled,
   ]);
 
+  console.log('🎯 [MULTISTEP_RENDER] 렌더링 상태:', {
+    isPreviewPanelOpen,
+    deviceType,
+    currentStep,
+    timestamp: new Date().toISOString(),
+  });
+
   return (
-    <div className="mx-auto max-w-[1200px] sm:p-4 md:p-8 mb-xs:w-[300px] mb-sm:w-[350px] mb-md:w-[400px] mb-lg:w-[400px] mb-xl:w-[450px] tb:w-[1200px]">
-      {bridgeDebugEnabled && (
+    <div className="relative">
+      {bridgeDebugEnabled ? (
         <div className="fixed z-50 px-3 py-1 text-sm text-yellow-700 bg-yellow-100 border border-yellow-400 rounded debug-indicator top-4 right-4">
           🔧 BRIDGE DEBUG MODE
         </div>
-      )}
+      ) : null}
 
-      <FormHeaderContainer />
+      <div className="mx-auto max-w-[1200px] sm:p-4 md:p-8 mb-xs:w-[300px] mb-sm:w-[350px] mb-md:w-[400px] mb-lg:w-[400px] mb-xl:w-[450px] tb:w-[1200px]">
+        <FormHeaderContainer />
 
-      {/* 🎯 DesktopPreviewLayout에 isPreviewPanelOpen 전달 */}
-      <DesktopPreviewLayout showPreview={isPreviewPanelOpen}>
-        <FormProvider {...methods}>
-          <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
-            {/* 멀티스텝폼의 버튼 헤더 부분 */}
-            <StepNavigationWrapper
-              currentStep={currentStep}
-              progressWidth={progressWidth}
-              onStepChange={handleStepChange}
-            />
+        <div className="w-full">
+          <FormProvider {...methods}>
+            <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
+              <StepNavigationWrapper
+                currentStep={currentStep}
+                progressWidth={progressWidth}
+                onStepChange={handleStepChange}
+              />
 
-            <StepContentContainer currentStep={currentStep}>
-              {renderCurrentStep()}
-            </StepContentContainer>
+              <StepContentContainer currentStep={currentStep}>
+                {renderCurrentStep()}
+              </StepContentContainer>
 
-            <NavigationButtons
-              currentStep={currentStep}
-              onNext={handleNextStep}
-              onPrev={handlePrevStep}
-            />
-          </form>
-        </FormProvider>
-
-        {/* 🎯 데스크탑 미리보기 - DesktopPreviewLayout에서 처리 */}
-        <div className="top-0 hidden md:block lg:sticky h-svh">
-          <PreviewPanelContainer />
+              <NavigationButtons
+                currentStep={currentStep}
+                onNext={handleNextStep}
+                onPrev={handlePrevStep}
+              />
+            </form>
+          </FormProvider>
         </div>
-      </DesktopPreviewLayout>
 
-      {/* 🎯 모바일 미리보기 - 항상 렌더링 (바텀 시트 애니메이션) */}
-      <div className="md:hidden">
-        <PreviewPanelContainer />
+        <ToastManager />
       </div>
 
-      {bridgeDebugEnabled && (
-        <div className="fixed z-50 max-w-sm p-4 bg-gray-100 border border-gray-300 rounded debug-panel bottom-4 right-4">
-          <h3 className="mb-2 text-sm font-semibold">🌉 Bridge Status</h3>
-          <div className="space-y-1 text-xs">
-            <div>
-              Status:{' '}
-              <span
-                className={`font-mono ${
-                  checkCanTransfer() ? 'text-green-600' : 'text-red-600'
-                }`}
-              >
-                {isTransferInProgress ? 'transferring' : 'idle'}
-              </span>
-            </div>
-            <div>
-              Can Transfer:{' '}
-              <span
-                className={
-                  checkCanTransfer() ? 'text-green-600' : 'text-red-600'
-                }
-              >
-                {checkCanTransfer() ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div>
-              Errors:{' '}
-              <span className="text-red-600">
-                {transferErrors?.length || 0}
-              </span>
-            </div>
-            <div>
-              Warnings:{' '}
-              <span className="text-yellow-600">
-                {transferWarnings?.length || 0}
-              </span>
-            </div>
-            <div>
-              Preview Panel:{' '}
-              <span
-                className={
-                  isPreviewPanelOpen ? 'text-green-600' : 'text-red-600'
-                }
-              >
-                {isPreviewPanelOpen ? 'Open' : 'Closed'}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={() => setBridgeDebugEnabled(false)}
-            className="px-2 py-1 mt-2 text-xs bg-gray-200 rounded hover:bg-gray-300"
-            type="button"
-          >
-            Close Debug
-          </button>
-        </div>
-      )}
+      <ResponsivePreviewPanelOverlay
+        isOpen={isPreviewPanelOpen}
+        deviceType={deviceType}
+      />
 
-      <ToastManager />
+      {bridgeDebugEnabled ? (
+        <DebugPanel
+          isTransferInProgress={isTransferInProgress}
+          checkCanTransfer={checkCanTransfer}
+          transferErrors={transferErrors}
+          transferWarnings={transferWarnings}
+          isPreviewPanelOpen={isPreviewPanelOpen}
+          onClose={() => setBridgeDebugEnabled(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface ResponsivePreviewPanelOverlayProps {
+  isOpen: boolean;
+  deviceType: 'mobile' | 'desktop';
+}
+
+function ResponsivePreviewPanelOverlay({
+  isOpen,
+  deviceType,
+}: ResponsivePreviewPanelOverlayProps): React.ReactNode {
+  const [isVisible, setIsVisible] = useState(false);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+
+  console.log('🎯 [OVERLAY] 애니메이션 상태:', {
+    isOpen,
+    isVisible,
+    shouldAnimate,
+    deviceType,
+    timestamp: new Date().toISOString(),
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      // 🎬 열기: 확실한 시간 지연으로 첫 번째 열기부터 부드러운 애니메이션 보장
+      setIsVisible(true);
+      console.log('🎬 [ANIMATION] DOM 추가 완료');
+
+      // 🕐 확실한 50ms 지연: 브라우저가 DOM 렌더링과 초기 상태를 완전히 인식하도록 대기
+      const openTimeoutId = setTimeout(() => {
+        setShouldAnimate(true);
+        console.log('🎬 [ANIMATION] 열기 애니메이션 시작 - 50ms 지연 적용');
+      }, 50);
+
+      return () => clearTimeout(openTimeoutId);
+    }
+
+    // 🎬 닫기: 애니메이션 먼저 실행 후 DOM 제거
+    setShouldAnimate(false);
+    console.log('🎬 [ANIMATION] 닫기 애니메이션 시작');
+
+    const closeTimeoutId = setTimeout(() => {
+      setIsVisible(false);
+      console.log('🎬 [ANIMATION] DOM 제거 완료');
+    }, 1300);
+
+    return () => clearTimeout(closeTimeoutId);
+  }, [isOpen]);
+
+  if (!isVisible) {
+    console.log('🚫 [OVERLAY] DOM에서 제거됨');
+    return null;
+  }
+
+  const isMobile = deviceType === 'mobile';
+
+  return (
+    <>
+      <BackgroundOverlay isMobile={isMobile} shouldAnimate={shouldAnimate} />
+
+      <div
+        className={`
+          ${
+            isMobile
+              ? `preview-panel-bottom-sheet ${shouldAnimate ? 'is-open' : ''}`
+              : `preview-panel-desktop-overlay ${
+                  shouldAnimate ? 'is-open' : ''
+                }`
+          }
+        `}
+      >
+        <PreviewPanelContainer />
+      </div>
+    </>
+  );
+}
+
+interface BackgroundOverlayProps {
+  isMobile: boolean;
+  shouldAnimate: boolean;
+}
+
+function BackgroundOverlay({
+  isMobile,
+  shouldAnimate,
+}: BackgroundOverlayProps): React.ReactNode {
+  const handleBackgroundClick = usePreviewPanelStore(
+    (state) => state.handleBackgroundClick
+  );
+
+  return (
+    <div
+      className={`
+        ${
+          isMobile
+            ? `preview-panel-mobile-backdrop ${
+                shouldAnimate ? 'is-visible' : ''
+              }`
+            : `preview-panel-desktop-backdrop ${
+                shouldAnimate ? 'is-visible' : ''
+              }`
+        }
+      `}
+      onClick={handleBackgroundClick}
+    />
+  );
+}
+
+interface DebugPanelProps {
+  isTransferInProgress: boolean;
+  checkCanTransfer: () => boolean;
+  transferErrors?: any[];
+  transferWarnings?: any[];
+  isPreviewPanelOpen: boolean;
+  onClose: () => void;
+}
+
+function DebugPanel({
+  isTransferInProgress,
+  checkCanTransfer,
+  transferErrors = [],
+  transferWarnings = [],
+  isPreviewPanelOpen,
+  onClose,
+}: DebugPanelProps): React.ReactNode {
+  const canTransferStatus = checkCanTransfer();
+
+  return (
+    <div className="fixed z-50 max-w-sm p-4 bg-gray-100 border border-gray-300 rounded debug-panel bottom-4 right-4">
+      <h3 className="mb-2 text-sm font-semibold">🌉 Bridge Status</h3>
+      <div className="space-y-1 text-xs">
+        <div>
+          Status:{' '}
+          <span
+            className={`font-mono ${
+              canTransferStatus ? 'text-green-600' : 'text-red-600'
+            }`}
+          >
+            {isTransferInProgress ? 'transferring' : 'idle'}
+          </span>
+        </div>
+        <div>
+          Can Transfer:{' '}
+          <span
+            className={canTransferStatus ? 'text-green-600' : 'text-red-600'}
+          >
+            {canTransferStatus ? 'Yes' : 'No'}
+          </span>
+        </div>
+        <div>
+          Errors: <span className="text-red-600">{transferErrors.length}</span>
+        </div>
+        <div>
+          Warnings:{' '}
+          <span className="text-yellow-600">{transferWarnings.length}</span>
+        </div>
+        <div>
+          Preview Panel:{' '}
+          <span
+            className={isPreviewPanelOpen ? 'text-green-600' : 'text-red-600'}
+          >
+            {isPreviewPanelOpen ? 'Open' : 'Closed'}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={onClose}
+        className="px-2 py-1 mt-2 text-xs bg-gray-200 rounded hover:bg-gray-300"
+        type="button"
+      >
+        Close Debug
+      </button>
     </div>
   );
 }
