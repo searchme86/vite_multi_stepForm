@@ -1,6 +1,7 @@
-//====여기부터 수정됨====
-// 모달 핸들러 훅 - 무한 렌더링 방지
-import { useState, useCallback, useMemo } from 'react';
+// src/components/previewPanel/hooks/useModalHandlers.ts
+
+import { useCallback, useMemo } from 'react';
+import { usePreviewPanelStore } from '../store/previewPanelStore';
 
 // 반환 타입 정의
 interface UseModalHandlersReturn {
@@ -12,63 +13,128 @@ interface UseModalHandlersReturn {
   handleDesktopModalClose: () => void;
 }
 
+/**
+ * 모달 핸들러 훅 - PreviewPanelStore 통합 버전
+ *
+ * 수정사항:
+ * - 함수 존재 체크 제거 (항상 정의되므로 불필요한 체크)
+ * - 타입 안전성 향상
+ *
+ * @returns 모달 상태와 핸들러 함수들
+ */
 export function useModalHandlers(): UseModalHandlersReturn {
-  // 모바일 모달 상태 관리
-  // 모바일 미리보기 모달의 열림/닫힘 상태를 관리합니다
-  const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
+  console.log('🔧 [MODAL_HANDLERS] 훅 초기화 (PreviewPanelStore 통합 버전)');
 
-  // 데스크톱 모달 상태 관리
-  // 데스크톱 미리보기 모달의 열림/닫힘 상태를 관리합니다
-  const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
+  // 🎯 PreviewPanelStore에서 모바일 모달 상태 가져오기
+  const isMobileModalOpen = usePreviewPanelStore(
+    (state) => state.isMobileModalOpen
+  );
 
-  // 모바일 모달 열기 핸들러 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
+  // 🎯 PreviewPanelStore에서 데스크톱 모달 상태 가져오기
+  const isDesktopModalOpen = usePreviewPanelStore(
+    (state) => state.isDesktopModalOpen
+  );
+
+  // 🎯 PreviewPanelStore에서 모바일 모달 액션들 가져오기
+  const storeOpenMobileModal = usePreviewPanelStore(
+    (state) => state.openMobileModal
+  );
+  const storeCloseMobileModal = usePreviewPanelStore(
+    (state) => state.closeMobileModal
+  );
+
+  // 🎯 PreviewPanelStore에서 데스크톱 모달 액션들 가져오기
+  const storeOpenDesktopModal = usePreviewPanelStore(
+    (state) => state.openDesktopModal
+  );
+  const storeCloseDesktopModal = usePreviewPanelStore(
+    (state) => state.closeDesktopModal
+  );
+
+  console.log('🔧 [MODAL_HANDLERS] 현재 모달 상태:', {
+    isMobileModalOpen,
+    isDesktopModalOpen,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 모바일 모달 열기 핸들러 - PreviewPanelStore 액션 사용
   const handleMobileModalOpen = useCallback(() => {
-    console.log('📱 모바일 모달 열기');
-    setIsMobileModalOpen(true);
-  }, []);
+    console.log('📱 [MODAL_HANDLERS] 모바일 모달 열기 요청:', {
+      currentState: isMobileModalOpen,
+      action: 'OPEN_MOBILE_MODAL',
+      timestamp: new Date().toISOString(),
+    });
 
-  // 모바일 모달 닫기 핸들러 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
+    storeOpenMobileModal();
+
+    console.log('✅ [MODAL_HANDLERS] 모바일 모달 열기 완료');
+  }, [isMobileModalOpen, storeOpenMobileModal]);
+
+  // 🎯 모바일 모달 닫기 핸들러 - PreviewPanelStore 액션 사용
   const handleMobileModalClose = useCallback(() => {
-    console.log('📱 모바일 모달 닫기');
-    setIsMobileModalOpen(false);
-  }, []);
+    console.log('📱 [MODAL_HANDLERS] 모바일 모달 닫기 요청:', {
+      currentState: isMobileModalOpen,
+      action: 'CLOSE_MOBILE_MODAL',
+      timestamp: new Date().toISOString(),
+    });
 
-  // 데스크톱 모달 열기 핸들러 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
+    storeCloseMobileModal();
+
+    console.log('✅ [MODAL_HANDLERS] 모바일 모달 닫기 완료');
+  }, [isMobileModalOpen, storeCloseMobileModal]);
+
+  // 🎯 데스크톱 모달 열기 핸들러 - PreviewPanelStore 액션 사용
   const handleDesktopModalOpen = useCallback(() => {
-    console.log('🖥️ 데스크톱 모달 열기');
-    setIsDesktopModalOpen(true);
-  }, []);
+    console.log('🖥️ [MODAL_HANDLERS] 데스크톱 모달 열기 요청:', {
+      currentState: isDesktopModalOpen,
+      action: 'OPEN_DESKTOP_MODAL',
+      timestamp: new Date().toISOString(),
+    });
 
-  // 데스크톱 모달 닫기 핸들러 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
+    storeOpenDesktopModal();
+
+    console.log('✅ [MODAL_HANDLERS] 데스크톱 모달 열기 완료');
+  }, [isDesktopModalOpen, storeOpenDesktopModal]);
+
+  // 🎯 데스크톱 모달 닫기 핸들러 - PreviewPanelStore 액션 사용
   const handleDesktopModalClose = useCallback(() => {
-    console.log('🖥️ 데스크톱 모달 닫기');
-    setIsDesktopModalOpen(false);
-  }, []);
+    console.log('🖥️ [MODAL_HANDLERS] 데스크톱 모달 닫기 요청:', {
+      currentState: isDesktopModalOpen,
+      action: 'CLOSE_DESKTOP_MODAL',
+      timestamp: new Date().toISOString(),
+    });
+
+    storeCloseDesktopModal();
+
+    console.log('✅ [MODAL_HANDLERS] 데스크톱 모달 닫기 완료');
+  }, [isDesktopModalOpen, storeCloseDesktopModal]);
 
   // 모든 모달 관련 상태와 핸들러를 메모이제이션
-  // useMemo를 사용하여 의존성이 변경될 때만 새 객체를 생성합니다
-  // 이는 이 훅을 사용하는 컴포넌트의 불필요한 리렌더링을 방지합니다
-  return useMemo(
-    () => ({
+  const returnValue = useMemo((): UseModalHandlersReturn => {
+    console.log('🔄 [MODAL_HANDLERS] 반환 객체 생성:', {
+      isMobileModalOpen,
+      isDesktopModalOpen,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
       isMobileModalOpen,
       isDesktopModalOpen,
       handleMobileModalOpen,
       handleMobileModalClose,
       handleDesktopModalOpen,
       handleDesktopModalClose,
-    }),
-    [
-      isMobileModalOpen,
-      isDesktopModalOpen,
-      handleMobileModalOpen,
-      handleMobileModalClose,
-      handleDesktopModalOpen,
-      handleDesktopModalClose,
-    ]
-  );
+    };
+  }, [
+    isMobileModalOpen,
+    isDesktopModalOpen,
+    handleMobileModalOpen,
+    handleMobileModalClose,
+    handleDesktopModalOpen,
+    handleDesktopModalClose,
+  ]);
+
+  console.log('✅ [MODAL_HANDLERS] 훅 초기화 완료 (PreviewPanelStore 통합)');
+
+  return returnValue;
 }
-//====여기까지 수정됨====

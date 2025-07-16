@@ -1,46 +1,95 @@
-//====여기부터 수정됨====
-// 추가 상태 관리 훅 - 무한 렌더링 방지
-import { useState, useRef, useMemo, useCallback } from 'react';
+// src/components/previewPanel/hooks/useAdditionalState.ts
+
+import { useRef, useMemo, useCallback } from 'react';
+import { usePreviewPanelStore } from '../store/previewPanelStore';
 
 // 반환 타입 정의
-// 타입을 명확히 정의하여 TypeScript의 타입 추론을 돕습니다
 interface UseAdditionalStateReturn {
   hasTabChanged: boolean;
   setHasTabChanged: (value: boolean) => void;
   isMountedRef: React.MutableRefObject<boolean>;
 }
 
+/**
+ * 추가 상태 관리 훅 - PreviewPanelStore 통합 버전
+ *
+ * 수정사항:
+ * - 미사용 변수 제거 (storeSetIsMountedRef, isMountedFromStore)
+ * - 타입 안전성 향상
+ * - 불필요한 스토어 접근 제거
+ *
+ * @returns 탭 변경 상태와 마운트 상태 관련 함수들
+ */
 export function useAdditionalState(): UseAdditionalStateReturn {
-  // 탭 변경 상태 관리
-  // 탭이 변경되었는지를 추적하는 상태입니다
-  const [hasTabChanged, setHasTabChangedState] = useState<boolean>(false);
+  console.log('🔧 [ADDITIONAL_STATE] 훅 초기화 (PreviewPanelStore 통합 버전)');
 
-  // 컴포넌트 마운트 상태 추적
-  // 컴포넌트가 마운트되었는지를 추적하는 ref입니다
+  // 🎯 PreviewPanelStore에서 탭 변경 상태 가져오기
+  const hasTabChanged = usePreviewPanelStore((state) => state.hasTabChanged);
+
+  // 🎯 PreviewPanelStore에서 탭 변경 상태 설정 함수 가져오기
+  const storeSetHasTabChanged = usePreviewPanelStore(
+    (state) => state.setHasTabChanged
+  );
+
+  // 컴포넌트 마운트 상태 추적 ref
   const isMountedRef = useRef<boolean>(true);
 
-  // setHasTabChanged 함수를 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
-  // 이를 통해 이 함수를 의존성으로 사용하는 useEffect의 불필요한 재실행을 방지합니다
-  const setHasTabChanged = useCallback((value: boolean) => {
-    // 마운트된 상태에서만 상태 업데이트
-    // 언마운트된 컴포넌트에서 setState 호출을 방지합니다
-    if (isMountedRef.current) {
-      setHasTabChangedState(value);
-      console.log('📋 탭 변경 상태 업데이트:', value);
-    }
-  }, []);
+  console.log('🔧 [ADDITIONAL_STATE] 현재 상태:', {
+    hasTabChanged,
+    isMountedRefValue: isMountedRef.current,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 탭 변경 상태 설정 함수 - PreviewPanelStore 액션 사용
+  const setHasTabChanged = useCallback(
+    (newValue: boolean) => {
+      console.log('📋 [ADDITIONAL_STATE] 탭 변경 상태 업데이트 요청:', {
+        currentValue: hasTabChanged,
+        newValue,
+        isMounted: isMountedRef.current,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 마운트된 상태에서만 상태 업데이트
+      const shouldUpdateState = isMountedRef.current;
+      if (shouldUpdateState) {
+        storeSetHasTabChanged(newValue);
+
+        console.log('✅ [ADDITIONAL_STATE] 탭 변경 상태 업데이트 완료:', {
+          newValue,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.warn(
+          '⚠️ [ADDITIONAL_STATE] 언마운트된 상태에서 업데이트 요청 무시:',
+          {
+            requestedValue: newValue,
+            isMounted: isMountedRef.current,
+            timestamp: new Date().toISOString(),
+          }
+        );
+      }
+    },
+    [hasTabChanged, storeSetHasTabChanged]
+  );
 
   // 반환 객체를 메모이제이션
-  // useMemo를 사용하여 의존성이 변경될 때만 새 객체를 생성합니다
-  // 이는 이 훅을 사용하는 컴포넌트의 불필요한 리렌더링을 방지합니다
-  return useMemo(
-    () => ({
+  const returnValue = useMemo((): UseAdditionalStateReturn => {
+    console.log('🔄 [ADDITIONAL_STATE] 반환 객체 생성:', {
+      hasTabChanged,
+      hasSetFunction: !!setHasTabChanged,
+      hasRefObject: !!isMountedRef,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
       hasTabChanged,
       setHasTabChanged,
       isMountedRef,
-    }),
-    [hasTabChanged, setHasTabChanged] // isMountedRef는 ref이므로 의존성에 포함하지 않습니다
-  );
+    };
+  }, [hasTabChanged, setHasTabChanged]);
+
+  console.log('✅ [ADDITIONAL_STATE] 훅 초기화 완료 (PreviewPanelStore 통합)');
+
+  return returnValue;
 }
-//====여기까지 수정됨====
