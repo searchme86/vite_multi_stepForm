@@ -9,6 +9,7 @@ const logger = createLogger('DELETE_CONFIRMATION');
 export const useDeleteConfirmation = (
   onConfirmDelete: (imageIndex: number, imageName: string) => void
 ) => {
+  // 🚨 FIXED: isVisible 속성으로 통일
   const [deleteConfirmState, setDeleteConfirmState] =
     useState<DeleteConfirmState>({
       isVisible: false,
@@ -25,7 +26,6 @@ export const useDeleteConfirmation = (
     const { imageIndex: currentImageIndex, imageName: currentImageName } =
       deleteConfirmState;
 
-    // 🚨 FIXED: imageName의 타입 안전성 확보
     const safeImageName = currentImageName ?? '';
 
     currentStateRef.current = {
@@ -49,6 +49,7 @@ export const useDeleteConfirmation = (
         timestamp: new Date().toLocaleTimeString(),
       });
 
+      // 🚨 FIXED: isVisible 속성으로 통일
       const newDeleteConfirmState: DeleteConfirmState = {
         isVisible: true,
         imageIndex,
@@ -73,7 +74,6 @@ export const useDeleteConfirmation = (
     const isValidIndex = currentImageIndex >= 0;
     const hasImageName = currentImageName.length > 0;
 
-    // 🔧 early return으로 중첩 방지
     if (!isValidIndex || !hasImageName) {
       logger.error('잘못된 삭제 요청', {
         imageIndex: currentImageIndex,
@@ -86,6 +86,7 @@ export const useDeleteConfirmation = (
 
     onConfirmDelete(currentImageIndex, currentImageName);
 
+    // 🚨 FIXED: isVisible 속성으로 통일
     const resetDeleteConfirmState: DeleteConfirmState = {
       isVisible: false,
       imageIndex: -1,
@@ -111,6 +112,7 @@ export const useDeleteConfirmation = (
       timestamp: new Date().toLocaleTimeString(),
     });
 
+    // 🚨 FIXED: isVisible 속성으로 통일
     const cancelledDeleteConfirmState: DeleteConfirmState = {
       isVisible: false,
       imageIndex: -1,

@@ -21,9 +21,8 @@ console.log('🔧 [IMPORT] useImageUploadHandlers 모듈 로드 완료');
 const detectMobileDevice = (): boolean => {
   if (typeof window === 'undefined') return false;
 
-  const userAgent = navigator?.userAgent ?? '';
-  const hasTouch =
-    'ontouchstart' in window || (navigator?.maxTouchPoints ?? 0) > 0;
+  const { userAgent = '', maxTouchPoints = 0 } = navigator ?? {};
+  const hasTouch = 'ontouchstart' in window || maxTouchPoints > 0;
   const isSmallScreen = window.innerWidth <= 768;
   const isMobileUserAgent =
     /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
@@ -175,6 +174,23 @@ const validateSliderPermission = (
   return { canProceed: false, reason: reasons[action] };
 };
 
+const convertFileIdToString = (fileId: unknown): string | null => {
+  if (typeof fileId === 'string') {
+    return fileId.trim() !== '' ? fileId : null;
+  }
+
+  if (typeof fileId === 'number') {
+    return Number.isFinite(fileId) ? fileId.toString() : null;
+  }
+
+  console.warn('⚠️ [TYPE_CONVERT] 지원하지 않는 fileId 타입:', {
+    type: typeof fileId,
+    value: fileId,
+  });
+
+  return null;
+};
+
 export const useImageUploadHandlers = (
   params: UseImageUploadHandlersParams
 ): UseImageUploadHandlersResult => {
@@ -209,8 +225,8 @@ export const useImageUploadHandlers = (
   );
 
   const finalSelectedSliderIndices = useMemo(() => {
-    const storeIndices = storeData.selectedSliderIndices;
-    const selectionIndices = selectionData.selectedSliderIndices;
+    const { selectedSliderIndices: storeIndices } = storeData;
+    const { selectedSliderIndices: selectionIndices } = selectionData;
 
     const indices = storeIndices.length > 0 ? storeIndices : selectionIndices;
 
@@ -247,6 +263,7 @@ export const useImageUploadHandlers = (
   const { duplicateMessageState, showDuplicateMessage } =
     useDuplicateFileHandler();
 
+  // 🚨 FIXED: 타입 안전성을 위한 Map 파일 제거 로직 개선
   const handleDeleteImage = useCallback(
     (imageIndex: number, imageName: string) => {
       console.log('🗑️ [DELETE] 이미지 삭제 처리:', { imageIndex, imageName });
@@ -258,11 +275,8 @@ export const useImageUploadHandlers = (
       );
 
       if (!permission.canProceed) {
-        const warningToast = createToast(
-          '삭제 불가',
-          permission.reason ?? '삭제할 수 없습니다.',
-          'warning'
-        );
+        const { reason = '삭제할 수 없습니다.' } = permission;
+        const warningToast = createToast('삭제 불가', reason, 'warning');
         showToastMessage(warningToast);
         return;
       }
@@ -273,11 +287,66 @@ export const useImageUploadHandlers = (
         console.log('📸 [DELETE] 메인 이미지 해제:', { imageIndex });
       }
 
-      updateMediaValue((prev) =>
-        prev.filter((_, index) => index !== imageIndex)
+      // 🚨 FIXED: Map 기반 파일 제거 - 타입 안전성 개선
+      if (mapFileActions) {
+        try {
+          const allFiles = mapFileActions.getFileUrls();
+          const urlIndex = allFiles.indexOf(imageUrl);
+
+          if (urlIndex === -1) {
+            console.warn('⚠️ [DELETE] Map에서 URL을 찾을 수 없음:', {
+              imageUrl: imageUrl?.slice(0, 50),
+              urlIndex,
+            });
+          } else {
+            const allNames = mapFileActions.getFileNames();
+            const fileName = allNames[urlIndex];
+            const legacyArrays = mapFileActions.convertToLegacyArrays();
+            const fileIds = Array.from(legacyArrays.urls.keys());
+            const rawFileId = fileIds[urlIndex];
+
+            console.log('🔍 [DELETE_DEBUG] 타입 정보:', {
+              rawFileIdType: typeof rawFileId,
+              rawFileIdValue: rawFileId,
+              urlIndex,
+              fileName,
+            });
+
+            if (rawFileId !== undefined) {
+              const convertedFileId = convertFileIdToString(rawFileId);
+
+              if (convertedFileId === null) {
+                console.error('❌ [DELETE] fileId 변환 실패:', {
+                  rawFileId,
+                  type: typeof rawFileId,
+                });
+                return;
+              }
+
+              mapFileActions.removeFile(convertedFileId);
+              console.log('✅ [DELETE] Map에서 파일 제거 완료:', {
+                originalFileId: rawFileId,
+                convertedFileId,
+                fileName,
+                imageIndex,
+              });
+            } else {
+              console.error('❌ [DELETE] fileId가 undefined:', {
+                urlIndex,
+                fileIdsLength: fileIds.length,
+              });
+            }
+          }
+        } catch (mapDeleteError) {
+          console.error('❌ [DELETE] Map에서 파일 제거 실패:', mapDeleteError);
+        }
+      }
+
+      updateMediaValue((previousMedia) =>
+        previousMedia.filter((_, index) => index !== imageIndex)
       );
-      updateSelectedFileNames((prev) =>
-        prev.filter((_, index) => index !== imageIndex)
+      updateSelectedFileNames((previousNames) =>
+        previousNames.filter((_, index) => index !== imageIndex)
       );
 
       const successToast = createToast(
@@ -297,6 +366,7 @@ export const useImageUploadHandlers = (
       updateMediaValue,
       updateSelectedFileNames,
       showToastMessage,
+      mapFileActions,
     ]
   );
 
@@ -307,7 +377,6 @@ export const useImageUploadHandlers = (
     cancelDelete,
   } = useDeleteConfirmation(handleDeleteImage);
 
-  // 🚨 Phase 2: mapFileActions 전달 수정
   const fileProcessingCallbacks = useMemo(
     () => ({
       updateMediaValue,
@@ -318,7 +387,7 @@ export const useImageUploadHandlers = (
       updateFileProgress,
       completeFileUpload,
       failFileUpload,
-      mapFileActions: mapFileActions, // 🚨 FIXED: mapFileActions 전달 추가
+      mapFileActions: mapFileActions,
     }),
     [
       updateMediaValue,
@@ -329,7 +398,7 @@ export const useImageUploadHandlers = (
       updateFileProgress,
       completeFileUpload,
       failFileUpload,
-      mapFileActions, // 🚨 FIXED: 의존성 배열에 추가
+      mapFileActions,
     ]
   );
 
@@ -342,7 +411,7 @@ export const useImageUploadHandlers = (
   const fileProcessingHandlers = useFileProcessing(
     formData.media,
     selectionData.selectedFileNames,
-    fileProcessingCallbacks // 🚨 FIXED: mapFileActions가 포함된 콜백 전달
+    fileProcessingCallbacks
   );
 
   const { touchActiveImages, handleImageTouch: originalHandleImageTouch } =
@@ -359,11 +428,8 @@ export const useImageUploadHandlers = (
       );
 
       if (!permission.canProceed) {
-        const infoToast = createToast(
-          '터치 제한',
-          permission.reason ?? '터치할 수 없습니다.',
-          'primary'
-        );
+        const { reason = '터치할 수 없습니다.' } = permission;
+        const infoToast = createToast('터치 제한', reason, 'primary');
         showToastMessage(infoToast);
         return;
       }
@@ -378,16 +444,17 @@ export const useImageUploadHandlers = (
   const handleFileSelectClick = useCallback(() => {
     console.log('📁 [FILE_SELECT] 파일 선택 버튼 클릭');
 
-    const buttonRef = fileSelectButtonRef.current;
-    if (buttonRef?.click) {
-      try {
-        buttonRef.click();
-        console.log('✅ [FILE_SELECT] 파일 입력 클릭 성공');
-      } catch (error) {
-        console.error('❌ [FILE_SELECT] 파일 입력 클릭 실패:', error);
-      }
-    } else {
+    const { current: buttonRef } = fileSelectButtonRef;
+    if (!buttonRef?.click) {
       console.warn('⚠️ [FILE_SELECT] 파일 선택 버튼 참조 없음');
+      return;
+    }
+
+    try {
+      buttonRef.click();
+      console.log('✅ [FILE_SELECT] 파일 입력 클릭 성공');
+    } catch (clickError) {
+      console.error('❌ [FILE_SELECT] 파일 입력 클릭 실패:', clickError);
     }
   }, []);
 
@@ -410,9 +477,10 @@ export const useImageUploadHandlers = (
       );
 
       if (!permission.canProceed) {
+        const { reason = '설정할 수 없습니다.' } = permission;
         const warningToast = createToast(
           '메인 이미지 설정 불가',
-          permission.reason ?? '설정할 수 없습니다.',
+          reason,
           'warning'
         );
         showToastMessage(warningToast);
@@ -499,15 +567,22 @@ export const useImageUploadHandlers = (
       if (setSliderSelectedIndices) {
         setSliderSelectedIndices(newSelectedIndices);
         console.log('✅ [SLIDER_UPDATE] setSliderSelectedIndices 사용');
-      } else if (storeUpdate) {
+        return;
+      }
+
+      if (storeUpdate) {
         storeUpdate(newSelectedIndices);
         console.log('✅ [SLIDER_UPDATE] updateSliderSelection 사용');
-      } else if (setSelectedSliderIndices) {
+        return;
+      }
+
+      if (setSelectedSliderIndices) {
         setSelectedSliderIndices(newSelectedIndices);
         console.log('✅ [SLIDER_UPDATE] setSelectedSliderIndices 사용');
-      } else {
-        console.warn('⚠️ [SLIDER_UPDATE] 사용 가능한 업데이트 메서드 없음');
+        return;
       }
+
+      console.warn('⚠️ [SLIDER_UPDATE] 사용 가능한 업데이트 메서드 없음');
     },
     [storeData, finalSelectedSliderIndices.length]
   );

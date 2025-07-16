@@ -165,14 +165,12 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     blogMediaStateResult.selectionState
   );
 
-  // 🔧 Phase 5: 양방향 레거시 동기화 개선
   const performLegacyDataSync = useCallback(() => {
     if (syncExecutedRef.current) {
       console.log('🔍 [LEGACY_SYNC] 이미 동기화 완료됨, 건너뜀');
       return;
     }
 
-    // ✅ 1. 레거시 → Map 동기화 (기존)
     const hasLegacyData =
       legacyMediaFiles.length > 0 || legacySelectedFileNames.length > 0;
 
@@ -205,7 +203,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       }
     }
 
-    // ✅ 2. Map → 레거시 동기화 (새로 추가)
     const { urls: mapUrls, names: mapNames } =
       mapFileActions.convertToLegacyArrays();
     const shouldSyncMapToLegacy =
@@ -485,10 +482,9 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     };
   }, [blogMediaIntegrationResult.imageGalleryStore]);
 
-  // 🔧 Phase 4: 플레이스홀더 정리 로직 추가
   useEffect(() => {
     const cleanupStaleePlaceholders = () => {
-      const staleTimeout = 10000; // 10초
+      const staleTimeout = 10000;
       const now = Date.now();
 
       currentMediaFiles.forEach((url: string, index: number) => {
@@ -531,25 +527,20 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
   ]);
 
   const contextValue = useMemo<ImageUploadContextValue>(() => {
+    // 🚨 FIXED: 속성명 통일 - isVisible 사용
     const convertDeleteConfirmState = () => {
       const state = imageUploadHandlers.deleteConfirmState;
       if (!state || typeof state !== 'object') {
-        return { isOpen: false, imageIndex: -1, imageUrl: '' };
+        return { isVisible: false, imageIndex: -1, imageUrl: '' };
       }
 
       const isVisible = Reflect.get(state, 'isVisible');
-      const isOpen = Reflect.get(state, 'isOpen');
       const imageIndex = Reflect.get(state, 'imageIndex');
       const imageName = Reflect.get(state, 'imageName');
       const imageUrl = Reflect.get(state, 'imageUrl');
 
       return {
-        isOpen:
-          typeof isOpen === 'boolean'
-            ? isOpen
-            : typeof isVisible === 'boolean'
-            ? isVisible
-            : false,
+        isVisible: typeof isVisible === 'boolean' ? isVisible : false,
         imageIndex: typeof imageIndex === 'number' ? imageIndex : -1,
         imageUrl:
           typeof imageUrl === 'string'
@@ -612,7 +603,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         Object.entries(state).forEach(([key, value]) => {
           const numericKey = parseInt(key, 10);
           if (!isNaN(numericKey)) {
-            result[numericKey] = !!value; // Boolean() 대신 !! 사용
+            result[numericKey] = !!value;
           }
         });
         return result;
@@ -621,7 +612,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       return {};
     };
 
-    // 🚨 Phase 1: hasActiveUploads 계산 로직 수정
     const uploadingFileCount = Object.keys(
       imageUploadHandlers.uploading || {}
     ).length;
@@ -641,8 +631,8 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       deleteConfirmState: convertDeleteConfirmState(),
       duplicateMessageState: convertDuplicateMessageState(),
       touchActiveImages: convertTouchActiveImages(),
-      hasActiveUploads: actuallyHasActiveUploads, // 🚨 수정: 실제 업로딩 상태만 체크
-      isMobileDevice: !!imageUploadHandlers.isMobileDevice, // Boolean() 대신 !! 사용
+      hasActiveUploads: actuallyHasActiveUploads,
+      isMobileDevice: !!imageUploadHandlers.isMobileDevice,
       selectedSliderIndices: selectedSliderIndices,
       isImageSelectedForSlider: isImageSelectedForSlider,
       updateSliderSelection: updateSliderSelection,

@@ -7,38 +7,48 @@ import { createLogger } from '../utils/loggerUtils';
 const logger = createLogger('DELETE_CONFIRM_DIALOG');
 
 interface SafeDeleteConfirmState {
-  readonly isOpen: boolean;
+  readonly isVisible: boolean;
   readonly imageIndex: number;
   readonly imageUrl: string;
   readonly hasValidData: boolean;
 }
 
+// 🚨 FIXED: 속성명 통일 - isVisible 우선 사용
 const extractSafeDeleteConfirmState = (
   deleteConfirmState: unknown
 ): SafeDeleteConfirmState => {
   try {
     if (!deleteConfirmState || typeof deleteConfirmState !== 'object') {
       return {
-        isOpen: false,
+        isVisible: false,
         imageIndex: -1,
         imageUrl: '',
         hasValidData: false,
       };
     }
 
+    // 🚨 FIXED: isVisible과 isOpen 모두 체크하여 호환성 확보
+    const isVisible = Reflect.get(deleteConfirmState, 'isVisible');
     const isOpen = Reflect.get(deleteConfirmState, 'isOpen');
     const imageIndex = Reflect.get(deleteConfirmState, 'imageIndex');
     const imageUrl = Reflect.get(deleteConfirmState, 'imageUrl');
 
-    const safeIsOpen = typeof isOpen === 'boolean' ? isOpen : false;
+    // isVisible을 우선하고, 없으면 isOpen 사용
+    const safeIsVisible =
+      typeof isVisible === 'boolean'
+        ? isVisible
+        : typeof isOpen === 'boolean'
+        ? isOpen
+        : false;
+
     const safeImageIndex = typeof imageIndex === 'number' ? imageIndex : -1;
     const safeImageUrl = typeof imageUrl === 'string' ? imageUrl : '';
 
     const hasValidData =
-      safeIsOpen && safeImageIndex >= 0 && safeImageUrl.length > 0;
+      safeIsVisible && safeImageIndex >= 0 && safeImageUrl.length > 0;
 
     return {
-      isOpen: safeIsOpen,
+      isVisible: safeIsVisible,
       imageIndex: safeImageIndex,
       imageUrl: safeImageUrl,
       hasValidData,
@@ -46,7 +56,7 @@ const extractSafeDeleteConfirmState = (
   } catch (error) {
     console.error('❌ [DELETE_CONFIRM] 상태 추출 실패:', error);
     return {
-      isOpen: false,
+      isVisible: false,
       imageIndex: -1,
       imageUrl: '',
       hasValidData: false,
@@ -80,7 +90,7 @@ function DeleteConfirmDialog(): React.ReactNode {
     const extracted = extractSafeDeleteConfirmState(deleteConfirmState);
 
     console.log('🔍 [DELETE_CONFIRM] 안전한 상태 추출:', {
-      isOpen: extracted.isOpen,
+      isVisible: extracted.isVisible,
       imageIndex: extracted.imageIndex,
       imageUrl: extracted.imageUrl.slice(0, 30) + '...',
       hasValidData: extracted.hasValidData,
@@ -90,7 +100,7 @@ function DeleteConfirmDialog(): React.ReactNode {
   }, [deleteConfirmState]);
 
   const deleteConfirmationInfo = useMemo(() => {
-    const { isOpen, imageIndex, imageUrl, hasValidData } = safeState;
+    const { isVisible, imageIndex, imageUrl, hasValidData } = safeState;
 
     if (!hasValidData) {
       return {
@@ -115,7 +125,7 @@ function DeleteConfirmDialog(): React.ReactNode {
     const warningMessage = '삭제된 이미지는 복구할 수 없습니다.';
 
     console.log('🔍 [DELETE_CONFIRM] 확인 정보 생성:', {
-      isVisible: isOpen,
+      isVisible,
       fileName,
       imageIndex,
       hasValidImageName,
@@ -123,7 +133,7 @@ function DeleteConfirmDialog(): React.ReactNode {
     });
 
     return {
-      isVisible: isOpen,
+      isVisible,
       fileName,
       imageIndex,
       confirmationMessage,
@@ -133,14 +143,17 @@ function DeleteConfirmDialog(): React.ReactNode {
     };
   }, [safeState]);
 
+  // 🚨 FIXED: 아래에서 위로 올라오는 애니메이션 복구
   const dialogStyleConfiguration = useMemo(() => {
     const { isVisible } = deleteConfirmationInfo;
 
     const baseClasses =
-      'absolute inset-0 p-3 bg-red-50 border-red-200 transition-all duration-500';
+      'absolute inset-0 p-3 bg-red-50 border-red-200 transition-all duration-500 ease-in-out';
+
+    // 🚨 FIXED: 아래에서 위로 올라오는 애니메이션 복구
     const visibilityClasses = isVisible
-      ? 'transform translate-y-0 opacity-100'
-      : 'transform translate-y-full opacity-0 pointer-events-none';
+      ? 'transform translate-y-0 opacity-100 scale-100'
+      : 'transform translate-y-full opacity-0 scale-95 pointer-events-none';
 
     const finalClassName = `${baseClasses} ${visibilityClasses}`;
 
@@ -225,10 +238,10 @@ function DeleteConfirmDialog(): React.ReactNode {
 
   const buttonStyleConfiguration = useMemo(() => {
     const cancelButtonClasses =
-      'px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200';
+      'px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-105';
 
     const confirmButtonClasses =
-      'px-3 py-1.5 text-xs font-medium text-white bg-red-600 border border-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200';
+      'px-3 py-1.5 text-xs font-medium text-white bg-red-600 border border-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-105';
 
     return {
       cancelButtonClasses,

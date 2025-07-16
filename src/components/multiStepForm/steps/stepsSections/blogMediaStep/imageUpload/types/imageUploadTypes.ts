@@ -1,8 +1,8 @@
 // 📁 imageUpload/types/imageUploadTypes.ts
 
+// 🚨 FIXED: DeleteConfirmState 속성명 통일
 export interface DeleteConfirmState {
-  readonly isVisible?: boolean;
-  readonly isOpen?: boolean;
+  readonly isVisible: boolean; // 🚨 FIXED: isVisible로 통일
   readonly imageIndex: number;
   readonly imageName?: string;
   readonly imageUrl?: string;
@@ -37,7 +37,6 @@ export interface DuplicateFileResult {
   readonly duplicateFiles: File[];
 }
 
-// 🚨 FIXED: 누락된 Map 관련 타입들 추가
 export type FileStatus = 'pending' | 'processing' | 'completed' | 'error';
 
 export interface FileItem {
@@ -60,7 +59,6 @@ export interface MapBasedFileState {
   readonly hasActiveUploads: boolean;
 }
 
-// 🚨 FIXED: FileStateActions 타입 완전 정의
 export interface FileStateActions {
   readonly addFile: (fileName: string, url: string) => string;
   readonly updateFile: (
@@ -159,8 +157,7 @@ export interface ImageUploadContextValue {
   readonly uploading: UploadProgressRecord;
   readonly uploadStatus: UploadStatusRecord;
   readonly deleteConfirmState: {
-    readonly isOpen?: boolean;
-    readonly isVisible?: boolean;
+    readonly isVisible: boolean; // 🚨 FIXED: isVisible로 통일
     readonly imageIndex: number;
     readonly imageUrl?: string;
     readonly imageName?: string;

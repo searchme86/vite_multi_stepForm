@@ -194,6 +194,7 @@ export const ImageCard: React.FC<ImageCardProps> = ({
     return `${fileName} 이미지${isMainImage ? ' (메인 이미지)' : ''}`;
   }, [fileName, isMainImage]);
 
+  // 🚨 FIXED: 호버 애니메이션 복구
   const cardClassName = useMemo(() => {
     const baseClasses = [
       'relative',
@@ -203,14 +204,28 @@ export const ImageCard: React.FC<ImageCardProps> = ({
       'transition-all',
       'duration-200',
       'cursor-pointer',
+      // 🚨 FIXED: 호버 애니메이션 클래스들 추가
+      'hover:scale-105',
+      'hover:shadow-lg',
+      'transform',
     ];
 
     if (isMainImage) {
-      baseClasses.push('border-blue-500', 'ring-2', 'ring-blue-200');
+      baseClasses.push(
+        'border-blue-500',
+        'ring-2',
+        'ring-blue-200',
+        'hover:border-blue-600'
+      );
     } else if (isSelected) {
-      baseClasses.push('border-green-500', 'ring-2', 'ring-green-200');
+      baseClasses.push(
+        'border-green-500',
+        'ring-2',
+        'ring-green-200',
+        'hover:border-green-600'
+      );
     } else {
-      baseClasses.push('border-gray-200', 'hover:border-gray-300');
+      baseClasses.push('border-gray-200', 'hover:border-blue-400');
     }
 
     if (cardState.hasError) {
@@ -248,7 +263,7 @@ export const ImageCard: React.FC<ImageCardProps> = ({
         <img
           src={imageUrl}
           alt={imageAltText}
-          className={`w-full h-48 object-cover ${
+          className={`w-full h-48 object-cover transition-opacity duration-200 ${
             cardState.isLoading ? 'opacity-50' : 'opacity-100'
           }`}
           loading="lazy"
@@ -290,10 +305,10 @@ export const ImageCard: React.FC<ImageCardProps> = ({
                 event.stopPropagation();
                 handleMainImageToggleSafely();
               }}
-              className={`px-2 py-1 text-xs rounded ${
+              className={`px-2 py-1 text-xs rounded transition-all duration-200 transform hover:scale-110 ${
                 isMainImage
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 hover:shadow-md'
               }`}
               aria-label={
                 isMainImage ? '메인 이미지 해제' : '메인 이미지로 설정'
@@ -309,7 +324,7 @@ export const ImageCard: React.FC<ImageCardProps> = ({
               event.stopPropagation();
               handleDeleteClickSafely();
             }}
-            className="px-2 py-1 text-xs text-white bg-red-500 rounded hover:bg-red-600"
+            className="px-2 py-1 text-xs text-white transition-all duration-200 transform bg-red-500 rounded hover:bg-red-600 hover:scale-110 hover:shadow-md"
             aria-label={`${fileName} 삭제`}
           >
             삭제
