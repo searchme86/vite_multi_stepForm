@@ -36,6 +36,18 @@ interface FileIdRegistry {
   urlToIdMap: Map<string, string>;
 }
 
+// 🚨 FIXED: 배치 업데이트 작업 인터페이스 추가
+interface BatchUpdateOperation {
+  readonly type: 'register' | 'update' | 'remove';
+  readonly fileId: string;
+  readonly data?: {
+    readonly fileName?: string;
+    readonly url?: string;
+    readonly placeholderUrl?: string;
+    readonly status?: 'pending' | 'processing' | 'completed' | 'failed';
+  };
+}
+
 const fileIdRegistry: FileIdRegistry = {
   mappings: new Map(),
   fileNameToIdMap: new Map(),
@@ -47,7 +59,11 @@ export const generateSecureFileId = (fileName: string): string => {
   try {
     if (!fileName || typeof fileName !== 'string') {
       logger.warn('유효하지 않은 파일명으로 ID 생성 시도:', { fileName });
-      return `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const fallbackId = `file-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+      console.log('🔑 [GENERATE_ID] Fallback ID 생성:', { fallbackId });
+      return fallbackId;
     }
 
     const sanitizedFileName = fileName
@@ -68,9 +84,13 @@ export const generateSecureFileId = (fileName: string): string => {
     return fileId;
   } catch (error) {
     logger.error('파일 ID 생성 실패:', { fileName, error });
-    return `fallback-${Date.now()}-${Math.random()
+    const fallbackId = `fallback-${Date.now()}-${Math.random()
       .toString(36)
       .substring(2, 8)}`;
+    console.log('🔑 [GENERATE_ID] 오류 발생, Fallback ID 생성:', {
+      fallbackId,
+    });
+    return fallbackId;
   }
 };
 
@@ -79,6 +99,8 @@ export const validateFileId = (fileId: string): FileIdValidationResult => {
   let sanitizedId = '';
 
   try {
+    console.log('🔍 [VALIDATE_ID] 파일 ID 검증 시작:', { fileId });
+
     if (!fileId || typeof fileId !== 'string') {
       issues.push('파일 ID가 문자열이 아님');
       sanitizedId = `invalid-${Date.now()}`;
@@ -113,6 +135,12 @@ export const validateFileId = (fileId: string): FileIdValidationResult => {
       sanitizedId,
     };
 
+    console.log('🔍 [VALIDATE_ID] 검증 결과:', {
+      isValid: result.isValid,
+      issuesCount: issues.length,
+      sanitizedId,
+    });
+
     if (!result.isValid) {
       logger.warn('파일 ID 검증 실패:', {
         원본ID: fileId,
@@ -139,6 +167,11 @@ export const createPlaceholderUrl = (
   fileName: string
 ): string => {
   try {
+    console.log('🔗 [PLACEHOLDER] 플레이스홀더 URL 생성 시작:', {
+      fileId,
+      fileName,
+    });
+
     const validation = validateFileId(fileId);
     const validFileId = validation.isValid ? fileId : validation.sanitizedId;
 
@@ -149,7 +182,7 @@ export const createPlaceholderUrl = (
     const timestamp = Date.now();
     const placeholderUrl = `placeholder-${validFileId}-${sanitizedFileName}-${timestamp}-processing`;
 
-    console.log('🔗 [PLACEHOLDER] 플레이스홀더 URL 생성:', {
+    console.log('🔗 [PLACEHOLDER] 플레이스홀더 URL 생성 완료:', {
       파일ID: validFileId,
       파일명: fileName,
       정제된파일명: sanitizedFileName,
@@ -159,7 +192,11 @@ export const createPlaceholderUrl = (
     return placeholderUrl;
   } catch (error) {
     logger.error('플레이스홀더 URL 생성 실패:', { fileId, fileName, error });
-    return `placeholder-error-${Date.now()}-processing`;
+    const errorPlaceholder = `placeholder-error-${Date.now()}-processing`;
+    console.log('🔗 [PLACEHOLDER] 오류 발생, 기본 플레이스홀더 생성:', {
+      errorPlaceholder,
+    });
+    return errorPlaceholder;
   }
 };
 
@@ -167,7 +204,12 @@ export const extractFileIdFromPlaceholder = (
   placeholderUrl: string
 ): string => {
   try {
+    console.log('🔍 [EXTRACT_ID] 플레이스홀더에서 파일 ID 추출 시작:', {
+      placeholderUrl: placeholderUrl.slice(0, 50) + '...',
+    });
+
     if (!placeholderUrl || typeof placeholderUrl !== 'string') {
+      console.log('🔍 [EXTRACT_ID] 유효하지 않은 플레이스홀더 URL');
       return '';
     }
 
@@ -178,8 +220,8 @@ export const extractFileIdFromPlaceholder = (
     if (placeholderMatch && placeholderMatch[1]) {
       const extractedId = placeholderMatch[1];
 
-      console.log('🔍 [EXTRACT_ID] 플레이스홀더에서 파일 ID 추출:', {
-        플레이스홀더URL: placeholderUrl,
+      console.log('🔍 [EXTRACT_ID] 플레이스홀더에서 파일 ID 추출 완료:', {
+        플레이스홀더URL: placeholderUrl.slice(0, 50) + '...',
         추출된파일ID: extractedId,
       });
 
@@ -187,6 +229,7 @@ export const extractFileIdFromPlaceholder = (
     }
 
     logger.warn('플레이스홀더 URL 패턴 불일치:', { placeholderUrl });
+    console.log('🔍 [EXTRACT_ID] 패턴 불일치로 빈 문자열 반환');
     return '';
   } catch (error) {
     logger.error('플레이스홀더에서 파일 ID 추출 실패:', {
@@ -224,12 +267,20 @@ export const parsePlaceholderInfo = (
   placeholderUrl: string
 ): PlaceholderInfo | null => {
   try {
+    console.log('🔍 [PARSE_PLACEHOLDER] 플레이스홀더 정보 파싱 시작:', {
+      placeholderUrl: placeholderUrl.slice(0, 50) + '...',
+    });
+
     if (!isPlaceholderUrl(placeholderUrl)) {
+      console.log('🔍 [PARSE_PLACEHOLDER] 플레이스홀더 URL이 아님');
       return null;
     }
 
     const parts = placeholderUrl.split('-');
     if (parts.length < 4) {
+      console.log('🔍 [PARSE_PLACEHOLDER] 파츠 개수 부족:', {
+        partsLength: parts.length,
+      });
       return null;
     }
 
@@ -240,6 +291,7 @@ export const parsePlaceholderInfo = (
     });
 
     if (fileIdEndIndex === -1) {
+      console.log('🔍 [PARSE_PLACEHOLDER] fileIdEndIndex 찾기 실패');
       return null;
     }
 
@@ -256,8 +308,8 @@ export const parsePlaceholderInfo = (
       isProcessing: placeholderUrl.endsWith('-processing'),
     };
 
-    console.log('🔍 [PARSE_PLACEHOLDER] 플레이스홀더 정보 파싱:', {
-      플레이스홀더URL: placeholderUrl,
+    console.log('🔍 [PARSE_PLACEHOLDER] 플레이스홀더 정보 파싱 완료:', {
+      플레이스홀더URL: placeholderUrl.slice(0, 50) + '...',
       파싱결과: info,
     });
 
@@ -268,51 +320,153 @@ export const parsePlaceholderInfo = (
   }
 };
 
+// 🚨 FIXED: 배치 업데이트 함수 추가 - Race Condition 해결의 핵심
+export const batchUpdateFileRegistry = (
+  operations: BatchUpdateOperation[]
+): void => {
+  try {
+    console.log('🔄 [BATCH_UPDATE] 배치 업데이트 시작:', {
+      operationsCount: operations.length,
+      types: operations.map((op) => op.type),
+    });
+
+    // ✅ 모든 operations를 하나의 동기 블록에서 처리 (원자적 연산)
+    operations.forEach(({ type, fileId, data }, index) => {
+      console.log(`🔄 [BATCH_UPDATE] 작업 ${index + 1}/${operations.length}:`, {
+        type,
+        fileId,
+      });
+
+      switch (type) {
+        case 'register':
+          if (data) {
+            const { fileName = '', url = '', placeholderUrl = '' } = data;
+            const validation = validateFileId(fileId);
+            const validFileId = validation.isValid
+              ? fileId
+              : validation.sanitizedId;
+
+            const mapping: FileIdMappingEntry = {
+              fileId: validFileId,
+              fileName,
+              originalFileName: fileName,
+              url,
+              placeholderUrl,
+              status: 'pending',
+              createdAt: Date.now(),
+              lastUpdated: Date.now(),
+            };
+
+            fileIdRegistry.mappings.set(validFileId, mapping);
+            fileIdRegistry.fileNameToIdMap.set(fileName, validFileId);
+            fileIdRegistry.placeholderToIdMap.set(placeholderUrl, validFileId);
+
+            if (url && !isPlaceholderUrl(url)) {
+              fileIdRegistry.urlToIdMap.set(url, validFileId);
+            }
+
+            console.log('✅ [BATCH_UPDATE] Register 완료:', {
+              validFileId,
+              fileName,
+            });
+          }
+          break;
+
+        case 'update':
+          if (data) {
+            const existingMapping = fileIdRegistry.mappings.get(fileId);
+            if (existingMapping) {
+              const updatedMapping: FileIdMappingEntry = {
+                ...existingMapping,
+                ...data,
+                lastUpdated: Date.now(),
+              };
+
+              fileIdRegistry.mappings.set(fileId, updatedMapping);
+
+              if (data.url && !isPlaceholderUrl(data.url)) {
+                fileIdRegistry.urlToIdMap.set(data.url, fileId);
+              }
+
+              if (data.fileName && data.fileName !== existingMapping.fileName) {
+                fileIdRegistry.fileNameToIdMap.delete(existingMapping.fileName);
+                fileIdRegistry.fileNameToIdMap.set(data.fileName, fileId);
+              }
+
+              console.log('✅ [BATCH_UPDATE] Update 완료:', {
+                fileId,
+                updates: data,
+              });
+            } else {
+              console.warn('⚠️ [BATCH_UPDATE] Update 대상 없음:', { fileId });
+            }
+          }
+          break;
+
+        case 'remove':
+          const existingMapping = fileIdRegistry.mappings.get(fileId);
+          if (existingMapping) {
+            fileIdRegistry.mappings.delete(fileId);
+            fileIdRegistry.fileNameToIdMap.delete(existingMapping.fileName);
+            fileIdRegistry.placeholderToIdMap.delete(
+              existingMapping.placeholderUrl
+            );
+
+            if (!isPlaceholderUrl(existingMapping.url)) {
+              fileIdRegistry.urlToIdMap.delete(existingMapping.url);
+            }
+
+            console.log('✅ [BATCH_UPDATE] Remove 완료:', {
+              fileId,
+              fileName: existingMapping.fileName,
+            });
+          } else {
+            console.warn('⚠️ [BATCH_UPDATE] Remove 대상 없음:', { fileId });
+          }
+          break;
+
+        default:
+          console.warn('⚠️ [BATCH_UPDATE] 알 수 없는 작업 타입:', {
+            type,
+            fileId,
+          });
+      }
+    });
+
+    console.log('✅ [BATCH_UPDATE] 배치 업데이트 완료:', {
+      처리된작업수: operations.length,
+      총매핑개수: fileIdRegistry.mappings.size,
+    });
+
+    logger.debug('배치 업데이트 완료', {
+      operationsProcessed: operations.length,
+      totalMappings: fileIdRegistry.mappings.size,
+    });
+  } catch (error) {
+    logger.error('배치 업데이트 실패:', { operations, error });
+    console.error('❌ [BATCH_UPDATE] 배치 업데이트 실패:', error);
+  }
+};
+
+// 🚨 FIXED: 기존 함수들을 배치 업데이트 사용하도록 수정
 export const registerFileMapping = (
   fileId: string,
   fileName: string,
   url: string,
   placeholderUrl: string
 ): void => {
-  try {
-    const validation = validateFileId(fileId);
-    const validFileId = validation.isValid ? fileId : validation.sanitizedId;
+  console.log('📝 [REGISTER] 단일 파일 매핑 등록 (배치 처리):', {
+    fileId,
+    fileName,
+  });
 
-    const mapping: FileIdMappingEntry = {
-      fileId: validFileId,
-      fileName,
-      originalFileName: fileName,
-      url,
-      placeholderUrl,
-      status: 'pending',
-      createdAt: Date.now(),
-      lastUpdated: Date.now(),
-    };
-
-    fileIdRegistry.mappings.set(validFileId, mapping);
-    fileIdRegistry.fileNameToIdMap.set(fileName, validFileId);
-    fileIdRegistry.placeholderToIdMap.set(placeholderUrl, validFileId);
-
-    if (url && !isPlaceholderUrl(url)) {
-      fileIdRegistry.urlToIdMap.set(url, validFileId);
-    }
-
-    console.log('📝 [REGISTER] 파일 매핑 등록:', {
-      파일ID: validFileId,
-      파일명: fileName,
-      URL: url.slice(0, 50) + '...',
-      플레이스홀더: placeholderUrl.slice(0, 50) + '...',
-      총매핑개수: fileIdRegistry.mappings.size,
-    });
-
-    logger.debug('파일 매핑 등록 완료', {
-      fileId: validFileId,
-      fileName,
-      mappingsCount: fileIdRegistry.mappings.size,
-    });
-  } catch (error) {
-    logger.error('파일 매핑 등록 실패:', { fileId, fileName, error });
-  }
+  batchUpdateFileRegistry([
+    {
+      type: 'register',
+      fileId,
+      data: { fileName, url, placeholderUrl },
+    },
+  ]);
 };
 
 export const updateFileMapping = (
@@ -320,39 +474,52 @@ export const updateFileMapping = (
   updates: Partial<Pick<FileIdMappingEntry, 'url' | 'status' | 'fileName'>>
 ): boolean => {
   try {
+    console.log('🔄 [UPDATE] 단일 파일 매핑 업데이트 (배치 처리):', {
+      fileId,
+      updates,
+    });
+
     const existingMapping = fileIdRegistry.mappings.get(fileId);
     if (!existingMapping) {
       logger.warn('존재하지 않는 파일 ID로 매핑 업데이트 시도:', { fileId });
       return false;
     }
 
-    const updatedMapping: FileIdMappingEntry = {
-      ...existingMapping,
-      ...updates,
-      lastUpdated: Date.now(),
-    };
-
-    fileIdRegistry.mappings.set(fileId, updatedMapping);
-
-    if (updates.url && !isPlaceholderUrl(updates.url)) {
-      fileIdRegistry.urlToIdMap.set(updates.url, fileId);
-    }
-
-    if (updates.fileName && updates.fileName !== existingMapping.fileName) {
-      fileIdRegistry.fileNameToIdMap.delete(existingMapping.fileName);
-      fileIdRegistry.fileNameToIdMap.set(updates.fileName, fileId);
-    }
-
-    console.log('🔄 [UPDATE] 파일 매핑 업데이트:', {
-      파일ID: fileId,
-      업데이트내용: updates,
-      이전URL: existingMapping.url.slice(0, 30) + '...',
-      새URL: updatedMapping.url.slice(0, 30) + '...',
-    });
+    batchUpdateFileRegistry([
+      {
+        type: 'update',
+        fileId,
+        data: updates,
+      },
+    ]);
 
     return true;
   } catch (error) {
     logger.error('파일 매핑 업데이트 실패:', { fileId, updates, error });
+    return false;
+  }
+};
+
+export const removeFileMapping = (fileId: string): boolean => {
+  try {
+    console.log('🗑️ [REMOVE] 단일 파일 매핑 제거 (배치 처리):', { fileId });
+
+    const existingMapping = fileIdRegistry.mappings.get(fileId);
+    if (!existingMapping) {
+      logger.warn('존재하지 않는 파일 ID로 매핑 제거 시도:', { fileId });
+      return false;
+    }
+
+    batchUpdateFileRegistry([
+      {
+        type: 'remove',
+        fileId,
+      },
+    ]);
+
+    return true;
+  } catch (error) {
+    logger.error('파일 매핑 제거 실패:', { fileId, error });
     return false;
   }
 };
@@ -364,12 +531,14 @@ export const getFileMappingById = (
     const mapping = fileIdRegistry.mappings.get(fileId);
 
     if (mapping) {
-      console.log('🔍 [GET_BY_ID] 파일 ID로 매핑 조회:', {
+      console.log('🔍 [GET_BY_ID] 파일 ID로 매핑 조회 성공:', {
         파일ID: fileId,
         파일명: mapping.fileName,
         상태: mapping.status,
         마지막업데이트: new Date(mapping.lastUpdated).toLocaleTimeString(),
       });
+    } else {
+      console.log('🔍 [GET_BY_ID] 파일 ID로 매핑 없음:', { fileId });
     }
 
     return mapping;
@@ -384,10 +553,12 @@ export const getFileIdByName = (fileName: string): string | undefined => {
     const fileId = fileIdRegistry.fileNameToIdMap.get(fileName);
 
     if (fileId) {
-      console.log('🔍 [GET_BY_NAME] 파일명으로 ID 조회:', {
+      console.log('🔍 [GET_BY_NAME] 파일명으로 ID 조회 성공:', {
         파일명: fileName,
         파일ID: fileId,
       });
+    } else {
+      console.log('🔍 [GET_BY_NAME] 파일명으로 ID 없음:', { fileName });
     }
 
     return fileId;
@@ -402,9 +573,13 @@ export const getFileIdByUrl = (url: string): string | undefined => {
     const fileId = fileIdRegistry.urlToIdMap.get(url);
 
     if (fileId) {
-      console.log('🔍 [GET_BY_URL] URL로 ID 조회:', {
+      console.log('🔍 [GET_BY_URL] URL로 ID 조회 성공:', {
         URL: url.slice(0, 50) + '...',
         파일ID: fileId,
+      });
+    } else {
+      console.log('🔍 [GET_BY_URL] URL로 ID 없음:', {
+        url: url.slice(0, 50) + '...',
       });
     }
 
@@ -422,9 +597,13 @@ export const getFileIdByPlaceholder = (
     const fileId = fileIdRegistry.placeholderToIdMap.get(placeholderUrl);
 
     if (fileId) {
-      console.log('🔍 [GET_BY_PLACEHOLDER] 플레이스홀더로 ID 조회:', {
+      console.log('🔍 [GET_BY_PLACEHOLDER] 플레이스홀더로 ID 조회 성공:', {
         플레이스홀더: placeholderUrl.slice(0, 50) + '...',
         파일ID: fileId,
+      });
+    } else {
+      console.log('🔍 [GET_BY_PLACEHOLDER] 플레이스홀더로 ID 없음:', {
+        placeholderUrl: placeholderUrl.slice(0, 50) + '...',
       });
     }
 
@@ -432,35 +611,6 @@ export const getFileIdByPlaceholder = (
   } catch (error) {
     logger.error('플레이스홀더로 ID 조회 실패:', { placeholderUrl, error });
     return undefined;
-  }
-};
-
-export const removeFileMapping = (fileId: string): boolean => {
-  try {
-    const existingMapping = fileIdRegistry.mappings.get(fileId);
-    if (!existingMapping) {
-      logger.warn('존재하지 않는 파일 ID로 매핑 제거 시도:', { fileId });
-      return false;
-    }
-
-    fileIdRegistry.mappings.delete(fileId);
-    fileIdRegistry.fileNameToIdMap.delete(existingMapping.fileName);
-    fileIdRegistry.placeholderToIdMap.delete(existingMapping.placeholderUrl);
-
-    if (!isPlaceholderUrl(existingMapping.url)) {
-      fileIdRegistry.urlToIdMap.delete(existingMapping.url);
-    }
-
-    console.log('🗑️ [REMOVE] 파일 매핑 제거:', {
-      파일ID: fileId,
-      파일명: existingMapping.fileName,
-      남은매핑개수: fileIdRegistry.mappings.size,
-    });
-
-    return true;
-  } catch (error) {
-    logger.error('파일 매핑 제거 실패:', { fileId, error });
-    return false;
   }
 };
 

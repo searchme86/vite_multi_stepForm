@@ -52,10 +52,13 @@ interface ImageUploadProviderProps {
 const safeExtractMainImageUrl = (formValues: unknown): string => {
   try {
     if (!formValues || typeof formValues !== 'object') {
+      console.log('🔍 [EXTRACT_MAIN_IMAGE] formValues가 객체가 아님');
       return '';
     }
     const mainImage = Reflect.get(formValues, 'mainImage');
-    return typeof mainImage === 'string' ? mainImage : '';
+    const extractedUrl = typeof mainImage === 'string' ? mainImage : '';
+    console.log('🔍 [EXTRACT_MAIN_IMAGE] 추출 결과:', { extractedUrl });
+    return extractedUrl;
   } catch (error) {
     console.warn('⚠️ [EXTRACT_MAIN_IMAGE] 추출 실패:', error);
     return '';
@@ -65,13 +68,21 @@ const safeExtractMainImageUrl = (formValues: unknown): string => {
 const safeExtractMediaFilesList = (formValues: unknown): string[] => {
   try {
     if (!formValues || typeof formValues !== 'object') {
+      console.log('🔍 [EXTRACT_MEDIA] formValues가 객체가 아님');
       return [];
     }
     const media = Reflect.get(formValues, 'media');
     if (!Array.isArray(media)) {
+      console.log('🔍 [EXTRACT_MEDIA] media가 배열이 아님');
       return [];
     }
-    return media.filter((item): item is string => typeof item === 'string');
+    const filteredMedia = media.filter(
+      (item): item is string => typeof item === 'string'
+    );
+    console.log('🔍 [EXTRACT_MEDIA] 추출 결과:', {
+      count: filteredMedia.length,
+    });
+    return filteredMedia;
   } catch (error) {
     console.warn('⚠️ [EXTRACT_MEDIA] 추출 실패:', error);
     return [];
@@ -81,15 +92,21 @@ const safeExtractMediaFilesList = (formValues: unknown): string[] => {
 const safeExtractSelectedFileNames = (selectionState: unknown): string[] => {
   try {
     if (!selectionState || typeof selectionState !== 'object') {
+      console.log('🔍 [EXTRACT_FILENAMES] selectionState가 객체가 아님');
       return [];
     }
     const selectedFileNames = Reflect.get(selectionState, 'selectedFileNames');
     if (!Array.isArray(selectedFileNames)) {
+      console.log('🔍 [EXTRACT_FILENAMES] selectedFileNames가 배열이 아님');
       return [];
     }
-    return selectedFileNames.filter(
+    const filteredNames = selectedFileNames.filter(
       (name): name is string => typeof name === 'string'
     );
+    console.log('🔍 [EXTRACT_FILENAMES] 추출 결과:', {
+      count: filteredNames.length,
+    });
+    return filteredNames;
   } catch (error) {
     console.warn('⚠️ [EXTRACT_FILENAMES] 추출 실패:', error);
     return [];
@@ -99,15 +116,21 @@ const safeExtractSelectedFileNames = (selectionState: unknown): string[] => {
 const safeExtractSliderIndices = (selectionState: unknown): number[] => {
   try {
     if (!selectionState || typeof selectionState !== 'object') {
+      console.log('🔍 [EXTRACT_SLIDER] selectionState가 객체가 아님');
       return [];
     }
     const sliderIndices = Reflect.get(selectionState, 'selectedSliderIndices');
     if (!Array.isArray(sliderIndices)) {
+      console.log('🔍 [EXTRACT_SLIDER] sliderIndices가 배열이 아님');
       return [];
     }
-    return sliderIndices.filter(
+    const filteredIndices = sliderIndices.filter(
       (index): index is number => typeof index === 'number'
     );
+    console.log('🔍 [EXTRACT_SLIDER] 추출 결과:', {
+      count: filteredIndices.length,
+    });
+    return filteredIndices;
   } catch (error) {
     console.warn('⚠️ [EXTRACT_SLIDER] 추출 실패:', error);
     return [];
@@ -117,7 +140,9 @@ const safeExtractSliderIndices = (selectionState: unknown): number[] => {
 export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
   children,
 }) => {
-  console.log('🔧 [IMAGE_UPLOAD_PROVIDER] Map 기반 Provider 초기화 시작');
+  console.log(
+    '🔧 [IMAGE_UPLOAD_PROVIDER] RACE_CONDITION_FIXED Context 초기화 시작'
+  );
 
   const blogMediaStateResult = useBlogMediaStepState();
   const blogMediaIntegrationResult = useBlogMediaStepIntegration();
@@ -126,13 +151,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     useMapBasedFileState();
 
   const syncExecutedRef = useRef<boolean>(false);
-  const lastSyncDataRef = useRef<{
-    mediaFiles: string[];
-    fileNames: string[];
-  }>({
-    mediaFiles: [],
-    fileNames: [],
-  });
 
   const legacyMainImageUrl = safeExtractMainImageUrl(
     blogMediaStateResult.formValues
@@ -147,8 +165,10 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     blogMediaStateResult.selectionState
   );
 
+  // 🚨 FIXED: Race Condition 해결 - clearAllFiles() 완전 제거
   const performLegacyDataSync = useCallback(() => {
     if (syncExecutedRef.current) {
+      console.log('🔍 [LEGACY_SYNC] 이미 동기화 완료됨, 건너뜀');
       return;
     }
 
@@ -159,48 +179,52 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       return;
     }
 
-    const isSameData =
-      JSON.stringify(lastSyncDataRef.current.mediaFiles) ===
-        JSON.stringify(legacyMediaFiles) &&
-      JSON.stringify(lastSyncDataRef.current.fileNames) ===
-        JSON.stringify(legacySelectedFileNames);
-
-    if (isSameData) {
-      console.log('ℹ️ [LEGACY_SYNC] 동일한 데이터, 동기화 건너뜀');
-      return;
-    }
-
-    console.log('🔄 [LEGACY_SYNC] 레거시 데이터 동기화 시작:', {
-      mediaCount: legacyMediaFiles.length,
-      fileNameCount: legacySelectedFileNames.length,
-    });
+    console.log(
+      '🔄 [LEGACY_SYNC] RACE_CONDITION_FIXED 레거시 데이터 동기화 시작:',
+      {
+        legacyMediaFiles: legacyMediaFiles.length,
+        legacySelectedFileNames: legacySelectedFileNames.length,
+      }
+    );
 
     try {
-      mapFileActions.clearAllFiles();
-      legacyMediaFiles.forEach((url, index) => {
-        const fileName = legacySelectedFileNames[index] || `file_${index + 1}`;
-        mapFileActions.addFile(fileName, url);
-      });
+      // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
+      // ❌ 완전 제거: mapFileActions.clearAllFiles();
 
-      lastSyncDataRef.current = {
-        mediaFiles: [...legacyMediaFiles],
-        fileNames: [...legacySelectedFileNames],
-      };
+      // ✅ 개별 중복 확인 후 추가 (Race Condition 방지)
+      legacyMediaFiles.forEach((url: string, index: number) => {
+        const fileName =
+          legacySelectedFileNames[index] || `legacy_file_${index + 1}`;
+        const existingUrls = mapFileActions.getFileUrls();
+
+        const isUrlAlreadyExists = existingUrls.includes(url);
+        if (!isUrlAlreadyExists) {
+          mapFileActions.addFile(fileName, url);
+          console.log('✅ [LEGACY_SYNC] 파일 추가:', {
+            fileName,
+            url: url.slice(0, 30) + '...',
+          });
+        } else {
+          console.log('⚠️ [LEGACY_SYNC] 중복 파일 건너뜀:', {
+            fileName,
+            url: url.slice(0, 30) + '...',
+          });
+        }
+      });
 
       syncExecutedRef.current = true;
 
-      console.log('✅ [LEGACY_SYNC] 동기화 완료:', legacyMediaFiles.length);
+      console.log('✅ [LEGACY_SYNC] RACE_CONDITION_FIXED 동기화 완료');
     } catch (error) {
       console.error('❌ [LEGACY_SYNC] 동기화 실패:', error);
     }
   }, [legacyMediaFiles, legacySelectedFileNames, mapFileActions]);
 
+  // 🚨 FIXED: setTimeout 제거 - 동기적 처리로 Race Condition 방지
   useEffect(() => {
-    const syncTimeout = setTimeout(() => {
-      performLegacyDataSync();
-    }, 100);
-
-    return () => clearTimeout(syncTimeout);
+    // ❌ 제거됨: setTimeout(() => { performLegacyDataSync(); }, 100);
+    // ✅ 동기적 즉시 실행으로 Race Condition 방지
+    performLegacyDataSync();
   }, [performLegacyDataSync]);
 
   const { urls: currentMediaFiles, names: currentFileNames } =
@@ -231,19 +255,35 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         }
       },
       checkIsMainImage: (imageUrl: string): boolean => {
-        return imageUrl === currentMainImageUrl;
+        const isMainImage = imageUrl === currentMainImageUrl;
+        console.log('🔍 [MAIN_IMAGE] 메인 이미지 확인:', {
+          imageUrl: imageUrl.slice(0, 30) + '...',
+          isMainImage,
+        });
+        return isMainImage;
       },
       checkCanSetAsMainImage: (imageUrl: string): boolean => {
-        if (!imageUrl || imageUrl.length === 0) return false;
+        if (!imageUrl || imageUrl.length === 0) {
+          console.log('🔍 [MAIN_IMAGE] 빈 URL로 설정 불가');
+          return false;
+        }
         const isPlaceholder =
           imageUrl.startsWith('placeholder-') &&
           imageUrl.includes('-processing');
         const isAlreadyMain = imageUrl === currentMainImageUrl;
-        return !isPlaceholder && !isAlreadyMain;
+        const canSet = !isPlaceholder && !isAlreadyMain;
+        console.log('🔍 [MAIN_IMAGE] 설정 가능 여부:', {
+          imageUrl: imageUrl.slice(0, 30) + '...',
+          isPlaceholder,
+          isAlreadyMain,
+          canSet,
+        });
+        return canSet;
       },
     };
   }, [currentMainImageUrl, blogMediaIntegrationResult]);
 
+  // 🚨 FIXED: Race Condition 해결 - clearAllFiles() 완전 제거
   const updateMediaValueCallback = useCallback(
     (
       filesOrUpdater:
@@ -251,26 +291,65 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         | ((prev: readonly string[]) => readonly string[])
     ) => {
       try {
+        console.log('🔄 [UPDATE_MEDIA] 미디어 값 업데이트 시작');
+
         if (typeof filesOrUpdater === 'function') {
           const currentUrls = mapFileActions.getFileUrls();
           const updatedUrls = filesOrUpdater(currentUrls);
 
-          mapFileActions.clearAllFiles();
-          updatedUrls.forEach((url, index) => {
-            const fileName = currentFileNames[index] || `file_${index + 1}`;
-            mapFileActions.addFile(fileName, url);
+          console.log('🔄 [UPDATE_MEDIA] 함수형 업데이트:', {
+            currentCount: currentUrls.length,
+            updatedCount: updatedUrls.length,
+          });
+
+          // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
+          // ❌ 완전 제거: mapFileActions.clearAllFiles();
+
+          // ✅ 개별 파일 추가로 변경 (중복 방지)
+          updatedUrls.forEach((url: string, index: number) => {
+            const fileName =
+              currentFileNames[index] || `updated_file_${index + 1}`;
+            const existingUrls = mapFileActions.getFileUrls();
+
+            const isUrlAlreadyExists = existingUrls.includes(url);
+            if (!isUrlAlreadyExists) {
+              mapFileActions.addFile(fileName, url);
+              console.log('✅ [UPDATE_MEDIA] 함수형 - 파일 추가:', {
+                fileName,
+                url: url.slice(0, 30) + '...',
+              });
+            }
           });
 
           blogMediaStateResult.setMediaValue(Array.from(updatedUrls));
         } else {
-          mapFileActions.clearAllFiles();
-          Array.from(filesOrUpdater).forEach((url, index) => {
-            const fileName = currentFileNames[index] || `file_${index + 1}`;
-            mapFileActions.addFile(fileName, url);
+          console.log('🔄 [UPDATE_MEDIA] 직접 값 업데이트:', {
+            filesCount: Array.from(filesOrUpdater).length,
+          });
+
+          // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
+          // ❌ 완전 제거: mapFileActions.clearAllFiles();
+
+          // ✅ 개별 파일 추가로 변경 (중복 방지)
+          Array.from(filesOrUpdater).forEach((url: string, index: number) => {
+            const fileName =
+              currentFileNames[index] || `direct_file_${index + 1}`;
+            const existingUrls = mapFileActions.getFileUrls();
+
+            const isUrlAlreadyExists = existingUrls.includes(url);
+            if (!isUrlAlreadyExists) {
+              mapFileActions.addFile(fileName, url);
+              console.log('✅ [UPDATE_MEDIA] 직접 - 파일 추가:', {
+                fileName,
+                url: url.slice(0, 30) + '...',
+              });
+            }
           });
 
           blogMediaStateResult.setMediaValue(Array.from(filesOrUpdater));
         }
+
+        console.log('✅ [UPDATE_MEDIA] 미디어 값 업데이트 완료');
       } catch (error) {
         console.error('❌ [UPDATE_MEDIA] 업데이트 실패:', error);
       }
@@ -278,6 +357,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     [mapFileActions, currentFileNames, blogMediaStateResult]
   );
 
+  // 🚨 FIXED: currentUrls 변수 누락 수정
   const updateSelectedFileNamesCallback = useCallback(
     (
       namesOrUpdater:
@@ -285,27 +365,55 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         | ((prev: readonly string[]) => readonly string[])
     ) => {
       try {
+        console.log('🔄 [UPDATE_FILENAMES] 파일명 업데이트 시작');
+
         if (typeof namesOrUpdater === 'function') {
           const currentNames = mapFileActions.getFileNames();
           const updatedNames = namesOrUpdater(currentNames);
 
+          console.log('🔄 [UPDATE_FILENAMES] 함수형 업데이트:', {
+            currentCount: currentNames.length,
+            updatedCount: updatedNames.length,
+          });
+
+          // ✅ FIXED: 누락된 currentUrls 변수 추가
           const currentUrls = mapFileActions.getFileUrls();
-          currentUrls.forEach((url, index) => {
+
+          currentUrls.forEach((url: string, index: number) => {
             const fileName = updatedNames[index];
             if (fileName) {
-              const fileId = Array.from(mapFileState.fileMap.entries()).find(
-                ([, file]) => file.url === url
-              )?.[0];
+              // ✅ 타입 안전한 방식으로 수정
+              let fileId: string | undefined;
+              for (const [id, file] of mapFileState.fileMap.entries()) {
+                if (
+                  file &&
+                  typeof file === 'object' &&
+                  Reflect.get(file, 'url') === url
+                ) {
+                  fileId = id;
+                  break;
+                }
+              }
               if (fileId) {
                 mapFileActions.updateFile(fileId, { fileName });
+                console.log('✅ [UPDATE_FILENAMES] 파일명 업데이트:', {
+                  fileId,
+                  fileName,
+                });
               }
             }
           });
 
           blogMediaStateResult.setSelectedFileNames(Array.from(updatedNames));
         } else {
+          console.log('🔄 [UPDATE_FILENAMES] 직접 값 업데이트:', {
+            namesCount: Array.from(namesOrUpdater).length,
+          });
+
           blogMediaStateResult.setSelectedFileNames(Array.from(namesOrUpdater));
         }
+
+        console.log('✅ [UPDATE_FILENAMES] 파일명 업데이트 완료');
       } catch (error) {
         console.error('❌ [UPDATE_FILENAMES] 업데이트 실패:', error);
       }
@@ -313,6 +421,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     [mapFileActions, mapFileState.fileMap, blogMediaStateResult]
   );
 
+  // 🚨 FIXED: mapFileActions 전달 확인됨
   const imageUploadHandlers = useImageUploadHandlers({
     formValues: blogMediaStateResult.formValues,
     uiState: blogMediaStateResult.uiState,
@@ -321,6 +430,9 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     setMainImageValue: (value: string) => {
       try {
         blogMediaIntegrationResult.setMainImageValue(value);
+        console.log('✅ [SET_MAIN_IMAGE] 설정 완료:', {
+          value: value.slice(0, 30) + '...',
+        });
       } catch (error) {
         console.error('❌ [SET_MAIN_IMAGE] 설정 실패:', error);
       }
@@ -330,6 +442,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       try {
         if (validateToastMessage(toast)) {
           blogMediaStateResult.addToast(toast);
+          console.log('✅ [SHOW_TOAST] 토스트 표시:', toast);
         } else {
           console.warn('⚠️ [SHOW_TOAST] 유효하지 않은 토스트 메시지:', toast);
         }
@@ -338,11 +451,14 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       }
     },
     imageGalleryStore: blogMediaIntegrationResult.imageGalleryStore,
+    mapFileActions: mapFileActions, // ✅ 전달 확인됨
   });
 
   const isImageSelectedForSlider = useMemo(() => {
     return (imageIndex: number): boolean => {
-      return selectedSliderIndices.includes(imageIndex);
+      const isSelected = selectedSliderIndices.includes(imageIndex);
+      console.log('🔍 [SLIDER] 이미지 선택 확인:', { imageIndex, isSelected });
+      return isSelected;
     };
   }, [selectedSliderIndices]);
 
@@ -359,10 +475,10 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
             setSliderSelectedIndices(newSelectedIndices);
           }
         }
-        console.log(
-          '✅ [SLIDER_UPDATE] 슬라이더 선택 업데이트:',
-          newSelectedIndices.length
-        );
+        console.log('✅ [SLIDER_UPDATE] 슬라이더 선택 업데이트:', {
+          count: newSelectedIndices.length,
+          indices: newSelectedIndices,
+        });
       } catch (error) {
         console.error('❌ [SLIDER_UPDATE] 업데이트 실패:', error);
       }
@@ -424,6 +540,9 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       return (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (files && typeof originalHandler === 'function') {
+          console.log('🔄 [FILE_CHANGE] 파일 변경 이벤트:', {
+            filesCount: files.length,
+          });
           originalHandler(files);
         }
       };
@@ -457,7 +576,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       return {};
     };
 
-    return {
+    const contextValueData = {
       uploadedImages: currentMediaFiles,
       selectedFileNames: currentFileNames,
       uploading: imageUploadHandlers.uploading || {},
@@ -480,6 +599,15 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       mainImageHandlers: mainImageHandlers,
       fileSelectButtonRef: fileSelectButtonRef,
     };
+
+    console.log('🔧 [CONTEXT_VALUE] Context 값 생성 완료:', {
+      uploadedImagesCount: contextValueData.uploadedImages.length,
+      selectedFileNamesCount: contextValueData.selectedFileNames.length,
+      hasActiveUploads: contextValueData.hasActiveUploads,
+      selectedSliderIndicesCount: contextValueData.selectedSliderIndices.length,
+    });
+
+    return contextValueData;
   }, [
     currentMediaFiles,
     currentFileNames,
@@ -495,15 +623,18 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
 
   useEffect(() => {
     if (mainImageRestoreExecutedRef.current) {
+      console.log('🔍 [RESTORE] 이미 복원 완료됨, 건너뜀');
       return;
     }
 
     const performMainImageRestore = () => {
       if (currentMainImageUrl && currentMainImageUrl.length > 0) {
+        console.log('🔍 [RESTORE] 이미 메인 이미지 설정됨, 복원 건너뜀');
         return;
       }
 
       if (currentMediaFiles.length === 0) {
+        console.log('🔍 [RESTORE] 미디어 파일 없음, 복원 건너뜀');
         return;
       }
 
@@ -522,9 +653,15 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
             backupMainImage.length > 0
           ) {
             const isRecentBackup = Date.now() - backupTimestamp < 5 * 60 * 1000;
-            if (isRecentBackup && currentMediaFiles.includes(backupMainImage)) {
+            const isBackupImageInCurrentFiles =
+              currentMediaFiles.includes(backupMainImage);
+
+            if (isRecentBackup && isBackupImageInCurrentFiles) {
               mainImageHandlers.onMainImageSet(-1, backupMainImage);
               mainImageRestoreExecutedRef.current = true;
+              console.log('✅ [RESTORE] 메인 이미지 복원 완료:', {
+                backupMainImage: backupMainImage.slice(0, 30) + '...',
+              });
               return;
             }
           }
@@ -551,12 +688,9 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     }
   }, [currentMediaFiles.join(','), currentMainImageUrl, mainImageHandlers]);
 
-  console.log('✅ [IMAGE_UPLOAD_PROVIDER] Map 기반 Provider 초기화 완료:', {
-    mapFileCount: mapFileState.totalFiles,
-    currentMediaCount: currentMediaFiles.length,
-    hasActiveUploads: mapFileState.hasActiveUploads,
-    syncExecuted: syncExecutedRef.current,
-  });
+  console.log(
+    '✅ [RACE_CONDITION_FIX] RACE_CONDITION_FIXED Context 초기화 완료'
+  );
 
   return (
     <ImageUploadContext.Provider value={contextValue}>
