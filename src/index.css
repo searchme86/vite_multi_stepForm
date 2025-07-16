@@ -83,19 +83,20 @@ body * {
 }
 
 /* ============================================ */
-/* 🎯 데스크탑 오버레이 패널 스타일 (신규 추가) */
+/* 🎯 데스크탑 오버레이 패널 스타일 (블러 제거 및 여백 추가) */
 /* ============================================ */
 
 @media (min-width: 768px) {
-  /* 데스크탑 배경 오버레이 - 🎯 패널과 완벽히 동기화된 부드러운 속도 */
+  /* 🎯 데스크탑 배경 오버레이 - 블러 제거 및 투명도 대폭 감소 */
   .preview-panel-desktop-backdrop {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background-color: rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(4px);
+    /* 🎯 블러 제거 및 투명도 대폭 감소 - 왼쪽 콘텐츠가 잘 보이도록 */
+    background-color: rgba(0, 0, 0, 0.05);
+    backdrop-filter: none;
     opacity: 0;
-    transition: opacity 800ms ease-out, backdrop-filter 800ms ease-out;
+    transition: opacity 800ms ease-out;
     pointer-events: none;
   }
 
@@ -104,17 +105,21 @@ body * {
     pointer-events: auto;
   }
 
-  /* 데스크탑 오버레이 패널 - 🎯 매우 부드러운 스무스 애니메이션 */
+  /* 🎯 데스크탑 오버레이 패널 - 여백 추가 및 크기 조정 */
   .preview-panel-desktop-overlay {
     position: fixed;
-    top: 0;
-    right: 0;
+    /* 🎯 상단과 우측에 여백 추가 */
+    top: 20px;
+    right: 20px;
     z-index: 50;
-    width: 600px;
-    height: 100vh;
+    /* 🎯 높이도 여백을 고려해서 조정 */
+    width: 580px;
+    height: calc(100vh - 40px);
     background-color: white;
-    border-left: 1px solid rgb(229, 231, 235); /* border-gray-200 */
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1), -4px 0 24px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgb(229, 231, 235);
+    border-radius: 12px;
+    /* 🎯 더 부드러운 그림자 효과 */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 8px 40px rgba(0, 0, 0, 0.12);
 
     /* 🎯 매우 부드러운 스무스 애니메이션 */
     transform: translateX(100%);
@@ -123,6 +128,7 @@ body * {
     /* GPU 가속 최적화 */
     will-change: transform;
     backface-visibility: hidden;
+    overflow: hidden;
   }
 
   .preview-panel-desktop-overlay.is-open {
@@ -138,6 +144,8 @@ body * {
     border-bottom: 1px solid rgb(229, 231, 235);
     backdrop-filter: blur(8px);
     background-color: rgba(255, 255, 255, 0.95);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
   }
 
   /* 데스크탑 패널 콘텐츠 */
@@ -179,12 +187,14 @@ body * {
     height: 100%;
   }
 
-  /* 모바일 배경 오버레이 - 🎯 패널과 완벽히 동기화된 부드러운 속도 */
+  /* 🎯 모바일 배경 오버레이 - 블러 제거 및 투명도 감소 */
   .preview-panel-mobile-backdrop {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background-color: rgba(0, 0, 0, 0.5);
+    /* 🎯 블러 제거 및 투명도 감소 - 모바일에서도 배경이 잘 보이도록 */
+    background-color: rgba(0, 0, 0, 0.2);
+    backdrop-filter: none;
     opacity: 0;
     transition: opacity 900ms ease-out;
     pointer-events: none;
@@ -424,7 +434,6 @@ button[aria-label='미리보기 패널 토글']:active {
   .preview-panel-desktop-backdrop.is-visible,
   .preview-panel-mobile-backdrop.is-visible {
     opacity: 1;
-    backdrop-filter: blur(4px);
   }
 }
 
@@ -435,16 +444,9 @@ button[aria-label='미리보기 패널 토글']:active {
 @media (prefers-color-scheme: dark) {
   /* 데스크탑 다크모드 */
   @media (min-width: 768px) {
-    .preview-panel-desktop-overlay {
-      background-color: rgb(26, 26, 26);
-      border-left-color: rgb(64, 64, 64);
-      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3), -4px 0 24px rgba(0, 0, 0, 0.4);
-    }
-
-    .preview-panel-desktop-header {
-      background-color: rgba(26, 26, 26, 0.95);
-      border-bottom-color: rgb(64, 64, 64);
-    }
+    /* .preview-panel-desktop-overlay {
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 8px 40px rgba(0, 0, 0, 0.4);
+    } */
 
     .preview-panel-desktop-content::-webkit-scrollbar-track {
       background: rgb(64, 64, 64);
@@ -495,13 +497,13 @@ button[aria-label='미리보기 패널 토글']:active {
     }
   }
 
-  /* 배경 오버레이 다크모드 */
+  /* 🎯 다크모드 배경 오버레이 - 블러 제거 상태 유지 */
   .preview-panel-desktop-backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.1);
   }
 
   .preview-panel-mobile-backdrop {
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -522,8 +524,7 @@ button[aria-label='미리보기 패널 토글']:active {
 /* 고해상도 디스플레이 최적화 */
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
   .preview-panel-desktop-overlay {
-    box-shadow: -1px 0 4px rgba(0, 0, 0, 0.1), -2px 0 8px rgba(0, 0, 0, 0.1),
-      -4px 0 16px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08), 0 4px 20px rgba(0, 0, 0, 0.12);
   }
 
   .preview-panel-bottom-sheet {
@@ -531,24 +532,85 @@ button[aria-label='미리보기 패널 토글']:active {
   }
 }
 
-/* 반응형 브레이크포인트 조정 */
+/* 🎯 반응형 브레이크포인트 조정 - 여백 고려 */
 @media (min-width: 768px) and (max-width: 1023px) {
   /* 태블릿 최적화 */
   .preview-panel-desktop-overlay {
-    width: 450px;
+    width: 420px;
+    right: 16px;
+    top: 16px;
+    height: calc(100vh - 32px);
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
   /* 작은 데스크탑 최적화 */
   .preview-panel-desktop-overlay {
-    width: 550px;
+    width: 520px;
+    right: 18px;
+    top: 18px;
+    height: calc(100vh - 36px);
   }
 }
 
 @media (min-width: 1280px) {
   /* 큰 데스크탑 최적화 */
   .preview-panel-desktop-overlay {
-    width: 650px;
+    width: 620px;
+    right: 24px;
+    top: 24px;
+    height: calc(100vh - 48px);
+  }
+}
+
+/* ============================================ */
+/* 🎯 추가 개선사항 - 왼쪽 콘텐츠 작업 편의성 증대 */
+/* ============================================ */
+
+/* 🎯 패널이 열렸을 때 메인 콘텐츠 영역 여백 추가 (선택사항) */
+@media (min-width: 768px) {
+  .preview-panel-active-layout {
+    padding-right: 640px;
+    transition: padding-right 1200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .preview-panel-inactive-layout {
+    padding-right: 0;
+    transition: padding-right 1200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* 🎯 패널 그림자 효과 개선 - 더 자연스러운 깊이감 */
+@media (min-width: 768px) {
+  .preview-panel-desktop-overlay {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.08),
+      0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* 🎯 미리보기 패널 상태 표시 개선 */
+.preview-panel-status-active {
+  position: relative;
+}
+
+.preview-panel-status-active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
