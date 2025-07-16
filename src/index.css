@@ -444,10 +444,6 @@ button[aria-label='미리보기 패널 토글']:active {
 @media (prefers-color-scheme: dark) {
   /* 데스크탑 다크모드 */
   @media (min-width: 768px) {
-    /* .preview-panel-desktop-overlay {
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 8px 40px rgba(0, 0, 0, 0.4);
-    } */
-
     .preview-panel-desktop-content::-webkit-scrollbar-track {
       background: rgb(64, 64, 64);
     }
@@ -479,10 +475,6 @@ button[aria-label='미리보기 패널 토글']:active {
     .preview-panel-drag-handle:active {
       background-color: rgba(255, 255, 255, 0.4);
     }
-
-    /* .preview-panel-mobile-header {
-      background-color: rgba(26, 26, 26, 0.95);
-    } */
 
     .preview-panel-mobile-content::-webkit-scrollbar-track {
       background: rgb(64, 64, 64);
