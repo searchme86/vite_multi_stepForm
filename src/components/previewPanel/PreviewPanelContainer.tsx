@@ -18,19 +18,89 @@ import {
   type MobileDeviceSize,
 } from './types/previewPanel.types';
 
-// Zustand 스토어 import
+// 🔄 Zustand 스토어 import - UI 상태 관리 전용
 import { usePreviewPanelStore } from './store/previewPanelStore';
 
+// 폼 데이터 타입 정의
+interface FormData {
+  userImage: string | undefined;
+  nickname: string;
+  emailPrefix: string;
+  emailDomain: string;
+  bio: string | undefined;
+  title: string;
+  description: string;
+  tags: string | undefined;
+  content: string;
+  mainImage: string | null | undefined;
+  media: string[] | undefined;
+  sliderImages: string[] | undefined;
+  editorCompletedContent: string;
+  isEditorCompleted: boolean;
+}
+
+// 현재 폼 값 타입 정의
+interface CurrentFormValues {
+  title: string;
+  description: string;
+  content: string;
+  nickname: string;
+  emailPrefix: string;
+  emailDomain: string;
+  bio: string;
+  userImage: string | null;
+  mainImage: string | null;
+  media: string[];
+  sliderImages: string[];
+  tags: string;
+  editorCompletedContent: string;
+  isEditorCompleted: boolean;
+}
+
+// 디스플레이 콘텐츠 타입 정의
+interface DisplayContent {
+  text: string;
+  source: 'editor' | 'basic';
+}
+
+// 에디터 상태 정보 타입 정의
+interface EditorStatusInfo {
+  isCompleted: boolean;
+  contentLength: number;
+  hasContainers: boolean;
+  hasParagraphs: boolean;
+  hasEditor: boolean;
+  containerCount: number;
+  paragraphCount: number;
+}
+
+// 아바타 속성 타입 정의
+interface AvatarProps {
+  src: string;
+  name: string;
+  fallback: string;
+  className: string;
+  showFallback: boolean;
+  isBordered: boolean;
+}
+
+// 커스텀 갤러리 뷰 타입 정의
+interface CustomGalleryView {
+  id: string;
+  name: string;
+  images: string[];
+}
+
 function PreviewPanelContainer(): ReactNode {
-  console.log('🎯 [PREVIEW_PANEL] 컴포넌트 렌더링 시작');
+  console.log('🎯 [PREVIEW_PANEL] 컴포넌트 렌더링 시작 (역할 분리 버전)');
 
   // 패널 엘리먼트 참조
   const panelElementRef = useRef<HTMLDivElement>(null);
 
-  // 모바일 감지 훅
+  // 📱 모바일 감지 훅
   const { isMobile } = useMobileDetection();
 
-  // 완전한 터치 핸들러 훅 사용 (모바일에서만)
+  // 🔄 터치 핸들러 훅 (모바일에서만)
   const {
     handleTouchStart,
     handleTouchMove,
@@ -38,12 +108,12 @@ function PreviewPanelContainer(): ReactNode {
     handleHeaderClick,
   } = useTouchHandlers();
 
-  // 🎯 Zustand 상태들을 개별적으로 구독
-  const selectedMobileSize = usePreviewPanelStore(
-    (state) => state.selectedMobileSize
-  );
+  // 🎯 PreviewPanelStore에서 UI 상태들 가져오기
   const isPreviewPanelOpen = usePreviewPanelStore(
     (state) => state.isPreviewPanelOpen
+  );
+  const selectedMobileSize = usePreviewPanelStore(
+    (state) => state.selectedMobileSize
   );
   const hasTabChanged = usePreviewPanelStore((state) => state.hasTabChanged);
   const isMobileModalOpen = usePreviewPanelStore(
@@ -54,8 +124,8 @@ function PreviewPanelContainer(): ReactNode {
   );
   const deviceType = usePreviewPanelStore((state) => state.deviceType);
 
-  // 🎯 Zustand 액션들을 개별적으로 구독
-  const zustandSetSelectedMobileSize = usePreviewPanelStore(
+  // 🎯 PreviewPanelStore에서 UI 액션들 가져오기
+  const setSelectedMobileSize = usePreviewPanelStore(
     (state) => state.setSelectedMobileSize
   );
   const setHasTabChanged = usePreviewPanelStore(
@@ -78,6 +148,16 @@ function PreviewPanelContainer(): ReactNode {
     (state) => state.handleCloseButtonClick
   );
 
+  console.log('🎯 [PREVIEW_PANEL] UI 상태 로드 완료:', {
+    isPreviewPanelOpen,
+    selectedMobileSize,
+    hasTabChanged,
+    isMobileModalOpen,
+    isDesktopModalOpen,
+    deviceType,
+    timestamp: new Date().toISOString(),
+  });
+
   // 🎯 모바일에서만 배경 스크롤 차단
   useEffect(() => {
     const shouldBlockBackgroundScroll = isMobile && isPreviewPanelOpen;
@@ -96,7 +176,8 @@ function PreviewPanelContainer(): ReactNode {
         timestamp: new Date().toISOString(),
       });
     } else {
-      const scrollY = parseInt(document.body.style.top || '0', 10);
+      const scrollYString = document.body.style.top || '0';
+      const scrollY = parseInt(scrollYString, 10);
 
       document.body.style.overflow = '';
       document.body.style.position = '';
@@ -125,7 +206,7 @@ function PreviewPanelContainer(): ReactNode {
   }, [isMobile, isPreviewPanelOpen]);
 
   // 🎯 MobileContentComponent를 위한 픽셀 기반 사이즈 검증 함수
-  const setSelectedMobileSize = useCallback(
+  const handleSelectedMobileSizeChange = useCallback(
     (requestedSizeValue: string) => {
       console.log('🔍 [MOBILE_TAB] 모바일 사이즈 변경 요청 시작:', {
         requestedSize: requestedSizeValue,
@@ -174,9 +255,9 @@ function PreviewPanelContainer(): ReactNode {
         });
       }
 
-      zustandSetSelectedMobileSize(finalSize);
+      setSelectedMobileSize(finalSize);
     },
-    [selectedMobileSize, zustandSetSelectedMobileSize, setHasTabChanged]
+    [selectedMobileSize, setSelectedMobileSize, setHasTabChanged]
   );
 
   // 🎯 디바이스 타입 계산 및 자동 동기화
@@ -199,7 +280,7 @@ function PreviewPanelContainer(): ReactNode {
     }
   }, [calculatedDeviceType, deviceType, setDeviceType]);
 
-  // 스토어 데이터 훅
+  // 📊 스토어 데이터 훅 - 콘텐츠 데이터만 제공
   const storeData = useStoreData();
   const {
     formData: rawFormData,
@@ -210,32 +291,45 @@ function PreviewPanelContainer(): ReactNode {
     isEditorCompleted,
   } = storeData;
 
+  console.log('📊 [PREVIEW_PANEL] 스토어 데이터 로드 완료:', {
+    hasRawFormData: !!rawFormData,
+    customGalleryViewsCount: customGalleryViews.length,
+    editorContainersCount: editorContainers.length,
+    editorParagraphsCount: editorParagraphs.length,
+    editorContentLength: editorCompletedContent.length,
+    isEditorCompleted,
+    timestamp: new Date().toISOString(),
+  });
+
   // 🎯 formData fallback 처리
   const formData = useMemo(() => {
     const hasRawFormData = rawFormData !== undefined;
 
-    return hasRawFormData
-      ? rawFormData
-      : {
-          userImage: undefined,
-          nickname: '',
-          emailPrefix: '',
-          emailDomain: '',
-          bio: undefined,
-          title: '',
-          description: '',
-          tags: undefined,
-          content: '',
-          mainImage: undefined,
-          media: [],
-          sliderImages: [],
-          author: '',
-          isEditorCompleted: false,
-          editorCompletedContent: '',
-        };
+    if (hasRawFormData) {
+      return rawFormData;
+    }
+
+    const fallbackFormData: FormData = {
+      userImage: undefined,
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: undefined,
+      title: '',
+      description: '',
+      tags: undefined,
+      content: '',
+      mainImage: undefined,
+      media: undefined,
+      sliderImages: undefined,
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+
+    return fallbackFormData;
   }, [rawFormData]);
 
-  // 데이터 변환 훅
+  // 🔄 데이터 변환 훅
   const transformedData = useDataTransformers({
     formData,
     editorCompletedContent,
@@ -256,111 +350,121 @@ function PreviewPanelContainer(): ReactNode {
   } = transformedData;
 
   // 🎯 타입 안전성 처리
-  const currentFormValues = useMemo(() => {
+  const currentFormValues = useMemo((): CurrentFormValues => {
     const hasRawCurrentFormValues = rawCurrentFormValues !== undefined;
 
-    return hasRawCurrentFormValues
-      ? {
-          title: rawCurrentFormValues.title ?? '',
-          description: rawCurrentFormValues.description ?? '',
-          content: rawCurrentFormValues.content ?? '',
-          nickname: rawCurrentFormValues.nickname ?? '',
-          emailPrefix: rawCurrentFormValues.emailPrefix ?? '',
-          emailDomain: rawCurrentFormValues.emailDomain ?? '',
-          bio: rawCurrentFormValues.bio ?? '',
-          userImage: rawCurrentFormValues.userImage ?? null,
-          mainImage: rawCurrentFormValues.mainImage ?? null,
-          media: Array.isArray(rawCurrentFormValues.media)
-            ? rawCurrentFormValues.media.filter(
-                (item): item is string => typeof item === 'string'
-              )
-            : [],
-          sliderImages: Array.isArray(rawCurrentFormValues.sliderImages)
-            ? rawCurrentFormValues.sliderImages.filter(
-                (item): item is string => typeof item === 'string'
-              )
-            : [],
-          tags: rawCurrentFormValues.tags ?? '',
-          editorCompletedContent:
-            rawCurrentFormValues.editorCompletedContent ?? '',
-          isEditorCompleted: rawCurrentFormValues.isEditorCompleted ?? false,
-        }
-      : {
-          title: '',
-          description: '',
-          content: '',
-          nickname: '',
-          emailPrefix: '',
-          emailDomain: '',
-          bio: '',
-          userImage: null,
-          mainImage: null,
-          media: [],
-          sliderImages: [],
-          tags: '',
-          editorCompletedContent: '',
-          isEditorCompleted: false,
-        };
+    if (hasRawCurrentFormValues) {
+      return {
+        title: rawCurrentFormValues.title ?? '',
+        description: rawCurrentFormValues.description ?? '',
+        content: rawCurrentFormValues.content ?? '',
+        nickname: rawCurrentFormValues.nickname ?? '',
+        emailPrefix: rawCurrentFormValues.emailPrefix ?? '',
+        emailDomain: rawCurrentFormValues.emailDomain ?? '',
+        bio: rawCurrentFormValues.bio ?? '',
+        userImage: rawCurrentFormValues.userImage ?? null,
+        mainImage: rawCurrentFormValues.mainImage ?? null,
+        media: Array.isArray(rawCurrentFormValues.media)
+          ? rawCurrentFormValues.media.filter(
+              (item): item is string => typeof item === 'string'
+            )
+          : [],
+        sliderImages: Array.isArray(rawCurrentFormValues.sliderImages)
+          ? rawCurrentFormValues.sliderImages.filter(
+              (item): item is string => typeof item === 'string'
+            )
+          : [],
+        tags: rawCurrentFormValues.tags ?? '',
+        editorCompletedContent:
+          rawCurrentFormValues.editorCompletedContent ?? '',
+        isEditorCompleted: rawCurrentFormValues.isEditorCompleted ?? false,
+      };
+    }
+
+    return {
+      title: '',
+      description: '',
+      content: '',
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: '',
+      userImage: null,
+      mainImage: null,
+      media: [],
+      sliderImages: [],
+      tags: '',
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
   }, [rawCurrentFormValues]);
 
-  const displayContent = useMemo(() => {
+  const displayContent = useMemo((): DisplayContent => {
     const isStringContent = typeof rawDisplayContent === 'string';
 
-    return isStringContent
-      ? {
-          text: rawDisplayContent,
-          source: 'editor' as const,
-        }
-      : rawDisplayContent ?? {
-          text: '',
-          source: 'basic' as const,
-        };
+    if (isStringContent) {
+      return {
+        text: rawDisplayContent,
+        source: 'editor',
+      };
+    }
+
+    return (
+      rawDisplayContent ?? {
+        text: '',
+        source: 'basic',
+      }
+    );
   }, [rawDisplayContent]);
 
-  const editorStatusInfo = useMemo(() => {
+  const editorStatusInfo = useMemo((): EditorStatusInfo => {
     const hasRawEditorStatusInfo = rawEditorStatusInfo !== undefined;
 
-    return hasRawEditorStatusInfo
-      ? {
-          isCompleted: rawEditorStatusInfo.isCompleted ?? false,
-          contentLength: rawEditorStatusInfo.contentLength ?? 0,
-          hasContainers: rawEditorStatusInfo.hasContainers ?? false,
-          hasParagraphs: rawEditorStatusInfo.hasParagraphs ?? false,
-          hasEditor: rawEditorStatusInfo.hasEditor ?? false,
-          containerCount: rawEditorStatusInfo.containerCount ?? 0,
-          paragraphCount: rawEditorStatusInfo.paragraphCount ?? 0,
-        }
-      : {
-          isCompleted: false,
-          contentLength: 0,
-          hasContainers: false,
-          hasParagraphs: false,
-          hasEditor: false,
-          containerCount: 0,
-          paragraphCount: 0,
-        };
+    if (hasRawEditorStatusInfo) {
+      return {
+        isCompleted: rawEditorStatusInfo.isCompleted ?? false,
+        contentLength: rawEditorStatusInfo.contentLength ?? 0,
+        hasContainers: rawEditorStatusInfo.hasContainers ?? false,
+        hasParagraphs: rawEditorStatusInfo.hasParagraphs ?? false,
+        hasEditor: rawEditorStatusInfo.hasEditor ?? false,
+        containerCount: rawEditorStatusInfo.containerCount ?? 0,
+        paragraphCount: rawEditorStatusInfo.paragraphCount ?? 0,
+      };
+    }
+
+    return {
+      isCompleted: false,
+      contentLength: 0,
+      hasContainers: false,
+      hasParagraphs: false,
+      hasEditor: false,
+      containerCount: 0,
+      paragraphCount: 0,
+    };
   }, [rawEditorStatusInfo]);
 
-  const avatarProps = useMemo(() => {
+  const avatarProps = useMemo((): AvatarProps => {
     const hasRawAvatarProps = rawAvatarProps !== undefined;
 
-    return hasRawAvatarProps
-      ? {
-          src: rawAvatarProps.src ?? '',
-          name: rawAvatarProps.name ?? '',
-          fallback: rawAvatarProps.fallback ?? '',
-          className: rawAvatarProps.className ?? '',
-          showFallback: rawAvatarProps.showFallback ?? true,
-          isBordered: rawAvatarProps.isBordered ?? false,
-        }
-      : {
-          src: '',
-          name: '',
-          fallback: '',
-          className: '',
-          showFallback: true,
-          isBordered: false,
-        };
+    if (hasRawAvatarProps) {
+      return {
+        src: rawAvatarProps.src ?? '',
+        name: rawAvatarProps.name ?? '',
+        fallback: rawAvatarProps.fallback ?? '',
+        className: rawAvatarProps.className ?? '',
+        showFallback: rawAvatarProps.showFallback ?? true,
+        isBordered: rawAvatarProps.isBordered ?? false,
+      };
+    }
+
+    return {
+      src: '',
+      name: '',
+      fallback: '',
+      className: '',
+      showFallback: true,
+      isBordered: false,
+    };
   }, [rawAvatarProps]);
 
   // 타입 안전한 배열 처리
@@ -499,7 +603,7 @@ function PreviewPanelContainer(): ReactNode {
         swiperKey={swiperKey}
         customGalleryViews={customGalleryViews}
         selectedMobileSize={selectedMobileSize}
-        setSelectedMobileSize={setSelectedMobileSize}
+        setSelectedMobileSize={handleSelectedMobileSizeChange}
         hasTabChanged={hasTabChanged}
         setHasTabChanged={setHasTabChanged}
       />
@@ -600,13 +704,13 @@ interface PreviewModalsProps {
   isDesktopModalOpen: boolean;
   closeMobileModal: () => void;
   closeDesktopModal: () => void;
-  currentFormValues: any;
-  displayContent: any;
+  currentFormValues: CurrentFormValues;
+  displayContent: DisplayContent;
   heroImage: string;
   tagArray: string[];
-  avatarProps: any;
+  avatarProps: AvatarProps;
   swiperKey: string;
-  customGalleryViews: any[];
+  customGalleryViews: CustomGalleryView[];
   selectedMobileSize: string;
   setSelectedMobileSize: (size: string) => void;
   hasTabChanged: boolean;
