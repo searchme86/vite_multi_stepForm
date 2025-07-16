@@ -7,24 +7,24 @@ import React, {
   ReactNode,
   useMemo,
   useRef,
+  useCallback,
 } from 'react';
 import { useBlogMediaStepState } from '../../hooks/useBlogMediaStepState';
 import { useBlogMediaStepIntegration } from '../../hooks/useBlogMediaStepIntegration';
 import { useImageUploadHandlers } from '../hooks/useImageUploadHandlers';
+import { useMapBasedFileState } from '../hooks/useMapBasedFileState';
 import type {
   ImageUploadContextValue,
   FileSelectButtonRef,
   MainImageHandlers,
 } from '../types/imageUploadTypes';
 
-// 🔧 토스트 메시지 타입 정의
 interface SafeToastMessage {
   title: string;
   description: string;
   color: 'success' | 'warning' | 'danger' | 'primary';
 }
 
-// 🔧 타입 안전한 토스트 검증 함수
 const validateToastMessage = (toast: unknown): toast is SafeToastMessage => {
   if (!toast || typeof toast !== 'object') {
     return false;
@@ -49,7 +49,6 @@ interface ImageUploadProviderProps {
   children: ReactNode;
 }
 
-// 🔧 타입 안전한 값 추출 함수들
 const safeExtractMainImageUrl = (formValues: unknown): string => {
   try {
     if (!formValues || typeof formValues !== 'object') {
@@ -118,32 +117,98 @@ const safeExtractSliderIndices = (selectionState: unknown): number[] => {
 export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
   children,
 }) => {
-  console.log(
-    '🔧 [IMAGE_UPLOAD_PROVIDER] 에러 해결된 Provider 초기화 - useImageUploadHandlers 통합'
-  );
+  console.log('🔧 [IMAGE_UPLOAD_PROVIDER] Map 기반 Provider 초기화 시작');
 
-  // 🔧 기본 hooks (에러 없는 순서로 호출)
   const blogMediaStateResult = useBlogMediaStepState();
   const blogMediaIntegrationResult = useBlogMediaStepIntegration();
 
-  // 🔧 안전한 값 추출
-  const currentMainImageUrl = safeExtractMainImageUrl(
+  const { state: mapFileState, actions: mapFileActions } =
+    useMapBasedFileState();
+
+  const syncExecutedRef = useRef<boolean>(false);
+  const lastSyncDataRef = useRef<{
+    mediaFiles: string[];
+    fileNames: string[];
+  }>({
+    mediaFiles: [],
+    fileNames: [],
+  });
+
+  const legacyMainImageUrl = safeExtractMainImageUrl(
     blogMediaStateResult.formValues
   );
-  const mediaFilesList = safeExtractMediaFilesList(
+  const legacyMediaFiles = safeExtractMediaFilesList(
     blogMediaStateResult.formValues
   );
-  const selectedFileNames = safeExtractSelectedFileNames(
+  const legacySelectedFileNames = safeExtractSelectedFileNames(
     blogMediaStateResult.selectionState
   );
   const selectedSliderIndices = safeExtractSliderIndices(
     blogMediaStateResult.selectionState
   );
 
-  // 🔧 FileSelectButton 참조 생성
+  const performLegacyDataSync = useCallback(() => {
+    if (syncExecutedRef.current) {
+      return;
+    }
+
+    const hasLegacyData =
+      legacyMediaFiles.length > 0 || legacySelectedFileNames.length > 0;
+    if (!hasLegacyData) {
+      console.log('ℹ️ [LEGACY_SYNC] 레거시 데이터 없음, 동기화 건너뜀');
+      return;
+    }
+
+    const isSameData =
+      JSON.stringify(lastSyncDataRef.current.mediaFiles) ===
+        JSON.stringify(legacyMediaFiles) &&
+      JSON.stringify(lastSyncDataRef.current.fileNames) ===
+        JSON.stringify(legacySelectedFileNames);
+
+    if (isSameData) {
+      console.log('ℹ️ [LEGACY_SYNC] 동일한 데이터, 동기화 건너뜀');
+      return;
+    }
+
+    console.log('🔄 [LEGACY_SYNC] 레거시 데이터 동기화 시작:', {
+      mediaCount: legacyMediaFiles.length,
+      fileNameCount: legacySelectedFileNames.length,
+    });
+
+    try {
+      mapFileActions.clearAllFiles();
+      legacyMediaFiles.forEach((url, index) => {
+        const fileName = legacySelectedFileNames[index] || `file_${index + 1}`;
+        mapFileActions.addFile(fileName, url);
+      });
+
+      lastSyncDataRef.current = {
+        mediaFiles: [...legacyMediaFiles],
+        fileNames: [...legacySelectedFileNames],
+      };
+
+      syncExecutedRef.current = true;
+
+      console.log('✅ [LEGACY_SYNC] 동기화 완료:', legacyMediaFiles.length);
+    } catch (error) {
+      console.error('❌ [LEGACY_SYNC] 동기화 실패:', error);
+    }
+  }, [legacyMediaFiles, legacySelectedFileNames, mapFileActions]);
+
+  useEffect(() => {
+    const syncTimeout = setTimeout(() => {
+      performLegacyDataSync();
+    }, 100);
+
+    return () => clearTimeout(syncTimeout);
+  }, [performLegacyDataSync]);
+
+  const { urls: currentMediaFiles, names: currentFileNames } =
+    mapFileActions.convertToLegacyArrays();
+  const currentMainImageUrl = legacyMainImageUrl;
+
   const fileSelectButtonRef = useRef<FileSelectButtonRef>(null);
 
-  // 🔧 메인 이미지 핸들러 생성
   const mainImageHandlers = useMemo((): MainImageHandlers => {
     return {
       onMainImageSet: (imageIndex: number, imageUrl: string) => {
@@ -179,36 +244,64 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     };
   }, [currentMainImageUrl, blogMediaIntegrationResult]);
 
-  // ✅ useImageUploadHandlers 통합 사용
-  const imageUploadHandlers = useImageUploadHandlers({
-    formValues: blogMediaStateResult.formValues,
-    uiState: blogMediaStateResult.uiState,
-    selectionState: blogMediaStateResult.selectionState,
-    updateMediaValue: (filesOrUpdater) => {
+  const updateMediaValueCallback = useCallback(
+    (
+      filesOrUpdater:
+        | readonly string[]
+        | ((prev: readonly string[]) => readonly string[])
+    ) => {
       try {
         if (typeof filesOrUpdater === 'function') {
-          const currentMedia = mediaFilesList;
-          const updatedMedia = filesOrUpdater(currentMedia);
-          blogMediaStateResult.setMediaValue(Array.from(updatedMedia));
+          const currentUrls = mapFileActions.getFileUrls();
+          const updatedUrls = filesOrUpdater(currentUrls);
+
+          mapFileActions.clearAllFiles();
+          updatedUrls.forEach((url, index) => {
+            const fileName = currentFileNames[index] || `file_${index + 1}`;
+            mapFileActions.addFile(fileName, url);
+          });
+
+          blogMediaStateResult.setMediaValue(Array.from(updatedUrls));
         } else {
+          mapFileActions.clearAllFiles();
+          Array.from(filesOrUpdater).forEach((url, index) => {
+            const fileName = currentFileNames[index] || `file_${index + 1}`;
+            mapFileActions.addFile(fileName, url);
+          });
+
           blogMediaStateResult.setMediaValue(Array.from(filesOrUpdater));
         }
       } catch (error) {
         console.error('❌ [UPDATE_MEDIA] 업데이트 실패:', error);
       }
     },
-    setMainImageValue: (value: string) => {
-      try {
-        blogMediaIntegrationResult.setMainImageValue(value);
-      } catch (error) {
-        console.error('❌ [SET_MAIN_IMAGE] 설정 실패:', error);
-      }
-    },
-    updateSelectedFileNames: (namesOrUpdater) => {
+    [mapFileActions, currentFileNames, blogMediaStateResult]
+  );
+
+  const updateSelectedFileNamesCallback = useCallback(
+    (
+      namesOrUpdater:
+        | readonly string[]
+        | ((prev: readonly string[]) => readonly string[])
+    ) => {
       try {
         if (typeof namesOrUpdater === 'function') {
-          const currentNames = selectedFileNames;
+          const currentNames = mapFileActions.getFileNames();
           const updatedNames = namesOrUpdater(currentNames);
+
+          const currentUrls = mapFileActions.getFileUrls();
+          currentUrls.forEach((url, index) => {
+            const fileName = updatedNames[index];
+            if (fileName) {
+              const fileId = Array.from(mapFileState.fileMap.entries()).find(
+                ([, file]) => file.url === url
+              )?.[0];
+              if (fileId) {
+                mapFileActions.updateFile(fileId, { fileName });
+              }
+            }
+          });
+
           blogMediaStateResult.setSelectedFileNames(Array.from(updatedNames));
         } else {
           blogMediaStateResult.setSelectedFileNames(Array.from(namesOrUpdater));
@@ -217,6 +310,22 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         console.error('❌ [UPDATE_FILENAMES] 업데이트 실패:', error);
       }
     },
+    [mapFileActions, mapFileState.fileMap, blogMediaStateResult]
+  );
+
+  const imageUploadHandlers = useImageUploadHandlers({
+    formValues: blogMediaStateResult.formValues,
+    uiState: blogMediaStateResult.uiState,
+    selectionState: blogMediaStateResult.selectionState,
+    updateMediaValue: updateMediaValueCallback,
+    setMainImageValue: (value: string) => {
+      try {
+        blogMediaIntegrationResult.setMainImageValue(value);
+      } catch (error) {
+        console.error('❌ [SET_MAIN_IMAGE] 설정 실패:', error);
+      }
+    },
+    updateSelectedFileNames: updateSelectedFileNamesCallback,
     showToastMessage: (toast: unknown) => {
       try {
         if (validateToastMessage(toast)) {
@@ -231,225 +340,222 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     imageGalleryStore: blogMediaIntegrationResult.imageGalleryStore,
   });
 
-  // 🔧 sliderIndices 관련 함수들
   const isImageSelectedForSlider = useMemo(() => {
     return (imageIndex: number): boolean => {
       return selectedSliderIndices.includes(imageIndex);
     };
   }, [selectedSliderIndices]);
 
-  // 🔧 메모화된 Context 값 생성 (완전한 타입 일치)
+  const updateSliderSelection = useMemo(() => {
+    return (newSelectedIndices: number[]) => {
+      try {
+        const imageGalleryStore = blogMediaIntegrationResult.imageGalleryStore;
+        if (imageGalleryStore && typeof imageGalleryStore === 'object') {
+          const setSliderSelectedIndices = Reflect.get(
+            imageGalleryStore,
+            'setSliderSelectedIndices'
+          );
+          if (typeof setSliderSelectedIndices === 'function') {
+            setSliderSelectedIndices(newSelectedIndices);
+          }
+        }
+        console.log(
+          '✅ [SLIDER_UPDATE] 슬라이더 선택 업데이트:',
+          newSelectedIndices.length
+        );
+      } catch (error) {
+        console.error('❌ [SLIDER_UPDATE] 업데이트 실패:', error);
+      }
+    };
+  }, [blogMediaIntegrationResult.imageGalleryStore]);
+
   const contextValue = useMemo<ImageUploadContextValue>(() => {
+    const convertDeleteConfirmState = () => {
+      const state = imageUploadHandlers.deleteConfirmState;
+      if (!state || typeof state !== 'object') {
+        return { isOpen: false, imageIndex: -1, imageUrl: '' };
+      }
+
+      const isVisible = Reflect.get(state, 'isVisible');
+      const isOpen = Reflect.get(state, 'isOpen');
+      const imageIndex = Reflect.get(state, 'imageIndex');
+      const imageName = Reflect.get(state, 'imageName');
+      const imageUrl = Reflect.get(state, 'imageUrl');
+
+      return {
+        isOpen:
+          typeof isOpen === 'boolean'
+            ? isOpen
+            : typeof isVisible === 'boolean'
+            ? isVisible
+            : false,
+        imageIndex: typeof imageIndex === 'number' ? imageIndex : -1,
+        imageUrl:
+          typeof imageUrl === 'string'
+            ? imageUrl
+            : typeof imageName === 'string'
+            ? imageName
+            : '',
+      };
+    };
+
+    const convertDuplicateMessageState = () => {
+      const state = imageUploadHandlers.duplicateMessageState;
+      if (!state || typeof state !== 'object') {
+        return { isVisible: false, fileName: '' };
+      }
+
+      const isVisible = Reflect.get(state, 'isVisible');
+      const message = Reflect.get(state, 'message');
+      const fileNames = Reflect.get(state, 'fileNames');
+      const fileName =
+        Array.isArray(fileNames) && fileNames.length > 0
+          ? fileNames[0]
+          : message;
+
+      return {
+        isVisible: typeof isVisible === 'boolean' ? isVisible : false,
+        fileName: typeof fileName === 'string' ? fileName : '',
+      };
+    };
+
+    const createHandleFileChange = () => {
+      const originalHandler = imageUploadHandlers.handleFileChange;
+      return (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (files && typeof originalHandler === 'function') {
+          originalHandler(files);
+        }
+      };
+    };
+
+    const convertTouchActiveImages = () => {
+      const state = imageUploadHandlers.touchActiveImages;
+      if (!state) {
+        return {};
+      }
+
+      if (state instanceof Set) {
+        const result: Record<number, boolean> = {};
+        state.forEach((index: number) => {
+          result[index] = true;
+        });
+        return result;
+      }
+
+      if (typeof state === 'object') {
+        const result: Record<number, boolean> = {};
+        Object.entries(state).forEach(([key, value]) => {
+          const numericKey = parseInt(key, 10);
+          if (!isNaN(numericKey)) {
+            result[numericKey] = Boolean(value);
+          }
+        });
+        return result;
+      }
+
+      return {};
+    };
+
     return {
-      // ✅ 상태 데이터 (올바른 이름과 타입으로 매핑)
-      uploadedImages: mediaFilesList, // ✅ 이름 수정
-      selectedFileNames: selectedFileNames, // ✅ 추가
-      uploading: imageUploadHandlers.uploading || {}, // ✅ fallback 추가
-      uploadStatus: imageUploadHandlers.uploadStatus || {}, // ✅ fallback 추가
-      deleteConfirmState: imageUploadHandlers.deleteConfirmState, // ✅ 추가
-      duplicateMessageState: imageUploadHandlers.duplicateMessageState, // ✅ 추가
-      touchActiveImages: imageUploadHandlers.touchActiveImages, // ✅ 추가
-      hasActiveUploads: imageUploadHandlers.hasActiveUploads, // ✅ 추가
-      isMobileDevice: imageUploadHandlers.isMobileDevice, // ✅ 추가
-
-      // ✅ 슬라이더 선택 상태 추가
-      selectedSliderIndices: selectedSliderIndices, // ✅ 추가
-      isImageSelectedForSlider: isImageSelectedForSlider, // ✅ 추가
-
-      // ✅ 파일 처리 핸들러 (올바른 매핑)
-      handleFilesDropped: imageUploadHandlers.handleFilesDropped, // ✅ 추가
-      handleFileSelectClick: imageUploadHandlers.handleFileSelectClick, // ✅ 추가
-      handleFileChange: imageUploadHandlers.handleFileChange, // ✅ 추가
-
-      // ✅ 이미지 관리 핸들러 (올바른 매핑)
-      handleDeleteButtonClick: imageUploadHandlers.handleDeleteButtonClick, // ✅ 추가
-      handleDeleteConfirm: imageUploadHandlers.handleDeleteConfirm, // ✅ 추가
-      handleDeleteCancel: imageUploadHandlers.handleDeleteCancel, // ✅ 추가
-      handleImageTouch: imageUploadHandlers.handleImageTouch, // ✅ 추가
-
-      // ✅ 메인 이미지 핸들러
-      mainImageHandlers: mainImageHandlers, // ✅ 추가
-
-      // ✅ 참조 객체
-      fileSelectButtonRef: fileSelectButtonRef, // ✅ 추가
+      uploadedImages: currentMediaFiles,
+      selectedFileNames: currentFileNames,
+      uploading: imageUploadHandlers.uploading || {},
+      uploadStatus: imageUploadHandlers.uploadStatus || {},
+      deleteConfirmState: convertDeleteConfirmState(),
+      duplicateMessageState: convertDuplicateMessageState(),
+      touchActiveImages: convertTouchActiveImages(),
+      hasActiveUploads: Boolean(mapFileState.hasActiveUploads),
+      isMobileDevice: Boolean(imageUploadHandlers.isMobileDevice),
+      selectedSliderIndices: selectedSliderIndices,
+      isImageSelectedForSlider: isImageSelectedForSlider,
+      updateSliderSelection: updateSliderSelection,
+      handleFilesDropped: imageUploadHandlers.handleFilesDropped,
+      handleFileSelectClick: imageUploadHandlers.handleFileSelectClick,
+      handleFileChange: createHandleFileChange(),
+      handleDeleteButtonClick: imageUploadHandlers.handleDeleteButtonClick,
+      handleDeleteConfirm: imageUploadHandlers.handleDeleteConfirm,
+      handleDeleteCancel: imageUploadHandlers.handleDeleteCancel,
+      handleImageTouch: imageUploadHandlers.handleImageTouch,
+      mainImageHandlers: mainImageHandlers,
+      fileSelectButtonRef: fileSelectButtonRef,
     };
   }, [
-    mediaFilesList,
-    selectedFileNames,
+    currentMediaFiles,
+    currentFileNames,
     selectedSliderIndices,
     isImageSelectedForSlider,
+    updateSliderSelection,
     imageUploadHandlers,
     mainImageHandlers,
+    mapFileState.hasActiveUploads,
   ]);
 
-  // 🚨 강화된 메인 이미지 복원 로직 (기존 유지)
-  useEffect(() => {
-    const performSafeMainImageRestore = async () => {
-      console.log('🔄 [SAFE_RESTORE] 에러 안전한 메인 이미지 복원 시작:', {
-        currentMainImageUrl: currentMainImageUrl || 'none',
-        mediaFilesCount: mediaFilesList.length,
-        에러안전복원: true,
-      });
+  const mainImageRestoreExecutedRef = useRef<boolean>(false);
 
+  useEffect(() => {
+    if (mainImageRestoreExecutedRef.current) {
+      return;
+    }
+
+    const performMainImageRestore = () => {
       if (currentMainImageUrl && currentMainImageUrl.length > 0) {
-        console.log('ℹ️ [SAFE_RESTORE] 이미 메인 이미지가 있음, 복원 생략');
+        return;
+      }
+
+      if (currentMediaFiles.length === 0) {
         return;
       }
 
       try {
-        // localStorage 백업 확인
         const backupDataString = localStorage.getItem(
           'blogMediaMainImageBackup'
         );
         if (backupDataString) {
-          try {
-            const backupData = JSON.parse(backupDataString);
-            const backupMainImage = Reflect.get(backupData, 'mainImage');
-            const backupTimestamp = Reflect.get(backupData, 'timestamp');
+          const backupData = JSON.parse(backupDataString);
+          const backupMainImage = Reflect.get(backupData, 'mainImage');
+          const backupTimestamp = Reflect.get(backupData, 'timestamp');
 
-            if (
-              typeof backupMainImage === 'string' &&
-              typeof backupTimestamp === 'number' &&
-              backupMainImage.length > 0
-            ) {
-              const isRecentBackup =
-                Date.now() - backupTimestamp < 5 * 60 * 1000;
-
-              if (isRecentBackup && mediaFilesList.includes(backupMainImage)) {
-                console.log(
-                  '🔄 [SAFE_RESTORE] localStorage 백업에서 메인 이미지 복원'
-                );
-                mainImageHandlers.onMainImageSet(-1, backupMainImage);
-                return;
-              }
-            }
-          } catch (parseError) {
-            console.warn(
-              '⚠️ [SAFE_RESTORE] localStorage 백업 파싱 실패:',
-              parseError
-            );
-          }
-        }
-
-        // Zustand Store에서 복원
-        try {
-          const imageGalleryStore =
-            blogMediaIntegrationResult.imageGalleryStore;
-          if (imageGalleryStore && typeof imageGalleryStore === 'object') {
-            const getIsInitialized = Reflect.get(
-              imageGalleryStore,
-              'getIsInitialized'
-            );
-            const initializeStoredImages = Reflect.get(
-              imageGalleryStore,
-              'initializeStoredImages'
-            );
-            const getImageViewConfig = Reflect.get(
-              imageGalleryStore,
-              'getImageViewConfig'
-            );
-
-            if (typeof getIsInitialized === 'function') {
-              const isStoreInitialized = Boolean(getIsInitialized());
-
-              if (
-                !isStoreInitialized &&
-                typeof initializeStoredImages === 'function'
-              ) {
-                console.log('🔄 [SAFE_RESTORE] 갤러리 스토어 초기화 중...');
-                await initializeStoredImages();
-              }
-            }
-
-            if (typeof getImageViewConfig === 'function') {
-              const currentGalleryConfig = getImageViewConfig();
-              const storeMainImage = currentGalleryConfig?.mainImage;
-
-              if (
-                typeof storeMainImage === 'string' &&
-                storeMainImage.length > 0 &&
-                mediaFilesList.includes(storeMainImage)
-              ) {
-                console.log(
-                  '🔄 [SAFE_RESTORE] Zustand Store에서 메인 이미지 복원'
-                );
-                mainImageHandlers.onMainImageSet(-1, storeMainImage);
-                return;
-              }
+          if (
+            typeof backupMainImage === 'string' &&
+            typeof backupTimestamp === 'number' &&
+            backupMainImage.length > 0
+          ) {
+            const isRecentBackup = Date.now() - backupTimestamp < 5 * 60 * 1000;
+            if (isRecentBackup && currentMediaFiles.includes(backupMainImage)) {
+              mainImageHandlers.onMainImageSet(-1, backupMainImage);
+              mainImageRestoreExecutedRef.current = true;
+              return;
             }
           }
-        } catch (storeError) {
-          console.error(
-            '❌ [SAFE_RESTORE] Zustand Store 복원 실패:',
-            storeError
-          );
         }
-
-        console.log('ℹ️ [SAFE_RESTORE] 복원할 메인 이미지 없음');
-      } catch (restoreError) {
-        console.error('❌ [SAFE_RESTORE] 메인 이미지 복원 실패:', restoreError);
+      } catch (error) {
+        console.warn('⚠️ [RESTORE] 복원 실패:', error);
       }
     };
 
-    const safeRestoreTimeout = setTimeout(() => {
-      performSafeMainImageRestore().catch((error) => {
-        console.error('❌ [SAFE_RESTORE] 복원 프로세스 실패:', error);
-      });
-    }, 500);
+    const restoreTimeout = setTimeout(performMainImageRestore, 1000);
+    return () => clearTimeout(restoreTimeout);
+  }, [currentMediaFiles.length, currentMainImageUrl, mainImageHandlers]);
 
-    return () => clearTimeout(safeRestoreTimeout);
-  }, [
-    mediaFilesList,
-    currentMainImageUrl,
-    mainImageHandlers,
-    blogMediaIntegrationResult,
-  ]);
-
-  // 🚨 미디어 목록 변경 시 메인 이미지 유효성 검사 (기존 유지)
   useEffect(() => {
-    const validateMainImageOnMediaChange = () => {
-      if (!currentMainImageUrl || currentMainImageUrl.length === 0) {
-        return;
-      }
+    if (!currentMainImageUrl || currentMainImageUrl.length === 0) {
+      return;
+    }
 
-      const isMainImageStillValid =
-        mediaFilesList.includes(currentMainImageUrl);
+    const isMainImageStillValid =
+      currentMediaFiles.includes(currentMainImageUrl);
+    if (!isMainImageStillValid) {
+      console.log('⚠️ [VALIDATION] 메인 이미지가 미디어 목록에 없음, 해제');
+      mainImageHandlers.onMainImageCancel();
+    }
+  }, [currentMediaFiles.join(','), currentMainImageUrl, mainImageHandlers]);
 
-      if (!isMainImageStillValid) {
-        console.log(
-          '⚠️ [SAFE_VALIDATION] 메인 이미지가 미디어 목록에 없음, 해제'
-        );
-
-        try {
-          mainImageHandlers.onMainImageCancel();
-
-          const clearBackupData = {
-            mainImage: null,
-            timestamp: Date.now(),
-            source: 'safeMediaValidation',
-            reason: 'imageRemovedFromMediaList',
-          };
-          localStorage.setItem(
-            'blogMediaMainImageBackup',
-            JSON.stringify(clearBackupData)
-          );
-        } catch (clearError) {
-          console.warn('⚠️ [SAFE_VALIDATION] 해제 실패:', clearError);
-        }
-      }
-    };
-
-    validateMainImageOnMediaChange();
-  }, [mediaFilesList, currentMainImageUrl, mainImageHandlers]);
-
-  console.log('✅ [IMAGE_UPLOAD_PROVIDER] 에러 해결된 Provider 초기화 완료:', {
-    mediaFilesCount: mediaFilesList.length,
-    selectedFileNamesCount: selectedFileNames.length,
-    hasMainImage: Boolean(currentMainImageUrl),
-    hasActiveUploads: imageUploadHandlers.hasActiveUploads,
-    uploadingCount: Object.keys(imageUploadHandlers.uploading || {}).length,
-    contextValueComplete: true,
-    timestamp: new Date().toLocaleTimeString(),
+  console.log('✅ [IMAGE_UPLOAD_PROVIDER] Map 기반 Provider 초기화 완료:', {
+    mapFileCount: mapFileState.totalFiles,
+    currentMediaCount: currentMediaFiles.length,
+    hasActiveUploads: mapFileState.hasActiveUploads,
+    syncExecuted: syncExecutedRef.current,
   });
 
   return (

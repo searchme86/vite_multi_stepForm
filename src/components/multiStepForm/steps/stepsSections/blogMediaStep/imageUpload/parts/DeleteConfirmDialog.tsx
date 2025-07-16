@@ -6,51 +6,133 @@ import { createLogger } from '../utils/loggerUtils';
 
 const logger = createLogger('DELETE_CONFIRM_DIALOG');
 
+interface SafeDeleteConfirmState {
+  readonly isOpen: boolean;
+  readonly imageIndex: number;
+  readonly imageUrl: string;
+  readonly hasValidData: boolean;
+}
+
+const extractSafeDeleteConfirmState = (
+  deleteConfirmState: unknown
+): SafeDeleteConfirmState => {
+  try {
+    if (!deleteConfirmState || typeof deleteConfirmState !== 'object') {
+      return {
+        isOpen: false,
+        imageIndex: -1,
+        imageUrl: '',
+        hasValidData: false,
+      };
+    }
+
+    const isOpen = Reflect.get(deleteConfirmState, 'isOpen');
+    const imageIndex = Reflect.get(deleteConfirmState, 'imageIndex');
+    const imageUrl = Reflect.get(deleteConfirmState, 'imageUrl');
+
+    const safeIsOpen = typeof isOpen === 'boolean' ? isOpen : false;
+    const safeImageIndex = typeof imageIndex === 'number' ? imageIndex : -1;
+    const safeImageUrl = typeof imageUrl === 'string' ? imageUrl : '';
+
+    const hasValidData =
+      safeIsOpen && safeImageIndex >= 0 && safeImageUrl.length > 0;
+
+    return {
+      isOpen: safeIsOpen,
+      imageIndex: safeImageIndex,
+      imageUrl: safeImageUrl,
+      hasValidData,
+    };
+  } catch (error) {
+    console.error('❌ [DELETE_CONFIRM] 상태 추출 실패:', error);
+    return {
+      isOpen: false,
+      imageIndex: -1,
+      imageUrl: '',
+      hasValidData: false,
+    };
+  }
+};
+
+const extractFileNameFromUrl = (imageUrl: string): string => {
+  try {
+    if (!imageUrl || imageUrl.length === 0) {
+      return 'unknown';
+    }
+
+    const urlParts = imageUrl.split('/');
+    const fileName = urlParts[urlParts.length - 1] || 'unknown';
+
+    const fileNameWithoutQuery = fileName.split('?')[0] || 'unknown';
+
+    return fileNameWithoutQuery;
+  } catch (error) {
+    console.error('❌ [DELETE_CONFIRM] 파일명 추출 실패:', error);
+    return 'unknown';
+  }
+};
+
 function DeleteConfirmDialog(): React.ReactNode {
-  // ✅ Context에서 모든 데이터 가져오기 (Props 0개)
   const { deleteConfirmState, handleDeleteConfirm, handleDeleteCancel } =
     useImageUploadContext();
 
-  logger.debug('DeleteConfirmDialog 렌더링', {
-    isVisible: deleteConfirmState.isVisible,
-    imageIndex: deleteConfirmState.imageIndex,
-    imageName: deleteConfirmState.imageName,
-  });
+  const safeState = useMemo(() => {
+    const extracted = extractSafeDeleteConfirmState(deleteConfirmState);
 
-  // 🚀 성능 최적화: 삭제 확인 정보 메모이제이션
+    console.log('🔍 [DELETE_CONFIRM] 안전한 상태 추출:', {
+      isOpen: extracted.isOpen,
+      imageIndex: extracted.imageIndex,
+      imageUrl: extracted.imageUrl.slice(0, 30) + '...',
+      hasValidData: extracted.hasValidData,
+    });
+
+    return extracted;
+  }, [deleteConfirmState]);
+
   const deleteConfirmationInfo = useMemo(() => {
-    const { isVisible, imageName, imageIndex } = deleteConfirmState;
+    const { isOpen, imageIndex, imageUrl, hasValidData } = safeState;
 
-    const hasValidImageName = imageName.length > 0;
+    if (!hasValidData) {
+      return {
+        isVisible: false,
+        fileName: '',
+        imageIndex: -1,
+        confirmationMessage: '',
+        warningMessage: '',
+        hasValidImageName: false,
+        hasValidImageIndex: false,
+      };
+    }
+
+    const fileName = extractFileNameFromUrl(imageUrl);
+    const hasValidImageName = fileName.length > 0 && fileName !== 'unknown';
     const hasValidImageIndex = imageIndex >= 0;
 
     const confirmationMessage = hasValidImageName
-      ? `"${imageName}" 이미지를 삭제하시겠습니까?`
+      ? `"${fileName}" 이미지를 삭제하시겠습니까?`
       : '선택된 이미지를 삭제하시겠습니까?';
 
     const warningMessage = '삭제된 이미지는 복구할 수 없습니다.';
 
-    logger.debug('삭제 확인 정보 계산', {
-      isVisible,
-      imageName,
+    console.log('🔍 [DELETE_CONFIRM] 확인 정보 생성:', {
+      isVisible: isOpen,
+      fileName,
       imageIndex,
       hasValidImageName,
       hasValidImageIndex,
-      confirmationMessage,
     });
 
     return {
-      isVisible,
-      imageName,
+      isVisible: isOpen,
+      fileName,
       imageIndex,
       confirmationMessage,
       warningMessage,
       hasValidImageName,
       hasValidImageIndex,
     };
-  }, [deleteConfirmState]);
+  }, [safeState]);
 
-  // 🚀 성능 최적화: 다이얼로그 스타일 클래스 메모이제이션
   const dialogStyleConfiguration = useMemo(() => {
     const { isVisible } = deleteConfirmationInfo;
 
@@ -62,37 +144,32 @@ function DeleteConfirmDialog(): React.ReactNode {
 
     const finalClassName = `${baseClasses} ${visibilityClasses}`;
 
-    logger.debug('다이얼로그 스타일 클래스 계산', {
-      isVisible,
-      finalClassName,
-    });
-
     return {
       finalClassName,
       isVisible,
     };
   }, [deleteConfirmationInfo.isVisible]);
 
-  // 🚀 성능 최적화: 확인 버튼 클릭 핸들러 메모이제이션
   const handleConfirmClickEvent = useCallback(() => {
-    const { isVisible, hasValidImageIndex, imageIndex, imageName } =
+    const { isVisible, hasValidImageIndex, imageIndex, fileName } =
       deleteConfirmationInfo;
 
-    logger.debug('삭제 확인 버튼 클릭', {
+    console.log('🗑️ [DELETE_CONFIRM] 삭제 확인 버튼 클릭:', {
       isVisible,
       hasValidImageIndex,
       imageIndex,
-      imageName,
+      fileName,
     });
 
-    // 🔧 early return으로 중첩 방지
     if (!isVisible) {
-      logger.warn('다이얼로그가 보이지 않는 상태에서 확인 버튼 클릭');
+      console.warn(
+        '⚠️ [DELETE_CONFIRM] 다이얼로그가 보이지 않는 상태에서 확인 버튼 클릭'
+      );
       return;
     }
 
     if (!hasValidImageIndex) {
-      logger.warn('유효하지 않은 이미지 인덱스로 확인 버튼 클릭', {
+      console.warn('⚠️ [DELETE_CONFIRM] 유효하지 않은 이미지 인덱스:', {
         imageIndex,
       });
       return;
@@ -101,52 +178,51 @@ function DeleteConfirmDialog(): React.ReactNode {
     try {
       handleDeleteConfirm();
 
-      logger.info('삭제 확인 처리 완료', {
+      console.log('✅ [DELETE_CONFIRM] 삭제 확인 처리 완료:', {
         imageIndex,
-        imageName,
+        fileName,
       });
     } catch (confirmError) {
-      logger.error('삭제 확인 처리 중 오류', {
+      console.error('❌ [DELETE_CONFIRM] 삭제 확인 처리 중 오류:', {
         error: confirmError,
         imageIndex,
-        imageName,
+        fileName,
       });
     }
   }, [deleteConfirmationInfo, handleDeleteConfirm]);
 
-  // 🚀 성능 최적화: 취소 버튼 클릭 핸들러 메모이제이션
   const handleCancelClickEvent = useCallback(() => {
-    const { isVisible, imageIndex, imageName } = deleteConfirmationInfo;
+    const { isVisible, imageIndex, fileName } = deleteConfirmationInfo;
 
-    logger.debug('삭제 취소 버튼 클릭', {
+    console.log('❌ [DELETE_CONFIRM] 삭제 취소 버튼 클릭:', {
       isVisible,
       imageIndex,
-      imageName,
+      fileName,
     });
 
-    // 🔧 early return으로 중첩 방지
     if (!isVisible) {
-      logger.warn('다이얼로그가 보이지 않는 상태에서 취소 버튼 클릭');
+      console.warn(
+        '⚠️ [DELETE_CONFIRM] 다이얼로그가 보이지 않는 상태에서 취소 버튼 클릭'
+      );
       return;
     }
 
     try {
       handleDeleteCancel();
 
-      logger.info('삭제 취소 처리 완료', {
+      console.log('✅ [DELETE_CONFIRM] 삭제 취소 처리 완료:', {
         imageIndex,
-        imageName,
+        fileName,
       });
     } catch (cancelError) {
-      logger.error('삭제 취소 처리 중 오류', {
+      console.error('❌ [DELETE_CONFIRM] 삭제 취소 처리 중 오류:', {
         error: cancelError,
         imageIndex,
-        imageName,
+        fileName,
       });
     }
   }, [deleteConfirmationInfo, handleDeleteCancel]);
 
-  // 🚀 성능 최적화: 버튼 스타일 설정 메모이제이션
   const buttonStyleConfiguration = useMemo(() => {
     const cancelButtonClasses =
       'px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200';
@@ -160,11 +236,10 @@ function DeleteConfirmDialog(): React.ReactNode {
     };
   }, []);
 
-  // 🚀 성능 최적화: 접근성 속성 메모이제이션
   const accessibilityAttributes = useMemo(() => {
-    const { imageName } = deleteConfirmationInfo;
+    const { fileName } = deleteConfirmationInfo;
 
-    const dialogAriaLabel = `${imageName} 이미지 삭제 확인`;
+    const dialogAriaLabel = `${fileName} 이미지 삭제 확인`;
     const cancelAriaLabel = '이미지 삭제 취소';
     const confirmAriaLabel = '이미지 삭제 확인';
 
@@ -173,9 +248,8 @@ function DeleteConfirmDialog(): React.ReactNode {
       cancelAriaLabel,
       confirmAriaLabel,
     };
-  }, [deleteConfirmationInfo.imageName]);
+  }, [deleteConfirmationInfo.fileName]);
 
-  // 🔧 구조분해할당으로 데이터 접근
   const { confirmationMessage, warningMessage, isVisible } =
     deleteConfirmationInfo;
 
@@ -185,9 +259,9 @@ function DeleteConfirmDialog(): React.ReactNode {
   const { dialogAriaLabel, cancelAriaLabel, confirmAriaLabel } =
     accessibilityAttributes;
 
-  // 🔧 early return으로 불필요한 렌더링 방지
   if (!isVisible) {
-    logger.debug('다이얼로그가 보이지 않으므로 렌더링 최소화');
+    console.log('🔍 [DELETE_CONFIRM] 다이얼로그가 보이지 않으므로 렌더링 안함');
+    return null;
   }
 
   return (
