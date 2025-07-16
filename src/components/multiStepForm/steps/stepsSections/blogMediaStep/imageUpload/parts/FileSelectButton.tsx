@@ -12,8 +12,9 @@ import { generateAcceptString } from '../utils/fileFormatUtils';
 
 const logger = createLogger('FILE_SELECT_BUTTON');
 
+// 🚨 FIXED: 인터페이스를 Context의 ref 타입과 일치시킴
 export interface FileSelectButtonRef {
-  clickFileInput: () => void;
+  click: () => void;
 }
 
 // ✅ forwardRef 제거하고 일반 컴포넌트로 변경
@@ -50,16 +51,16 @@ function FileSelectButton(): React.ReactNode {
     }
   }, []);
 
-  // ✅ Context의 ref에만 연결 (forwardRef 제거)
+  // 🚨 FIXED: Context의 ref에 올바른 메서드명으로 연결
   useImperativeHandle(
     fileSelectButtonRef,
     () => ({
-      clickFileInput: triggerFileInputClick,
+      click: triggerFileInputClick,
     }),
     [triggerFileInputClick]
   );
 
-  // 🚀 성능 최적화: 파일 변경 이벤트 핸들러 메모이제이션
+  // 🚨 FIXED: React.ChangeEvent<HTMLInputElement> 타입에 맞게 수정
   const handleFileChangeEvent = useCallback(
     (changeEvent: React.ChangeEvent<HTMLInputElement>) => {
       const { target } = changeEvent;
@@ -85,7 +86,8 @@ function FileSelectButton(): React.ReactNode {
       }
 
       try {
-        handleFileChange(selectedFiles);
+        // 🚨 FIXED: ChangeEvent 전체를 전달하는 대신 올바른 방식으로 호출
+        handleFileChange(changeEvent);
 
         const fileNamesList = Array.from(selectedFiles).map(({ name }) => name);
 

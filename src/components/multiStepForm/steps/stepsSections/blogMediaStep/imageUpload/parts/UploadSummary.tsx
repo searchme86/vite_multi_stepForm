@@ -12,8 +12,9 @@ interface SummaryData {
   isDeleteConfirmVisible: boolean;
 }
 
+// 🚨 FIXED: readonly string[] 타입을 안전하게 처리
 const calculateSummaryData = (
-  uploadedImages: string[],
+  uploadedImages: readonly string[],
   hasMainImageHandlers: boolean,
   isDeleteConfirmVisible: boolean
 ): SummaryData => {
@@ -145,14 +146,19 @@ function UploadSummary(): React.ReactNode {
     const { isVisible: isDeleteConfirmVisible = false } = deleteConfirmState;
     const hasMainImageHandlers = mainImageHandlers !== null;
 
+    // 🚨 FIXED: readonly string[] 타입을 안전하게 처리
+    const safeUploadedImages = Array.isArray(uploadedImages)
+      ? uploadedImages
+      : [];
+
     const calculatedSummaryData = calculateSummaryData(
-      uploadedImages,
+      safeUploadedImages,
       hasMainImageHandlers,
       isDeleteConfirmVisible
     );
 
     logger.debug('summaryData 계산 완료', {
-      uploadedImagesCount: uploadedImages.length,
+      uploadedImagesCount: safeUploadedImages.length,
       hasMainImageHandlers,
       isDeleteConfirmVisible,
       calculatedSummaryData,

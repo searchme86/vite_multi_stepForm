@@ -9,6 +9,7 @@ import {
   createFileReader,
   convertFilesToFileList,
 } from '../utils/fileProcessingUtils';
+import type { FileItem, FileStatus } from '../types/imageUploadTypes'; // 🚨 FIXED: 타입 임포트 추가
 
 const logger = createLogger('FILE_PROCESSING');
 
@@ -31,17 +32,15 @@ interface FileProcessingCallbacks {
     addFile: (fileName: string, url: string) => string;
     updateFile: (
       fileId: string,
-      updates: { fileName?: string; url?: string; status?: string }
-    ) => void;
-    removeFile: (fileId: string) => void;
-    getFileById: (
-      fileId: string
-    ) =>
-      | { id: string; fileName: string; url: string; status: string }
-      | undefined;
+      updates: { fileName?: string; url?: string; status?: FileStatus }
+    ) => boolean;
+    removeFile: (fileId: string) => boolean;
+    getFileById: (fileId: string) => FileItem | undefined;
     getFileUrls: () => string[];
     getFileNames: () => string[];
     clearAllFiles: () => void;
+    reorderFiles: (newOrder: readonly string[]) => boolean;
+    getFilesByStatus: (status: FileStatus) => readonly FileItem[];
   };
 }
 
@@ -121,7 +120,20 @@ export const useFileProcessing = (
   const updateQueueRef = useRef<Array<() => void>>([]);
   const isProcessingQueueRef = useRef<boolean>(false);
 
+  // 🚨 Phase 3: mapFileActions 전달 확인 강화
   const hasMapFileActions = callbacks.mapFileActions !== undefined;
+  const mapFileActionsType = typeof callbacks.mapFileActions;
+  const mapFileActionsMethods = hasMapFileActions
+    ? Object.keys(callbacks.mapFileActions)
+    : [];
+
+  console.log('🚨 [PHASE3_FIX] useFileProcessing mapFileActions 상태:', {
+    hasMapFileActions,
+    mapFileActionsType,
+    mapFileActionsMethods,
+    mapBasedProcessing: hasMapFileActions,
+    timestamp: new Date().toLocaleTimeString(),
+  });
 
   useEffect(() => {
     currentStateRef.current = {
@@ -207,19 +219,23 @@ export const useFileProcessing = (
     return Array.from(processingFiles.values()).map((file) => file.fileName);
   }, [processingFiles]);
 
+  // 🚨 Phase 3: processFileInBackgroundById 강화
   const processFileInBackgroundById = useCallback(
     (file: File, fileName: string, mapping: FileIdMapping): void => {
       const { fileId, placeholderUrl } = mapping;
 
-      console.log('🔍 [BACKGROUND_PROCESS] 백그라운드 처리 시작:', {
-        파일명: fileName,
+      console.log('🔧 [BACKGROUND_START] 파일 처리 시작:', {
+        fileName,
+        fileSize: file.size,
+        fileType: file.type,
         파일ID: fileId,
         플레이스홀더URL: placeholderUrl,
-        파일크기: file.size,
+        mapAvailable: !!callbacks.mapFileActions,
         hasMapFileActions,
         timestamp: new Date().toLocaleTimeString(),
       });
 
+      // 🚨 파일 검증 강화
       const validationResult = validateFile(file);
       const { isValid: fileIsValid, errorMessage: validationError } =
         validationResult;
@@ -227,15 +243,28 @@ export const useFileProcessing = (
       if (!fileIsValid) {
         const errorMessage = validationError || 'unknown';
 
-        console.log('🔍 [BACKGROUND_PROCESS] 파일 검증 실패:', {
-          파일명: fileName,
-          파일ID: fileId,
-          에러메시지: errorMessage,
+        console.error('❌ [VALIDATION_FAIL] 파일 검증 실패:', {
+          fileName,
+          fileId,
+          errorMessage,
         });
 
-        if (hasMapFileActions) {
+        // 🚨 플레이스홀더 제거 로직 추가
+        if (callbacks.mapFileActions) {
+          console.log('🗑️ [CLEANUP] 검증 실패한 플레이스홀더 제거:', {
+            fileId,
+          });
           callbacks.mapFileActions.removeFile(fileId);
+
+          const updatedUrls = callbacks.mapFileActions.getFileUrls();
+          const updatedNames = callbacks.mapFileActions.getFileNames();
+
+          enqueueStateUpdate(() => {
+            callbacks.updateMediaValue(updatedUrls);
+            callbacks.updateSelectedFileNames(updatedNames);
+          });
         }
+
         removeProcessingFile(fileId);
 
         callbacks.showToastMessage(
@@ -254,24 +283,30 @@ export const useFileProcessing = (
       callbacks.startFileUpload(fileId, fileName);
 
       const handleProgressUpdate = (progress: number): void => {
-        console.log('🔍 [BACKGROUND_PROGRESS] 진행률 업데이트:', {
-          파일명: fileName,
-          파일ID: fileId,
-          진행률: `${progress}%`,
+        console.log('📊 [BACKGROUND_PROGRESS] 진행률 업데이트:', {
+          fileName,
+          fileId,
+          progress: `${progress}%`,
         });
         callbacks.updateFileProgress(fileId, progress);
       };
 
+      // 🚨 FileReader 성공 처리 강화
       const handleSuccessfulProcessing = (result: string): void => {
-        console.log('🔍 [BACKGROUND_SUCCESS] 파일 처리 성공:', {
-          파일명: fileName,
-          파일ID: fileId,
-          결과URL길이: result.length,
-          결과URL미리보기: result.slice(0, 50) + '...',
+        console.log('✅ [BACKGROUND_SUCCESS] 파일 변환 성공:', {
+          fileName,
+          fileId,
+          resultLength: result.length,
+          resultPreview: result.slice(0, 50) + '...',
           hasMapFileActions,
         });
 
-        if (hasMapFileActions) {
+        if (callbacks.mapFileActions) {
+          console.log('🔄 [MAP_UPDATE] Map 기반 파일 업데이트:', {
+            fileId,
+            url: result.slice(0, 50) + '...',
+          });
+
           callbacks.mapFileActions.updateFile(fileId, {
             url: result,
             status: 'completed',
@@ -280,11 +315,18 @@ export const useFileProcessing = (
           const updatedUrls = callbacks.mapFileActions.getFileUrls();
           const updatedNames = callbacks.mapFileActions.getFileNames();
 
+          console.log('📋 [MAP_SYNC] Map → 레거시 동기화:', {
+            updatedUrlsCount: updatedUrls.length,
+            updatedNamesCount: updatedNames.length,
+          });
+
           enqueueStateUpdate(() => {
             callbacks.updateMediaValue(updatedUrls);
             callbacks.updateSelectedFileNames(updatedNames);
           });
         } else {
+          console.log('🔄 [LEGACY_UPDATE] 레거시 기반 파일 업데이트');
+
           enqueueStateUpdate(() => {
             callbacks.updateMediaValue((prev) => {
               const newUrls = [...prev];
@@ -293,6 +335,14 @@ export const useFileProcessing = (
               );
               if (placeholderIndex !== -1) {
                 newUrls[placeholderIndex] = result;
+                console.log(
+                  '✅ [LEGACY_REPLACE] 플레이스홀더 → 실제 URL 교체:',
+                  {
+                    index: placeholderIndex,
+                    oldUrl: prev[placeholderIndex]?.slice(0, 30) + '...',
+                    newUrl: result.slice(0, 30) + '...',
+                  }
+                );
               }
               return newUrls;
             });
@@ -318,16 +368,21 @@ export const useFileProcessing = (
         });
       };
 
+      // 🚨 FileReader 에러 처리 강화
       const handleProcessingError = (error: Error): void => {
         const errorMessage = error.message || 'FileReader 에러';
 
-        console.error('🔍 [BACKGROUND_ERROR] 파일 처리 실패:', {
-          파일명: fileName,
-          파일ID: fileId,
-          오류: errorMessage,
+        console.error('❌ [BACKGROUND_ERROR] 파일 처리 실패:', {
+          fileName,
+          fileId,
+          error: errorMessage,
+          errorStack: error.stack,
         });
 
-        if (hasMapFileActions) {
+        if (callbacks.mapFileActions) {
+          console.log('🗑️ [CLEANUP] 처리 실패한 플레이스홀더 제거:', {
+            fileId,
+          });
           callbacks.mapFileActions.removeFile(fileId);
 
           const updatedUrls = callbacks.mapFileActions.getFileUrls();
@@ -361,6 +416,12 @@ export const useFileProcessing = (
       };
 
       try {
+        console.log('📖 [READ_START] FileReader 시작:', {
+          fileName,
+          fileId,
+          fileSize: file.size,
+        });
+
         createFileReader(
           file,
           fileId,
@@ -369,10 +430,10 @@ export const useFileProcessing = (
           handleProcessingError
         );
       } catch (readerError) {
-        console.error('🚨 [BACKGROUND_ERROR] FileReader 생성 실패:', {
-          파일명: fileName,
-          파일ID: fileId,
-          에러: readerError,
+        console.error('🚨 [READER_CREATE_ERROR] FileReader 생성 실패:', {
+          fileName,
+          fileId,
+          error: readerError,
         });
 
         const readerErrorObj =
@@ -447,9 +508,15 @@ export const useFileProcessing = (
 
         uniqueFiles.forEach((file) => {
           const fileId = generateSecureFileId(file.name);
-          const placeholderUrl = `placeholder-${fileId}-processing`;
+          const timestampSuffix = Date.now(); // 타임스탬프 추가
+          const placeholderUrl = `placeholder-${fileId}-${timestampSuffix}-processing`;
 
-          if (hasMapFileActions) {
+          if (callbacks.mapFileActions) {
+            console.log('📁 [MAP_ADD] Map에 파일 추가:', {
+              fileName: file.name,
+              placeholderUrl,
+            });
+
             const addedFileId = callbacks.mapFileActions.addFile(
               file.name,
               placeholderUrl
@@ -476,9 +543,14 @@ export const useFileProcessing = (
           파일ID들: Array.from(fileMappings.values()).map((m) => m.fileId),
         });
 
-        if (hasMapFileActions) {
+        if (callbacks.mapFileActions) {
           const updatedUrls = callbacks.mapFileActions.getFileUrls();
           const updatedNames = callbacks.mapFileActions.getFileNames();
+
+          console.log('🔄 [MAP_STATE_UPDATE] Map 상태 업데이트:', {
+            updatedUrlsCount: updatedUrls.length,
+            updatedNamesCount: updatedNames.length,
+          });
 
           enqueueStateUpdate(() => {
             callbacks.updateMediaValue(updatedUrls);
@@ -517,7 +589,13 @@ export const useFileProcessing = (
 
           addProcessingFile(processingInfo);
 
+          // 🚨 지연 시간 조정으로 안정성 개선
           setTimeout(() => {
+            console.log('🚀 [BACKGROUND_TRIGGER] 백그라운드 처리 시작:', {
+              fileName: file.name,
+              fileId: mapping.fileId,
+              index,
+            });
             processFileInBackgroundById(file, file.name, mapping);
           }, 100 + index * 50);
         });

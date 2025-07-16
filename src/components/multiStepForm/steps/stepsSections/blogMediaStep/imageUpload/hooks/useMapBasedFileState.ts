@@ -11,7 +11,6 @@ import type {
   FileStatus,
 } from '../types/imageUploadTypes';
 
-// 📋 파일 ID 생성 유틸리티
 const generateFileId = (): string => {
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).substring(2, 8);
@@ -24,14 +23,12 @@ const isValidFileId = (id: string): boolean => {
   return hasValidFormat && matchesPattern;
 };
 
-// 📋 플레이스홀더 URL 검증
 const isPlaceholderUrl = (url: string): boolean => {
   const hasPlaceholderPrefix = url.startsWith('placeholder-');
   const hasProcessingSuffix = url.includes('-processing');
   return hasPlaceholderPrefix && hasProcessingSuffix;
 };
 
-// 📋 파일 아이템 생성 헬퍼
 const createFileItem = (
   fileName: string,
   url: string,
@@ -50,7 +47,6 @@ const createFileItem = (
   };
 };
 
-// 📋 파일 상태 검증
 const validateFileItem = (item: unknown): item is FileItem => {
   const isValidObject = item && typeof item === 'object';
   if (!isValidObject) {
@@ -83,7 +79,6 @@ const validateFileItem = (item: unknown): item is FileItem => {
   );
 };
 
-// 📋 Map 기반 파일 상태 관리 훅
 export function useMapBasedFileState(): UseMapBasedFileStateResult {
   const [fileMap, setFileMap] = useState<FileProcessingMap>(new Map());
   const [fileOrder, setFileOrder] = useState<FileOrderArray>([]);
@@ -95,7 +90,6 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     updateCount: stateUpdateCountRef.current,
   });
 
-  // 📋 파일 추가
   const addFile = useCallback(
     (fileName: string, url: string, id?: string): string => {
       const hasValidFileName = fileName && fileName.length > 0;
@@ -117,7 +111,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
       );
       const fileId = fileItem.id;
 
-      setFileMap((prev) => {
+      setFileMap((prev: FileProcessingMap) => {
         const newMap = new Map(prev);
         newMap.set(fileId, fileItem);
 
@@ -132,7 +126,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
         return newMap;
       });
 
-      setFileOrder((prev) => {
+      setFileOrder((prev: FileOrderArray) => {
         const isAlreadyInOrder = prev.includes(fileId);
         if (isAlreadyInOrder) {
           return prev;
@@ -155,9 +149,11 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     []
   );
 
-  // 📋 파일 업데이트
   const updateFile = useCallback(
-    (id: string, updates: Partial<Omit<FileItem, 'id'>>): boolean => {
+    (
+      id: string,
+      updates: { fileName?: string; url?: string; status?: FileStatus }
+    ): boolean => {
       const isValidId = isValidFileId(id);
       if (!isValidId) {
         console.warn('⚠️ [UPDATE_FILE] 유효하지 않은 파일 ID:', id);
@@ -166,7 +162,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
 
       let updateSuccess = false;
 
-      setFileMap((prev) => {
+      setFileMap((prev: FileProcessingMap) => {
         const hasFile = prev.has(id);
         if (!hasFile) {
           console.warn('⚠️ [UPDATE_FILE] 존재하지 않는 파일 ID:', id);
@@ -185,7 +181,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
         const updatedFile: FileItem = {
           ...currentFile,
           ...updates,
-          id, // ID는 변경 불가
+          id,
         };
 
         const isValidUpdatedFile = validateFileItem(updatedFile);
@@ -220,7 +216,6 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     []
   );
 
-  // 📋 파일 제거
   const removeFile = useCallback((id: string): boolean => {
     const isValidId = isValidFileId(id);
     if (!isValidId) {
@@ -230,7 +225,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
 
     let removeSuccess = false;
 
-    setFileMap((prev) => {
+    setFileMap((prev: FileProcessingMap) => {
       const hasFile = prev.has(id);
       if (!hasFile) {
         console.warn('⚠️ [REMOVE_FILE] 존재하지 않는 파일 ID:', id);
@@ -252,8 +247,8 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     });
 
     if (removeSuccess) {
-      setFileOrder((prev) => {
-        const newOrder = prev.filter((fileId) => fileId !== id);
+      setFileOrder((prev: FileOrderArray) => {
+        const newOrder = prev.filter((fileId: string) => fileId !== id);
 
         console.log('✅ [REMOVE_FILE] 순서 배열 업데이트:', {
           removedId: id,
@@ -269,7 +264,6 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     return removeSuccess;
   }, []);
 
-  // 📋 모든 파일 초기화
   const clearAllFiles = useCallback((): void => {
     console.log('🧹 [CLEAR_ALL] 모든 파일 초기화 시작:', {
       currentFileCount: fileMap.size,
@@ -283,9 +277,8 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     console.log('✅ [CLEAR_ALL] 모든 파일 초기화 완료');
   }, [fileMap.size, fileOrder.length]);
 
-  // 📋 파일 순서 재정렬
   const reorderFiles = useCallback(
-    (newOrder: string[]): boolean => {
+    (newOrder: readonly string[]): boolean => {
       const isValidArray = Array.isArray(newOrder);
       if (!isValidArray) {
         console.warn('⚠️ [REORDER_FILES] 유효하지 않은 순서 배열:', newOrder);
@@ -293,7 +286,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
       }
 
       const validIds = newOrder.filter(
-        (id) => isValidFileId(id) && fileMap.has(id)
+        (id: string) => isValidFileId(id) && fileMap.has(id)
       );
       const isValidOrderLength = validIds.length === newOrder.length;
 
@@ -302,7 +295,7 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
           originalLength: newOrder.length,
           validLength: validIds.length,
           invalidIds: newOrder.filter(
-            (id) => !isValidFileId(id) || !fileMap.has(id)
+            (id: string) => !isValidFileId(id) || !fileMap.has(id)
           ),
         });
         return false;
@@ -321,7 +314,6 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     [fileMap]
   );
 
-  // 📋 ID로 파일 조회
   const getFileById = useCallback(
     (id: string): FileItem | undefined => {
       const isValidId = isValidFileId(id);
@@ -337,12 +329,11 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     [fileMap]
   );
 
-  // 📋 상태별 파일 조회
   const getFilesByStatus = useCallback(
-    (status: FileStatus): FileItem[] => {
+    (status: FileStatus): readonly FileItem[] => {
       const files: FileItem[] = [];
 
-      fileMap.forEach((file) => {
+      fileMap.forEach((file: FileItem) => {
         const isMatchingStatus = file.status === status;
         const isValidFile = validateFileItem(file);
 
@@ -362,11 +353,10 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     [fileMap]
   );
 
-  // 📋 파일 URL 목록 조회 (순서 보장)
   const getFileUrls = useCallback((): string[] => {
     const urls: string[] = [];
 
-    fileOrder.forEach((id) => {
+    fileOrder.forEach((id: string) => {
       const file = fileMap.get(id);
       const isValidFile = file && validateFileItem(file);
 
@@ -384,11 +374,10 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     return urls;
   }, [fileMap, fileOrder]);
 
-  // 📋 파일명 목록 조회 (순서 보장)
   const getFileNames = useCallback((): string[] => {
     const names: string[] = [];
 
-    fileOrder.forEach((id) => {
+    fileOrder.forEach((id: string) => {
       const file = fileMap.get(id);
       const isValidFile = file && validateFileItem(file);
 
@@ -406,7 +395,6 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     return names;
   }, [fileMap, fileOrder]);
 
-  // 📋 레거시 배열 형태로 변환 (기존 코드 호환성)
   const convertToLegacyArrays = useCallback((): {
     urls: string[];
     names: string[];
@@ -422,13 +410,13 @@ export function useMapBasedFileState(): UseMapBasedFileStateResult {
     return { urls, names };
   }, [getFileUrls, getFileNames]);
 
-  // 📋 상태 계산
   const totalFiles = fileMap.size;
   const completedFiles = Array.from(fileMap.values()).filter(
-    (file) => file.status === 'completed'
+    (file: FileItem) => file.status === 'completed'
   ).length;
   const hasActiveUploads = Array.from(fileMap.values()).some(
-    (file) => file.status === 'pending' || file.status === 'processing'
+    (file: FileItem) =>
+      file.status === 'pending' || file.status === 'processing'
   );
 
   const state: MapBasedFileState = {

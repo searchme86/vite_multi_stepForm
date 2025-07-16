@@ -165,65 +165,78 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     blogMediaStateResult.selectionState
   );
 
-  // 🚨 FIXED: Race Condition 해결 - clearAllFiles() 완전 제거
+  // 🔧 Phase 5: 양방향 레거시 동기화 개선
   const performLegacyDataSync = useCallback(() => {
     if (syncExecutedRef.current) {
       console.log('🔍 [LEGACY_SYNC] 이미 동기화 완료됨, 건너뜀');
       return;
     }
 
+    // ✅ 1. 레거시 → Map 동기화 (기존)
     const hasLegacyData =
       legacyMediaFiles.length > 0 || legacySelectedFileNames.length > 0;
-    if (!hasLegacyData) {
-      console.log('ℹ️ [LEGACY_SYNC] 레거시 데이터 없음, 동기화 건너뜀');
-      return;
-    }
 
-    console.log(
-      '🔄 [LEGACY_SYNC] RACE_CONDITION_FIXED 레거시 데이터 동기화 시작:',
-      {
+    if (hasLegacyData) {
+      console.log('🔄 [LEGACY_SYNC] 레거시 → Map 동기화 시작:', {
         legacyMediaFiles: legacyMediaFiles.length,
         legacySelectedFileNames: legacySelectedFileNames.length,
-      }
-    );
-
-    try {
-      // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
-      // ❌ 완전 제거: mapFileActions.clearAllFiles();
-
-      // ✅ 개별 중복 확인 후 추가 (Race Condition 방지)
-      legacyMediaFiles.forEach((url: string, index: number) => {
-        const fileName =
-          legacySelectedFileNames[index] || `legacy_file_${index + 1}`;
-        const existingUrls = mapFileActions.getFileUrls();
-
-        const isUrlAlreadyExists = existingUrls.includes(url);
-        if (!isUrlAlreadyExists) {
-          mapFileActions.addFile(fileName, url);
-          console.log('✅ [LEGACY_SYNC] 파일 추가:', {
-            fileName,
-            url: url.slice(0, 30) + '...',
-          });
-        } else {
-          console.log('⚠️ [LEGACY_SYNC] 중복 파일 건너뜀:', {
-            fileName,
-            url: url.slice(0, 30) + '...',
-          });
-        }
       });
 
-      syncExecutedRef.current = true;
+      try {
+        legacyMediaFiles.forEach((url: string, index: number) => {
+          const fileName =
+            legacySelectedFileNames[index] || `legacy_file_${index + 1}`;
+          const existingUrls = mapFileActions.getFileUrls();
 
-      console.log('✅ [LEGACY_SYNC] RACE_CONDITION_FIXED 동기화 완료');
-    } catch (error) {
-      console.error('❌ [LEGACY_SYNC] 동기화 실패:', error);
+          const isUrlAlreadyExists = existingUrls.includes(url);
+          if (!isUrlAlreadyExists) {
+            mapFileActions.addFile(fileName, url);
+            console.log('✅ [LEGACY_SYNC] 레거시 파일 추가:', {
+              fileName,
+              url: url.slice(0, 30) + '...',
+            });
+          }
+        });
+
+        syncExecutedRef.current = true;
+        console.log('✅ [LEGACY_SYNC] 레거시 → Map 동기화 완료');
+      } catch (error) {
+        console.error('❌ [LEGACY_SYNC] 레거시 → Map 동기화 실패:', error);
+      }
     }
-  }, [legacyMediaFiles, legacySelectedFileNames, mapFileActions]);
 
-  // 🚨 FIXED: setTimeout 제거 - 동기적 처리로 Race Condition 방지
+    // ✅ 2. Map → 레거시 동기화 (새로 추가)
+    const { urls: mapUrls, names: mapNames } =
+      mapFileActions.convertToLegacyArrays();
+    const shouldSyncMapToLegacy =
+      mapUrls.length > 0 && legacyMediaFiles.length === 0;
+
+    if (shouldSyncMapToLegacy) {
+      console.log('🔄 [SYNC] Map → 레거시 동기화:', {
+        mapUrls: mapUrls.length,
+        mapNames: mapNames.length,
+      });
+
+      try {
+        blogMediaStateResult.setMediaValue(Array.from(mapUrls));
+        blogMediaStateResult.setSelectedFileNames(Array.from(mapNames));
+        console.log('✅ [SYNC] Map → 레거시 동기화 완료');
+      } catch (error) {
+        console.error('❌ [SYNC] Map → 레거시 동기화 실패:', error);
+      }
+    }
+
+    if (!hasLegacyData && !shouldSyncMapToLegacy) {
+      console.log('ℹ️ [LEGACY_SYNC] 동기화할 데이터 없음, 건너뜀');
+    }
+  }, [
+    legacyMediaFiles,
+    legacySelectedFileNames,
+    mapFileActions,
+    blogMediaStateResult,
+  ]);
+
   useEffect(() => {
-    // ❌ 제거됨: setTimeout(() => { performLegacyDataSync(); }, 100);
-    // ✅ 동기적 즉시 실행으로 Race Condition 방지
     performLegacyDataSync();
   }, [performLegacyDataSync]);
 
@@ -283,7 +296,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     };
   }, [currentMainImageUrl, blogMediaIntegrationResult]);
 
-  // 🚨 FIXED: Race Condition 해결 - clearAllFiles() 완전 제거
   const updateMediaValueCallback = useCallback(
     (
       filesOrUpdater:
@@ -302,10 +314,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
             updatedCount: updatedUrls.length,
           });
 
-          // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
-          // ❌ 완전 제거: mapFileActions.clearAllFiles();
-
-          // ✅ 개별 파일 추가로 변경 (중복 방지)
           updatedUrls.forEach((url: string, index: number) => {
             const fileName =
               currentFileNames[index] || `updated_file_${index + 1}`;
@@ -327,10 +335,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
             filesCount: Array.from(filesOrUpdater).length,
           });
 
-          // 🚨 FIXED: clearAllFiles() 완전 제거 - Race Condition 주범 제거
-          // ❌ 완전 제거: mapFileActions.clearAllFiles();
-
-          // ✅ 개별 파일 추가로 변경 (중복 방지)
           Array.from(filesOrUpdater).forEach((url: string, index: number) => {
             const fileName =
               currentFileNames[index] || `direct_file_${index + 1}`;
@@ -357,7 +361,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     [mapFileActions, currentFileNames, blogMediaStateResult]
   );
 
-  // 🚨 FIXED: currentUrls 변수 누락 수정
   const updateSelectedFileNamesCallback = useCallback(
     (
       namesOrUpdater:
@@ -376,13 +379,11 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
             updatedCount: updatedNames.length,
           });
 
-          // ✅ FIXED: 누락된 currentUrls 변수 추가
           const currentUrls = mapFileActions.getFileUrls();
 
           currentUrls.forEach((url: string, index: number) => {
             const fileName = updatedNames[index];
             if (fileName) {
-              // ✅ 타입 안전한 방식으로 수정
               let fileId: string | undefined;
               for (const [id, file] of mapFileState.fileMap.entries()) {
                 if (
@@ -421,7 +422,6 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
     [mapFileActions, mapFileState.fileMap, blogMediaStateResult]
   );
 
-  // 🚨 FIXED: mapFileActions 전달 확인됨
   const imageUploadHandlers = useImageUploadHandlers({
     formValues: blogMediaStateResult.formValues,
     uiState: blogMediaStateResult.uiState,
@@ -451,7 +451,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       }
     },
     imageGalleryStore: blogMediaIntegrationResult.imageGalleryStore,
-    mapFileActions: mapFileActions, // ✅ 전달 확인됨
+    mapFileActions: mapFileActions,
   });
 
   const isImageSelectedForSlider = useMemo(() => {
@@ -484,6 +484,51 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       }
     };
   }, [blogMediaIntegrationResult.imageGalleryStore]);
+
+  // 🔧 Phase 4: 플레이스홀더 정리 로직 추가
+  useEffect(() => {
+    const cleanupStaleePlaceholders = () => {
+      const staleTimeout = 10000; // 10초
+      const now = Date.now();
+
+      currentMediaFiles.forEach((url: string, index: number) => {
+        const isPlaceholderUrl =
+          url.startsWith('placeholder-') && url.includes('-processing');
+
+        if (isPlaceholderUrl) {
+          const timestampMatch = url.match(/-(\d+)-processing$/);
+          const timestampExists = timestampMatch && timestampMatch[1];
+
+          if (timestampExists) {
+            const createdTime = parseInt(timestampMatch[1], 10);
+            const ageMs = now - createdTime;
+            const isStale = ageMs > staleTimeout;
+
+            if (isStale) {
+              console.log('🗑️ [CLEANUP] 오래된 플레이스홀더 제거:', {
+                url: url.slice(0, 50) + '...',
+                ageMs,
+              });
+
+              updateMediaValueCallback((prev) =>
+                prev.filter((_, i) => i !== index)
+              );
+              updateSelectedFileNamesCallback((prev) =>
+                prev.filter((_, i) => i !== index)
+              );
+            }
+          }
+        }
+      });
+    };
+
+    const cleanupTimer = setInterval(cleanupStaleePlaceholders, 5000);
+    return () => clearInterval(cleanupTimer);
+  }, [
+    currentMediaFiles,
+    updateMediaValueCallback,
+    updateSelectedFileNamesCallback,
+  ]);
 
   const contextValue = useMemo<ImageUploadContextValue>(() => {
     const convertDeleteConfirmState = () => {
@@ -567,7 +612,7 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
         Object.entries(state).forEach(([key, value]) => {
           const numericKey = parseInt(key, 10);
           if (!isNaN(numericKey)) {
-            result[numericKey] = Boolean(value);
+            result[numericKey] = !!value; // Boolean() 대신 !! 사용
           }
         });
         return result;
@@ -575,6 +620,18 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
 
       return {};
     };
+
+    // 🚨 Phase 1: hasActiveUploads 계산 로직 수정
+    const uploadingFileCount = Object.keys(
+      imageUploadHandlers.uploading || {}
+    ).length;
+    const actuallyHasActiveUploads = uploadingFileCount > 0;
+
+    console.log('🔍 [PHASE1_FIX] hasActiveUploads 계산:', {
+      uploadingFileCount,
+      actuallyHasActiveUploads,
+      previousMapBasedValue: mapFileState.hasActiveUploads,
+    });
 
     const contextValueData = {
       uploadedImages: currentMediaFiles,
@@ -584,8 +641,8 @@ export const ImageUploadProvider: React.FC<ImageUploadProviderProps> = ({
       deleteConfirmState: convertDeleteConfirmState(),
       duplicateMessageState: convertDuplicateMessageState(),
       touchActiveImages: convertTouchActiveImages(),
-      hasActiveUploads: Boolean(mapFileState.hasActiveUploads),
-      isMobileDevice: Boolean(imageUploadHandlers.isMobileDevice),
+      hasActiveUploads: actuallyHasActiveUploads, // 🚨 수정: 실제 업로딩 상태만 체크
+      isMobileDevice: !!imageUploadHandlers.isMobileDevice, // Boolean() 대신 !! 사용
       selectedSliderIndices: selectedSliderIndices,
       isImageSelectedForSlider: isImageSelectedForSlider,
       updateSliderSelection: updateSliderSelection,

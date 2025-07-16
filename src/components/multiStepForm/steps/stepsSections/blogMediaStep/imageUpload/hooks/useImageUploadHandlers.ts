@@ -18,7 +18,6 @@ import type {
 
 console.log('🔧 [IMPORT] useImageUploadHandlers 모듈 로드 완료');
 
-// 🔧 디바이스 감지 함수
 const detectMobileDevice = (): boolean => {
   if (typeof window === 'undefined') return false;
 
@@ -32,7 +31,6 @@ const detectMobileDevice = (): boolean => {
   return hasTouch || isSmallScreen || isMobileUserAgent;
 };
 
-// 🔧 안전한 데이터 추출 함수들
 const extractFormData = (formValues: unknown): ExtractedFormData => {
   if (!formValues || typeof formValues !== 'object') {
     return { media: [], mainImage: '' };
@@ -145,14 +143,12 @@ const extractStoreData = (imageGalleryStore: unknown): ExtractedStoreData => {
   };
 };
 
-// 🔧 토스트 메시지 생성 함수
 const createToast = (
   title: string,
   description: string,
   color: 'success' | 'warning' | 'danger' | 'primary'
 ): ToastMessage => ({ title, description, color });
 
-// 🔧 슬라이더 권한 검증 함수들
 const validateSliderPermission = (
   imageIndex: number,
   selectedSliderIndices: readonly number[],
@@ -190,7 +186,7 @@ export const useImageUploadHandlers = (
     updateSelectedFileNames,
     showToastMessage,
     imageGalleryStore,
-    mapFileActions, // 🚨 FIXED: mapFileActions 받기
+    mapFileActions,
   } = params;
 
   console.log('🚀 [INIT] useImageUploadHandlers 초기화');
@@ -200,10 +196,8 @@ export const useImageUploadHandlers = (
     mapFileActionsMethods: mapFileActions ? Object.keys(mapFileActions) : [],
   });
 
-  // 🔧 파일 선택 버튼 참조
   const fileSelectButtonRef = useRef<FileSelectButtonRef>(null);
 
-  // 🔧 데이터 추출 (메모이제이션)
   const formData = useMemo(() => extractFormData(formValues), [formValues]);
   const selectionData = useMemo(
     () => extractSelectionData(selectionState),
@@ -214,15 +208,12 @@ export const useImageUploadHandlers = (
     [imageGalleryStore]
   );
 
-  // 🔧 최종 슬라이더 선택 상태 결정 (Store 우선)
   const finalSelectedSliderIndices = useMemo(() => {
     const storeIndices = storeData.selectedSliderIndices;
     const selectionIndices = selectionData.selectedSliderIndices;
 
-    // 🔧 Store에 데이터가 있으면 Store 우선, 없으면 Selection 사용
     const indices = storeIndices.length > 0 ? storeIndices : selectionIndices;
 
-    // 🔧 유효한 인덱스만 필터링
     const validIndices = indices.filter(
       (index) => index >= 0 && index < formData.media.length
     );
@@ -241,10 +232,8 @@ export const useImageUploadHandlers = (
     formData.media.length,
   ]);
 
-  // 🔧 모바일 디바이스 감지
   const isMobileDevice = useMemo(() => detectMobileDevice(), []);
 
-  // 🔧 파일 업로드 상태 관리
   const {
     uploading,
     uploadStatus,
@@ -255,16 +244,13 @@ export const useImageUploadHandlers = (
     failFileUpload,
   } = useFileUploadState();
 
-  // 🔧 중복 파일 처리
   const { duplicateMessageState, showDuplicateMessage } =
     useDuplicateFileHandler();
 
-  // 🔧 이미지 삭제 핸들러 (슬라이더 권한 검증 포함)
   const handleDeleteImage = useCallback(
     (imageIndex: number, imageName: string) => {
       console.log('🗑️ [DELETE] 이미지 삭제 처리:', { imageIndex, imageName });
 
-      // 🚨 슬라이더 권한 검증
       const permission = validateSliderPermission(
         imageIndex,
         finalSelectedSliderIndices,
@@ -281,14 +267,12 @@ export const useImageUploadHandlers = (
         return;
       }
 
-      // 메인 이미지인 경우 해제
       const imageUrl = formData.media[imageIndex];
       if (imageUrl && imageUrl === formData.mainImage) {
         setMainImageValue('');
         console.log('📸 [DELETE] 메인 이미지 해제:', { imageIndex });
       }
 
-      // 파일 목록에서 제거
       updateMediaValue((prev) =>
         prev.filter((_, index) => index !== imageIndex)
       );
@@ -296,7 +280,6 @@ export const useImageUploadHandlers = (
         prev.filter((_, index) => index !== imageIndex)
       );
 
-      // 성공 토스트
       const successToast = createToast(
         '삭제 완료',
         `${imageName} 파일이 삭제되었습니다.`,
@@ -317,7 +300,6 @@ export const useImageUploadHandlers = (
     ]
   );
 
-  // 🔧 삭제 확인 처리
   const {
     deleteConfirmState,
     showDeleteConfirmation,
@@ -325,7 +307,7 @@ export const useImageUploadHandlers = (
     cancelDelete,
   } = useDeleteConfirmation(handleDeleteImage);
 
-  // 🔧 파일 처리 콜백들
+  // 🚨 Phase 2: mapFileActions 전달 수정
   const fileProcessingCallbacks = useMemo(
     () => ({
       updateMediaValue,
@@ -336,6 +318,7 @@ export const useImageUploadHandlers = (
       updateFileProgress,
       completeFileUpload,
       failFileUpload,
+      mapFileActions: mapFileActions, // 🚨 FIXED: mapFileActions 전달 추가
     }),
     [
       updateMediaValue,
@@ -346,26 +329,29 @@ export const useImageUploadHandlers = (
       updateFileProgress,
       completeFileUpload,
       failFileUpload,
+      mapFileActions, // 🚨 FIXED: 의존성 배열에 추가
     ]
   );
 
-  // 🔧 파일 처리 핸들러
+  console.log('🔍 [PHASE2_FIX] fileProcessingCallbacks 생성:', {
+    hasMapFileActions: fileProcessingCallbacks.mapFileActions !== undefined,
+    mapFileActionsType: typeof fileProcessingCallbacks.mapFileActions,
+    callbackKeys: Object.keys(fileProcessingCallbacks),
+  });
+
   const fileProcessingHandlers = useFileProcessing(
     formData.media,
     selectionData.selectedFileNames,
-    fileProcessingCallbacks
+    fileProcessingCallbacks // 🚨 FIXED: mapFileActions가 포함된 콜백 전달
   );
 
-  // 🔧 모바일 터치 상태
   const { touchActiveImages, handleImageTouch: originalHandleImageTouch } =
     useMobileTouchState(isMobileDevice);
 
-  // 🔧 이미지 터치 핸들러 (슬라이더 권한 검증 포함)
   const handleImageTouch = useCallback(
     (imageIndex: number) => {
       console.log('👆 [TOUCH] 이미지 터치:', { imageIndex });
 
-      // 🚨 슬라이더 권한 검증
       const permission = validateSliderPermission(
         imageIndex,
         finalSelectedSliderIndices,
@@ -382,13 +368,13 @@ export const useImageUploadHandlers = (
         return;
       }
 
-      // 권한 통과 시 기존 터치 핸들러 실행
-      originalHandleImageTouch?.(imageIndex);
+      if (originalHandleImageTouch) {
+        originalHandleImageTouch(imageIndex);
+      }
     },
     [finalSelectedSliderIndices, originalHandleImageTouch, showToastMessage]
   );
 
-  // 🔧 파일 선택 버튼 클릭 핸들러
   const handleFileSelectClick = useCallback(() => {
     console.log('📁 [FILE_SELECT] 파일 선택 버튼 클릭');
 
@@ -405,7 +391,6 @@ export const useImageUploadHandlers = (
     }
   }, []);
 
-  // 🔧 메인 이미지 설정 핸들러 (슬라이더 권한 검증 포함)
   const handleMainImageSet = useCallback(
     (imageIndex: number, imageUrl: string) => {
       console.log('📸 [MAIN_IMAGE] 메인 이미지 설정:', {
@@ -418,7 +403,6 @@ export const useImageUploadHandlers = (
         return;
       }
 
-      // 🚨 슬라이더 권한 검증
       const permission = validateSliderPermission(
         imageIndex,
         finalSelectedSliderIndices,
@@ -449,7 +433,6 @@ export const useImageUploadHandlers = (
     [finalSelectedSliderIndices, setMainImageValue, showToastMessage]
   );
 
-  // 🔧 메인 이미지 해제 핸들러
   const handleMainImageCancel = useCallback(() => {
     console.log('📸 [MAIN_IMAGE] 메인 이미지 해제');
 
@@ -465,7 +448,6 @@ export const useImageUploadHandlers = (
     console.log('✅ [MAIN_IMAGE] 메인 이미지 해제 완료');
   }, [setMainImageValue, showToastMessage]);
 
-  // 🔧 메인 이미지 확인 함수들
   const checkIsMainImage = useCallback(
     (imageUrl: string): boolean => {
       if (!imageUrl || !formData.mainImage) return false;
@@ -478,15 +460,12 @@ export const useImageUploadHandlers = (
     (imageUrl: string): boolean => {
       if (!imageUrl) return false;
 
-      // 플레이스홀더 체크
       const isPlaceholder =
         imageUrl.startsWith('placeholder-') && imageUrl.includes('-processing');
       if (isPlaceholder) return false;
 
-      // 이미 메인 이미지인지 체크
       if (checkIsMainImage(imageUrl)) return false;
 
-      // 유효한 URL인지 체크
       const isValidUrl =
         imageUrl.startsWith('data:image/') ||
         imageUrl.startsWith('http') ||
@@ -497,7 +476,6 @@ export const useImageUploadHandlers = (
     [checkIsMainImage]
   );
 
-  // 🔧 슬라이더 관련 함수들
   const isImageSelectedForSlider = useCallback(
     (imageIndex: number): boolean => {
       return finalSelectedSliderIndices.includes(imageIndex);
@@ -512,7 +490,6 @@ export const useImageUploadHandlers = (
         newCount: newSelectedIndices.length,
       });
 
-      // Store 업데이트 시도 (우선순위: setSliderSelectedIndices > updateSliderSelection > setSelectedSliderIndices)
       const {
         setSliderSelectedIndices,
         updateSliderSelection: storeUpdate,
@@ -535,10 +512,8 @@ export const useImageUploadHandlers = (
     [storeData, finalSelectedSliderIndices.length]
   );
 
-  // 🔧 최종 반환값
   const result: UseImageUploadHandlersResult = useMemo(
     () => ({
-      // 상태 데이터
       uploading,
       uploadStatus,
       deleteConfirmState,
@@ -546,29 +521,19 @@ export const useImageUploadHandlers = (
       touchActiveImages,
       hasActiveUploads,
       isMobileDevice,
-
-      // 슬라이더 상태
       selectedSliderIndices: finalSelectedSliderIndices,
       isImageSelectedForSlider,
-
-      // 파일 처리 핸들러
       handleFilesDropped: fileProcessingHandlers.handleFilesDropped,
       handleFileSelectClick,
       handleFileChange: fileProcessingHandlers.handleFileChange,
-
-      // 이미지 관리 핸들러
       handleDeleteButtonClick: showDeleteConfirmation,
       handleDeleteConfirm: confirmDelete,
       handleDeleteCancel: cancelDelete,
       handleImageTouch,
-
-      // 메인 이미지 핸들러
       handleMainImageSet,
       handleMainImageCancel,
       checkIsMainImage,
       checkCanSetAsMainImage,
-
-      // 슬라이더 전용 핸들러
       updateSliderSelection,
     }),
     [
@@ -603,6 +568,8 @@ export const useImageUploadHandlers = (
     sliderIndicesCount: finalSelectedSliderIndices.length,
     isMobileDevice,
     mapFileActionsAvailable: mapFileActions !== undefined,
+    fileProcessingCallbacksWithMapActions:
+      fileProcessingCallbacks.mapFileActions !== undefined,
   });
 
   return result;

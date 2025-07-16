@@ -455,10 +455,13 @@ export const useDuplicateFileHandler = () => {
     const { isVisible, message, fileNames, animationKey } =
       duplicateMessageState;
 
+    // 🚨 FIXED: fileNames의 타입 안전성 확보
+    const safeFileNames = fileNames ?? [];
+
     return {
       isVisible,
       message,
-      fileNamesCount: fileNames.length,
+      fileNamesCount: safeFileNames.length,
       animationKey,
       currentMessageId,
       hasActiveMessage: currentMessageId !== null,

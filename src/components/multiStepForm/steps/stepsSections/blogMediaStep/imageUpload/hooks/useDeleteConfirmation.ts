@@ -25,9 +25,12 @@ export const useDeleteConfirmation = (
     const { imageIndex: currentImageIndex, imageName: currentImageName } =
       deleteConfirmState;
 
+    // 🚨 FIXED: imageName의 타입 안전성 확보
+    const safeImageName = currentImageName ?? '';
+
     currentStateRef.current = {
       imageIndex: currentImageIndex,
-      imageName: currentImageName,
+      imageName: safeImageName,
     };
   }, [deleteConfirmState.imageIndex, deleteConfirmState.imageName]);
 
