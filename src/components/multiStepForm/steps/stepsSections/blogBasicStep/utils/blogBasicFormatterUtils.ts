@@ -16,6 +16,36 @@ interface FormattedTextInfo {
   readonly hasWhitespace: boolean;
 }
 
+// 🧹 안전한 문자열 변환
+function convertToSafeString(input: unknown): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (typeof input === 'number') {
+    return String(input);
+  }
+
+  if (input === null || input === undefined) {
+    return '';
+  }
+
+  return '';
+}
+
+// 🔢 안전한 배열 필터링
+function filterValidWords(words: string[]): string[] {
+  return words.filter((word) => {
+    return typeof word === 'string' && word.length > 0;
+  });
+}
+
+// 📏 안전한 길이 계산
+function calculateSafeLength(text: string): number {
+  const length = text.length;
+  return Number.isInteger(length) && length >= 0 ? length : 0;
+}
+
 /**
  * 제목 텍스트 정리 및 포맷팅
  *
@@ -32,22 +62,21 @@ interface FormattedTextInfo {
  * formatTitleText('  안녕하세요    세상  ')
  * → { original: '  안녕하세요    세상  ', formatted: '안녕하세요 세상', wordCount: 2, hasWhitespace: true }
  */
-export function formatTitleText(title: string): FormattedTextInfo {
+export function formatTitleText(title: unknown): FormattedTextInfo {
   console.group('🔤 제목 텍스트 포맷팅');
-  console.log('📝 원본 제목:', `"${title}"`);
+  console.log('📝 원본 제목:', title, '타입:', typeof title);
 
   // 안전한 문자열 처리
-  const safeTitle = typeof title === 'string' ? title : '';
+  const safeTitle = convertToSafeString(title);
 
   // 앞뒤 공백 제거 및 연속 공백 정리
   const trimmed = safeTitle.trim();
   const formatted = trimmed.replace(/\s+/g, ' ');
 
   // 단어 수 계산 (공백으로 구분)
-  const wordCount =
-    formatted.length > 0
-      ? formatted.split(' ').filter((word) => word.length > 0).length
-      : 0;
+  const wordsArray = formatted.length > 0 ? formatted.split(' ') : [];
+  const validWords = filterValidWords(wordsArray);
+  const wordCount = validWords.length;
 
   // 공백 포함 여부 확인
   const hasWhitespace = formatted.includes(' ');
@@ -82,12 +111,12 @@ export function formatTitleText(title: string): FormattedTextInfo {
  * formatDescriptionText('안녕하세요.\n\n\n세상입니다.')
  * → { original: '안녕하세요.\n\n\n세상입니다.', formatted: '안녕하세요.\n\n세상입니다.', wordCount: 2, hasWhitespace: true }
  */
-export function formatDescriptionText(description: string): FormattedTextInfo {
+export function formatDescriptionText(description: unknown): FormattedTextInfo {
   console.group('🔤 요약 텍스트 포맷팅');
-  console.log('📝 원본 요약:', `"${description}"`);
+  console.log('📝 원본 요약:', description, '타입:', typeof description);
 
   // 안전한 문자열 처리
-  const safeDescription = typeof description === 'string' ? description : '';
+  const safeDescription = convertToSafeString(description);
 
   // 앞뒤 공백 제거
   const trimmed = safeDescription.trim();
@@ -99,8 +128,9 @@ export function formatDescriptionText(description: string): FormattedTextInfo {
   const formatted = normalizedLineBreaks.replace(/[ \t]+/g, ' ');
 
   // 단어 수 계산 (공백과 줄바꿈으로 구분)
-  const words = formatted.split(/[\s\n]+/).filter((word) => word.length > 0);
-  const wordCount = words.length;
+  const wordsArray = formatted.split(/[\s\n]+/);
+  const validWords = filterValidWords(wordsArray);
+  const wordCount = validWords.length;
 
   // 공백 포함 여부 확인 (공백 또는 줄바꿈)
   const hasWhitespace = /\s/.test(formatted);
@@ -134,12 +164,12 @@ export function formatDescriptionText(description: string): FormattedTextInfo {
  * convertTitleToSlug('안녕하세요! React 블로그입니다.')
  * → 'react'
  */
-export function convertTitleToSlug(title: string): string {
+export function convertTitleToSlug(title: unknown): string {
   console.group('🔗 제목 → 슬러그 변환');
-  console.log('📝 원본 제목:', title);
+  console.log('📝 원본 제목:', title, '타입:', typeof title);
 
   // 안전한 문자열 처리
-  const safeTitle = typeof title === 'string' ? title : '';
+  const safeTitle = convertToSafeString(title);
 
   // 영문, 숫자만 추출하고 소문자로 변환
   const alphanumericOnly = safeTitle
@@ -173,12 +203,14 @@ export function convertTitleToSlug(title: string): string {
  * estimateReadingTime('안녕하세요. 긴 텍스트입니다...')
  * → 2 (분)
  */
-export function estimateReadingTime(text: string): number {
+export function estimateReadingTime(text: unknown): number {
   console.group('⏱️ 읽기 시간 추정');
-  console.log('📝 분석할 텍스트 길이:', text.length);
 
   // 안전한 문자열 처리
-  const safeText = typeof text === 'string' ? text : '';
+  const safeText = convertToSafeString(text);
+  const textLength = calculateSafeLength(safeText);
+
+  console.log('📝 분석할 텍스트 길이:', textLength);
 
   // 한국어 평균 읽기 속도 (분당 225자)
   const KOREAN_READING_SPEED = 225;
@@ -187,9 +219,10 @@ export function estimateReadingTime(text: string): number {
   const MIN_READING_TIME = 1;
 
   // 읽기 시간 계산 (올림 처리)
+  const calculatedMinutes = textLength / KOREAN_READING_SPEED;
   const estimatedMinutes = Math.max(
     MIN_READING_TIME,
-    Math.ceil(safeText.length / KOREAN_READING_SPEED)
+    Math.ceil(calculatedMinutes)
   );
 
   console.log('⏱️ 예상 읽기 시간:', `${estimatedMinutes}분`);
@@ -215,29 +248,33 @@ export function estimateReadingTime(text: string): number {
  * → '첫 번째 문장입니다. 두 번째 문장입니다.'
  */
 export function generateTextSummary(
-  text: string,
-  sentenceCount: number = 2
+  text: unknown,
+  sentenceCount: unknown = 2
 ): string {
   console.group('📖 텍스트 요약 생성');
   console.log('📝 원본 텍스트:', text);
   console.log('📊 요청 문장 수:', sentenceCount);
 
   // 안전한 문자열 처리
-  const safeText = typeof text === 'string' ? text : '';
-  const safeSentenceCount = Math.max(1, Math.floor(sentenceCount));
+  const safeText = convertToSafeString(text);
+
+  // 안전한 숫자 처리
+  const safeSentenceCount =
+    typeof sentenceCount === 'number' && sentenceCount > 0
+      ? Math.floor(sentenceCount)
+      : 2;
 
   // 문장 분리 (마침표, 느낌표, 물음표 기준)
-  const sentences = safeText
-    .split(/[.!?]+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
+  const sentencesArray = safeText.split(/[.!?]+/);
+  const trimmedSentences = sentencesArray.map((sentence) => sentence.trim());
+  const validSentences = filterValidWords(trimmedSentences);
 
   // 요청된 개수만큼 문장 추출
-  const selectedSentences = sentences.slice(0, safeSentenceCount);
+  const selectedSentences = validSentences.slice(0, safeSentenceCount);
 
   // 요약문 생성
-  const summary =
-    selectedSentences.join('. ') + (selectedSentences.length > 0 ? '.' : '');
+  const hasSentences = selectedSentences.length > 0;
+  const summary = hasSentences ? selectedSentences.join('. ') + '.' : '';
 
   console.log('📖 생성된 요약:', summary);
   console.log('📊 추출된 문장 수:', selectedSentences.length);

@@ -40,6 +40,30 @@ const COLOR_CLASSES = {
   DEFAULT: 'text-default-500',
 } as const;
 
+// 🧹 안전한 문자열 변환
+function convertToSafeString(input: unknown): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (typeof input === 'number') {
+    return String(input);
+  }
+
+  if (input === null || input === undefined) {
+    return '';
+  }
+
+  // 객체나 배열인 경우 빈 문자열 반환
+  return '';
+}
+
+// 🔢 안전한 숫자 추출
+function extractSafeLength(text: string): number {
+  const length = text.length;
+  return Number.isInteger(length) && length >= 0 ? length : 0;
+}
+
 /**
  * 제목 길이 유효성 검사
  *
@@ -54,23 +78,26 @@ const COLOR_CLASSES = {
  * validateTitleLength('안녕') → false (5자 미만)
  * validateTitleLength('안녕하세요') → true (5자 이상)
  */
-export function validateTitleLength(title: string): boolean {
+export function validateTitleLength(title: unknown): boolean {
   console.log('📏 제목 길이 검증:', {
     input: title,
-    length: title.length,
+    inputType: typeof title,
+  });
+
+  // 안전한 문자열 변환
+  const safeTitle = convertToSafeString(title);
+  const titleLength = extractSafeLength(safeTitle);
+
+  console.log('📏 제목 길이 검증 상세:', {
+    safeTitle,
+    titleLength,
     minRequired: TITLE_VALIDATION.MIN_LENGTH,
     maxAllowed: TITLE_VALIDATION.MAX_LENGTH,
   });
 
-  // null, undefined 안전 처리
-  if (typeof title !== 'string') {
-    console.warn('⚠️ 제목이 문자열이 아님:', typeof title);
-    return false;
-  }
-
   const isValid =
-    title.length >= TITLE_VALIDATION.MIN_LENGTH &&
-    title.length <= TITLE_VALIDATION.MAX_LENGTH;
+    titleLength >= TITLE_VALIDATION.MIN_LENGTH &&
+    titleLength <= TITLE_VALIDATION.MAX_LENGTH;
 
   console.log('✅ 제목 검증 결과:', isValid);
   return isValid;
@@ -89,20 +116,23 @@ export function validateTitleLength(title: string): boolean {
  * validateDescriptionLength('짧은글') → false (10자 미만)
  * validateDescriptionLength('충분히 긴 요약 내용입니다') → true (10자 이상)
  */
-export function validateDescriptionLength(description: string): boolean {
+export function validateDescriptionLength(description: unknown): boolean {
   console.log('📏 요약 길이 검증:', {
     input: description,
-    length: description.length,
+    inputType: typeof description,
+  });
+
+  // 안전한 문자열 변환
+  const safeDescription = convertToSafeString(description);
+  const descriptionLength = extractSafeLength(safeDescription);
+
+  console.log('📏 요약 길이 검증 상세:', {
+    safeDescription,
+    descriptionLength,
     minRequired: DESCRIPTION_VALIDATION.MIN_LENGTH,
   });
 
-  // null, undefined 안전 처리
-  if (typeof description !== 'string') {
-    console.warn('⚠️ 요약이 문자열이 아님:', typeof description);
-    return false;
-  }
-
-  const isValid = description.length >= DESCRIPTION_VALIDATION.MIN_LENGTH;
+  const isValid = descriptionLength >= DESCRIPTION_VALIDATION.MIN_LENGTH;
 
   console.log('✅ 요약 검증 결과:', isValid);
   return isValid;
@@ -119,12 +149,15 @@ export function validateDescriptionLength(description: string): boolean {
  * - 최소 길이 미달 시 경고 메시지
  * - 색상으로 상태 구분 (빨간색: 미달, 회색: 정상)
  */
-export function formatTitleCounter(title: string): CounterInfo {
-  console.log('🎨 제목 카운터 포맷팅:', { title, length: title.length });
+export function formatTitleCounter(title: unknown): CounterInfo {
+  console.log('🎨 제목 카운터 포맷팅:', {
+    title,
+    titleType: typeof title,
+  });
 
-  // 안전한 문자열 처리
-  const safeTitle = typeof title === 'string' ? title : '';
-  const currentLength = safeTitle.length;
+  // 안전한 문자열 변환
+  const safeTitle = convertToSafeString(title);
+  const currentLength = extractSafeLength(safeTitle);
 
   // 유효성 검사
   const isValid = validateTitleLength(safeTitle);
@@ -133,14 +166,17 @@ export function formatTitleCounter(title: string): CounterInfo {
   const colorClass = isValid ? COLOR_CLASSES.DEFAULT : COLOR_CLASSES.DANGER;
 
   // 표시 텍스트 생성
-  const displayText = `${currentLength} / ${TITLE_VALIDATION.MAX_LENGTH}자${
-    !isValid ? ' (최소 5자 이상)' : ''
-  }`;
+  const maxLength = TITLE_VALIDATION.MAX_LENGTH;
+  const minLength = TITLE_VALIDATION.MIN_LENGTH;
+
+  const displayText = isValid
+    ? `${currentLength} / ${maxLength}자`
+    : `${currentLength} / ${maxLength}자 (최소 ${minLength}자 이상)`;
 
   // 상태 메시지 생성
   const statusMessage = isValid
     ? '조건을 만족합니다'
-    : `최소 ${TITLE_VALIDATION.MIN_LENGTH}자 이상 입력해주세요`;
+    : `최소 ${minLength}자 이상 입력해주세요`;
 
   const result = {
     currentLength,
@@ -164,15 +200,15 @@ export function formatTitleCounter(title: string): CounterInfo {
  * - 최소 길이 미달 시 경고 메시지
  * - 색상으로 상태 구분 (빨간색: 미달, 회색: 정상)
  */
-export function formatDescriptionCounter(description: string): CounterInfo {
+export function formatDescriptionCounter(description: unknown): CounterInfo {
   console.log('🎨 요약 카운터 포맷팅:', {
     description,
-    length: description.length,
+    descriptionType: typeof description,
   });
 
-  // 안전한 문자열 처리
-  const safeDescription = typeof description === 'string' ? description : '';
-  const currentLength = safeDescription.length;
+  // 안전한 문자열 변환
+  const safeDescription = convertToSafeString(description);
+  const currentLength = extractSafeLength(safeDescription);
 
   // 유효성 검사
   const isValid = validateDescriptionLength(safeDescription);
@@ -181,14 +217,16 @@ export function formatDescriptionCounter(description: string): CounterInfo {
   const colorClass = isValid ? COLOR_CLASSES.DEFAULT : COLOR_CLASSES.DANGER;
 
   // 표시 텍스트 생성
-  const displayText = `${currentLength}자${
-    !isValid ? ` (최소 ${DESCRIPTION_VALIDATION.MIN_LENGTH}자 이상)` : ''
-  }`;
+  const minLength = DESCRIPTION_VALIDATION.MIN_LENGTH;
+
+  const displayText = isValid
+    ? `${currentLength}자`
+    : `${currentLength}자 (최소 ${minLength}자 이상)`;
 
   // 상태 메시지 생성
   const statusMessage = isValid
     ? '조건을 만족합니다'
-    : `최소 ${DESCRIPTION_VALIDATION.MIN_LENGTH}자 이상 입력해주세요`;
+    : `최소 ${minLength}자 이상 입력해주세요`;
 
   const result = {
     currentLength,
