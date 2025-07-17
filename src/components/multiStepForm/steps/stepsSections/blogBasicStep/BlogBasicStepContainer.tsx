@@ -1,12 +1,6 @@
-// blogBasicStep/BlogBasicStepContainer.tsx
+// blogBasicStep/BlogBasicStepContainer.tsx - 디버깅 버전
 
-/**
- * BlogBasicStep 컴포넌트
- * 블로그 기본 정보(제목, 요약) 입력을 담당하는 메인 컨테이너
- * React Hook Form과 Zustand 상태 관리를 통합하여 사용
- */
-
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 // 🎣 커스텀 훅들 - 상태 관리와 액션 분리
@@ -18,60 +12,105 @@ import BlogBasicStepGuide from './parts/BlogBasicStepGuide';
 import BlogTitleField from './parts/BlogTitleField';
 import BlogDescriptionField from './parts/BlogDescriptionField';
 
-/**
- * BlogBasicStep 메인 컨테이너 컴포넌트
- *
- * 기능:
- * 1. React Hook Form 컨텍스트 연결
- * 2. Zustand 상태 관리 통합
- * 3. 하위 컴포넌트들 조합
- *
- * 상태 흐름:
- * Input 변경 → React Hook Form → Zustand Store → 다른 컴포넌트들
- */
 function BlogBasicStepContainer(): React.ReactNode {
-  console.group('🏗️ BlogBasicStepContainer 렌더링');
-  console.log('BlogBasicStep 컨테이너 컴포넌트가 마운트되었습니다.');
+  console.group('🏗️ [BLOG_BASIC_DEBUG] BlogBasicStepContainer 렌더링');
+  console.log(
+    '📅 [BLOG_BASIC_DEBUG] 렌더링 시작 시간:',
+    new Date().toISOString()
+  );
 
   // 🔗 React Hook Form 컨텍스트 연결
-  // 이유: 부모 컴포넌트(MultiStepForm)에서 제공된 FormProvider 사용
   const formContext = useFormContext();
   const {
-    formState: { errors }, // 검증 오류 상태
+    formState: { errors },
+    watch,
+    getValues,
   } = formContext;
 
-  console.log('📊 React Hook Form 상태:', {
-    hasErrors: Object.keys(errors).length > 0,
-    errorFields: Object.keys(errors),
-  });
+  // 🎣 커스텀 훅: 폼 상태 관리
+  const { titleValue, descriptionValue, isInitialized } =
+    useBlogBasicFormState();
 
-  // 🎣 커스텀 훅: 폼 상태 관리 (React Hook Form + Zustand 동기화)
-  // 이유: 상태 관리 로직을 별도 파일로 분리하여 재사용성과 테스트 용이성 확보
-  const {
-    titleValue, // 현재 제목 값 (실시간)
-    descriptionValue, // 현재 요약 값 (실시간)
-    isInitialized, // 초기화 완료 여부
-  } = useBlogBasicFormState();
+  // 🎯 커스텀 훅: 액션 함수들
+  const { clearTitle, clearDescription } = useBlogBasicActions();
 
-  // 🎯 커스텀 훅: 액션 함수들 (비즈니스 로직)
-  // 이유: 액션 함수들을 별도로 분리하여 컴포넌트 코드 간소화
-  const {
-    clearTitle, // 제목 초기화 함수
-    clearDescription, // 요약 초기화 함수
-  } = useBlogBasicActions();
-
-  console.log('📝 현재 폼 값들:', {
-    title: titleValue,
+  // 🔍 디버깅: 현재 상태 로깅
+  console.log('🔍 [BLOG_BASIC_DEBUG] 현재 상태:', {
+    titleValue,
     titleLength: titleValue.length,
-    description: descriptionValue,
+    descriptionValue,
     descriptionLength: descriptionValue.length,
     isInitialized,
+    hasErrors: Object.keys(errors).length > 0,
+    errorFields: Object.keys(errors),
+    timestamp: new Date().toISOString(),
   });
 
+  // 🔍 디버깅: React Hook Form 값들과 비교
+  const reactHookFormValues = getValues();
+  console.log('🔍 [BLOG_BASIC_DEBUG] React Hook Form vs 커스텀 훅 비교:', {
+    reactHookForm: {
+      title: reactHookFormValues.title || '없음',
+      description: reactHookFormValues.description || '없음',
+    },
+    customHook: {
+      title: titleValue || '없음',
+      description: descriptionValue || '없음',
+    },
+    동일한가: {
+      title: reactHookFormValues.title === titleValue,
+      description: reactHookFormValues.description === descriptionValue,
+    },
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🔍 디버깅: 실시간 폼 변경 감지
+  useEffect(() => {
+    console.log('🔍 [BLOG_BASIC_DEBUG] 실시간 폼 변경 감지 설정');
+
+    const subscription = watch((value, { name, type }) => {
+      if (name === 'title' || name === 'description') {
+        console.log('🔄 [BLOG_BASIC_DEBUG] 폼 필드 변경 감지:', {
+          fieldName: name,
+          newValue: value[name],
+          changeType: type,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
+    return () => {
+      console.log('🔄 [BLOG_BASIC_DEBUG] 실시간 폼 변경 감지 해제');
+      subscription.unsubscribe();
+    };
+  }, [watch]);
+
+  // 🔍 디버깅: 상태 변경 시 로깅
+  useEffect(() => {
+    console.log('📊 [BLOG_BASIC_DEBUG] 상태 변경 감지:', {
+      titleValue,
+      descriptionValue,
+      timestamp: new Date().toISOString(),
+    });
+  }, [titleValue, descriptionValue]);
+
+  // 🔍 디버깅: 에러 상태 변경 시 로깅
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      console.log('❌ [BLOG_BASIC_DEBUG] 에러 발생:', {
+        errors,
+        errorMessages: Object.entries(errors).map(([key, error]) => ({
+          field: key,
+          message: error?.message,
+        })),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [errors]);
+
   // 🚫 초기화되지 않은 상태에서는 로딩 표시
-  // 이유: Zustand 스토어 초기화 완료 후에 UI 렌더링하여 깜빡임 방지
   if (!isInitialized) {
-    console.log('⏳ 아직 초기화되지 않음, 로딩 상태');
+    console.log('⏳ [BLOG_BASIC_DEBUG] 초기화 대기 중');
     console.groupEnd();
     return (
       <div className="flex items-center justify-center py-8">
@@ -80,23 +119,16 @@ function BlogBasicStepContainer(): React.ReactNode {
     );
   }
 
-  console.log('✅ 초기화 완료, UI 렌더링 시작');
+  console.log('✅ [BLOG_BASIC_DEBUG] 초기화 완료, UI 렌더링 시작');
   console.groupEnd();
 
   // 🎨 메인 UI 렌더링
   return (
     <div className="space-y-6">
       {/* 📋 안내 가이드 컴포넌트 */}
-      {/* 이유: 사용자에게 입력 방법과 조건을 명확히 안내 */}
       <BlogBasicStepGuide />
 
       {/* 📝 블로그 제목 입력 필드 */}
-      {/*
-        Props 설명:
-        - value: 현재 제목 값 (Zustand에서 가져온 실시간 값)
-        - onClear: 제목 초기화 함수 (React Hook Form + Zustand 동시 처리)
-        - error: React Hook Form 검증 오류 메시지
-      */}
       <BlogTitleField
         value={titleValue}
         onClear={clearTitle}
@@ -104,21 +136,32 @@ function BlogBasicStepContainer(): React.ReactNode {
       />
 
       {/* 📄 블로그 요약 입력 필드 */}
-      {/*
-        Props 설명:
-        - value: 현재 요약 값 (Zustand에서 가져온 실시간 값)
-        - onClear: 요약 초기화 함수 (React Hook Form + Zustand 동시 처리)
-        - error: React Hook Form 검증 오류 메시지
-      */}
       <BlogDescriptionField
         value={descriptionValue}
         onClear={clearDescription}
         error={errors.description?.message?.toString()}
       />
+
+      {/* 🔍 디버깅 정보 표시 (개발 모드에서만) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="p-4 mt-4 text-xs bg-gray-100 rounded-lg">
+          <h4 className="font-bold text-blue-600">
+            🔍 디버깅 정보 (BlogBasic)
+          </h4>
+          <div className="mt-2 space-y-1">
+            <div>
+              제목: {titleValue || '없음'} ({titleValue.length}자)
+            </div>
+            <div>
+              요약: {descriptionValue || '없음'} ({descriptionValue.length}자)
+            </div>
+            <div>초기화 완료: {isInitialized ? '✅' : '❌'}</div>
+            <div>에러 개수: {Object.keys(errors).length}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// 📤 컴포넌트 내보내기
-// 이유: 외부에서 BlogBasicStep 기능을 사용할 수 있도록 export
 export default BlogBasicStepContainer;

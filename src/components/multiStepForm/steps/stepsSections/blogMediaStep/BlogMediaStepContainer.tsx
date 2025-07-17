@@ -1,6 +1,7 @@
-// 📁 blogMediaStep/BlogMediaStepContainer.tsx
+// 📁 blogMediaStep/BlogMediaStepContainer.tsx - 디버깅 버전
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useFormContext } from 'react-hook-form';
 import { useBlogMediaStepState } from './hooks/useBlogMediaStepState';
 
 import ImageUploadContainer from './imageUpload/ImageUploadContainer';
@@ -39,23 +40,46 @@ interface MobileTabItem {
 }
 
 function BlogMediaStepContainer(): React.ReactNode {
-  console.log('🚀 [CONTAINER] 타입 안전성 강화된 컨테이너 렌더링 시작:', {
-    timestamp: new Date().toLocaleTimeString(),
-    componentName: 'BlogMediaStepContainer',
-    typeSafeVersion: true,
-  });
+  console.group('🚀 [BLOG_MEDIA_DEBUG] BlogMediaStepContainer 렌더링');
+  console.log(
+    '📅 [BLOG_MEDIA_DEBUG] 렌더링 시작 시간:',
+    new Date().toISOString()
+  );
 
   const [activeSectionType, setActiveSectionType] =
     useState<ActiveSectionType>('mainImage');
 
+  // 🔗 React Hook Form 컨텍스트 연결
+  const formContext = useFormContext();
+  const { watch, getValues } = formContext;
+
+  // 🎣 커스텀 훅: 미디어 상태 관리
   const blogMediaStepStateHook = useBlogMediaStepState();
   const { formValues: currentFormValuesData } = blogMediaStepStateHook;
 
+  // 🔍 디버깅: 훅 상태 로깅
+  console.log('🔍 [BLOG_MEDIA_DEBUG] 훅 상태:', {
+    hasStateHook: !!blogMediaStepStateHook,
+    hasFormValues: !!currentFormValuesData,
+    formValuesType: typeof currentFormValuesData,
+    formValuesKeys: currentFormValuesData
+      ? Object.keys(currentFormValuesData)
+      : [],
+    activeSectionType,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 안전한 폼 값 처리
   const createSafeFormValues = (formData: unknown): SafeFormValues => {
     const hasFormData = formData !== null && formData !== undefined;
     const isFormDataObject = hasFormData && typeof formData === 'object';
 
     if (!isFormDataObject) {
+      console.warn('⚠️ [BLOG_MEDIA_DEBUG] 폼 데이터가 객체가 아님:', {
+        formData,
+        hasFormData,
+        dataType: typeof formData,
+      });
       return {
         media: [],
         mainImage: null,
@@ -75,6 +99,13 @@ function BlogMediaStepContainer(): React.ReactNode {
     const safeSliderImages = Array.isArray(sliderImagesProperty)
       ? sliderImagesProperty
       : [];
+
+    console.log('🔍 [BLOG_MEDIA_DEBUG] 안전한 폼 값 처리:', {
+      mediaCount: safeMedia.length,
+      hasMainImage: !!safeMainImage,
+      sliderImagesCount: safeSliderImages.length,
+      timestamp: new Date().toISOString(),
+    });
 
     return {
       media: safeMedia,
@@ -104,43 +135,97 @@ function BlogMediaStepContainer(): React.ReactNode {
     ? rawConfiguredSliderImageList
     : [];
 
-  console.log('📊 [CONTAINER] 타입 안전성 강화된 상태 데이터 로드:', {
+  // 🔍 디버깅: React Hook Form 값들과 비교
+  const reactHookFormValues = getValues();
+  console.log('🔍 [BLOG_MEDIA_DEBUG] React Hook Form vs 커스텀 훅 비교:', {
+    reactHookForm: {
+      media: reactHookFormValues.media || [],
+      mainImage: reactHookFormValues.mainImage || null,
+      sliderImages: reactHookFormValues.sliderImages || [],
+    },
+    customHook: {
+      media: uploadedMediaFileList,
+      mainImage: selectedMainImageUrl,
+      sliderImages: configuredSliderImageList,
+    },
+    동일한가: {
+      media:
+        JSON.stringify(reactHookFormValues.media) ===
+        JSON.stringify(uploadedMediaFileList),
+      mainImage: reactHookFormValues.mainImage === selectedMainImageUrl,
+      sliderImages:
+        JSON.stringify(reactHookFormValues.sliderImages) ===
+        JSON.stringify(configuredSliderImageList),
+    },
+    timestamp: new Date().toISOString(),
+  });
+
+  console.log('📊 [BLOG_MEDIA_DEBUG] 최종 상태 데이터:', {
     uploadedMediaFileCount: uploadedMediaFileList.length,
     hasSelectedMainImage: selectedMainImageUrl !== null,
     configuredSliderImageCount: configuredSliderImageList.length,
     currentActiveSection: activeSectionType,
     selectedMainImagePreview: selectedMainImageUrl
-      ? selectedMainImageUrl.slice(0, 30) + '...'
+      ? selectedMainImageUrl.slice(0, 50) + '...'
       : 'none',
-    typeSafeStateAccess: true,
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: new Date().toISOString(),
   });
 
   const hasUploadedImages = uploadedMediaFileList.length > 0;
 
-  console.log('🔍 [CONTAINER] 이미지 존재 여부 확인:', {
-    mediaFileCount: uploadedMediaFileList.length,
-    hasUploadedImages,
-    typeSafeCheck: true,
-  });
+  // 🔍 디버깅: 실시간 폼 변경 감지
+  useEffect(() => {
+    console.log('🔍 [BLOG_MEDIA_DEBUG] 실시간 폼 변경 감지 설정');
+
+    const subscription = watch((value, { name, type }) => {
+      if (name === 'media' || name === 'mainImage' || name === 'sliderImages') {
+        console.log('🔄 [BLOG_MEDIA_DEBUG] 폼 필드 변경 감지:', {
+          fieldName: name,
+          newValue: value[name],
+          changeType: type,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
+    return () => {
+      console.log('🔄 [BLOG_MEDIA_DEBUG] 실시간 폼 변경 감지 해제');
+      subscription.unsubscribe();
+    };
+  }, [watch]);
+
+  // 🔍 디버깅: 상태 변경 시 로깅
+  useEffect(() => {
+    console.log('📊 [BLOG_MEDIA_DEBUG] 상태 변경 감지:', {
+      uploadedMediaFileCount: uploadedMediaFileList.length,
+      selectedMainImageUrl,
+      configuredSliderImageCount: configuredSliderImageList.length,
+      activeSectionType,
+      timestamp: new Date().toISOString(),
+    });
+  }, [
+    uploadedMediaFileList,
+    selectedMainImageUrl,
+    configuredSliderImageList,
+    activeSectionType,
+  ]);
 
   const handleNavigationSectionChange = (newSectionType: ActiveSectionType) => {
-    console.log('🔧 [CONTAINER] 네비게이션 섹션 변경:', {
+    console.log('🔧 [BLOG_MEDIA_DEBUG] 네비게이션 섹션 변경:', {
       previousSection: activeSectionType,
       newSectionType,
-      directStateUpdate: true,
-      timestamp: new Date().toLocaleTimeString(),
+      timestamp: new Date().toISOString(),
     });
 
     setActiveSectionType(newSectionType);
 
-    console.log('✅ [CONTAINER] 네비게이션 섹션 변경 완료:', {
+    console.log('✅ [BLOG_MEDIA_DEBUG] 네비게이션 섹션 변경 완료:', {
       newActiveSection: newSectionType,
     });
   };
 
   const renderDragAndDropUploadSection = () => {
-    console.log('🔄 [RENDER] 업로드 섹션 렌더링 - 타입 안전성 강화');
+    console.log('🔄 [BLOG_MEDIA_DEBUG] 업로드 섹션 렌더링');
 
     return (
       <section
@@ -161,9 +246,8 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderDesktopSidebarNavigation = () => {
-    console.log('🔄 [RENDER] 데스크톱 사이드바 네비게이션 렌더링:', {
+    console.log('🔄 [BLOG_MEDIA_DEBUG] 데스크톱 사이드바 네비게이션 렌더링:', {
       currentActiveSection: activeSectionType,
-      typeSafeRendering: true,
     });
 
     const navigationMenuItemList: NavigationMenuItem[] = [
@@ -255,9 +339,8 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderMobileTabNavigation = () => {
-    console.log('🔄 [RENDER] 모바일 탭 네비게이션 렌더링:', {
+    console.log('🔄 [BLOG_MEDIA_DEBUG] 모바일 탭 네비게이션 렌더링:', {
       currentActiveSection: activeSectionType,
-      typeSafeRendering: true,
     });
 
     const mobileTabItemList: MobileTabItem[] = [
@@ -320,14 +403,15 @@ function BlogMediaStepContainer(): React.ReactNode {
   };
 
   const renderActiveMainContent = () => {
-    console.log('🔄 [RENDER] 메인 콘텐츠 렌더링 - 타입 안전성 강화:', {
+    console.log('🔄 [BLOG_MEDIA_DEBUG] 메인 콘텐츠 렌더링:', {
       activeSectionType,
       hasImages: hasUploadedImages,
-      typeSafeRendering: true,
     });
 
     if (!hasUploadedImages) {
-      console.log('📋 [RENDER] 업로드된 이미지 없음 - 안내 메시지 표시');
+      console.log(
+        '📋 [BLOG_MEDIA_DEBUG] 업로드된 이미지 없음 - 안내 메시지 표시'
+      );
 
       return (
         <div className="flex items-center justify-center p-6 w-full lg:w-[calc(100%-16rem)]">
@@ -391,15 +475,10 @@ function BlogMediaStepContainer(): React.ReactNode {
       selectedContent = <ImageSliderContainer />;
     }
 
-    console.log(
-      '✅ [RENDER] 메인 콘텐츠 컴포넌트 선택 완료 - 타입 안전성 강화:',
-      {
-        activeSectionType,
-        hasSelectedContent: selectedContent !== null,
-        renderingMainImageAsPreview: activeSectionType === 'mainImage',
-        typeSafeContentSelection: true,
-      }
-    );
+    console.log('✅ [BLOG_MEDIA_DEBUG] 메인 콘텐츠 컴포넌트 선택 완료:', {
+      activeSectionType,
+      hasSelectedContent: selectedContent !== null,
+    });
 
     return (
       <main className="p-6 w-full lg:w-[calc(100%-16rem)]">
@@ -408,18 +487,16 @@ function BlogMediaStepContainer(): React.ReactNode {
     );
   };
 
-  console.log('🎨 [CONTAINER] 타입 안전성 강화된 컨테이너 최종 렌더링 준비:', {
+  console.log('🎨 [BLOG_MEDIA_DEBUG] 컨테이너 최종 렌더링 준비:', {
     shouldShowManagementSections: hasUploadedImages,
     activeSectionType,
     uploadedImageCount: uploadedMediaFileList.length,
     hasMainImage: selectedMainImageUrl !== null,
     sliderImageCount: configuredSliderImageList.length,
-    selectedMainImagePreview: selectedMainImageUrl
-      ? selectedMainImageUrl.slice(0, 30) + '...'
-      : 'none',
-    typeSafeContainerCompleted: true,
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: new Date().toISOString(),
   });
+
+  console.groupEnd();
 
   return (
     <main role="main" aria-label="블로그 미디어 관리" className="min-h-screen">
@@ -432,6 +509,21 @@ function BlogMediaStepContainer(): React.ReactNode {
         {renderMobileTabNavigation()}
         {renderActiveMainContent()}
       </div>
+
+      {/* 🔍 디버깅 정보 표시 (개발 모드에서만) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="p-4 mx-6 mt-4 text-xs bg-gray-100 rounded-lg">
+          <h4 className="font-bold text-blue-600">
+            🔍 디버깅 정보 (BlogMedia)
+          </h4>
+          <div className="mt-2 space-y-1">
+            <div>업로드된 이미지: {uploadedMediaFileList.length}개</div>
+            <div>메인 이미지: {selectedMainImageUrl ? '설정됨' : '미설정'}</div>
+            <div>슬라이더 이미지: {configuredSliderImageList.length}개</div>
+            <div>현재 섹션: {activeSectionType}</div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

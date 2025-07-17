@@ -1,25 +1,66 @@
 // src/components/multiStepForm/MultiStepFormContainer.tsx
 
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useCallback,
+  useRef,
+  useState,
+  useMemo,
+} from 'react';
 import { FormProvider } from 'react-hook-form';
 import type { StepNumber } from './types/stepTypes';
+import {
+  renderStepComponent,
+  isValidStepNumber,
+  getMinStep,
+} from './types/stepTypes';
 import { useMultiStepFormState } from './reactHookForm/useMultiStepFormState';
 import { useBidirectionalBridge } from '../../bridges/hooks/useBidirectionalBridge';
 import PreviewPanelContainer from '../previewPanel/PreviewPanelContainer';
 import FormHeaderContainer from './layout/shared/FormHeaderContainer';
-import DesktopPreviewLayout from './layout/desktop/DesktopPreviewLayout';
 import StepNavigationWrapper from './layout/shared/StepNavigationWrapper';
 import NavigationButtons from './layout/shared/NavigationButtons';
 import StepContentContainer from './animation/StepContentContainer';
 import ToastManager from '../toaster/ToastManager';
-import { renderStepComponent } from './types/stepTypes';
 import { usePreviewPanelStore } from '../previewPanel/store/previewPanelStore';
 
-function MultiStepFormContainer(): React.ReactNode {
-  const [bridgeDebugEnabled, setBridgeDebugEnabled] = useState(false);
-  const lastLogTimeRef = useRef<number>(0);
-  const logIntervalRef = useRef<number>();
+interface TransferResult {
+  operationSuccess: boolean;
+  transferredData: TransferredDataStructure;
+  timestamp: string;
+  transferId: string;
+}
 
+interface TransferredDataStructure {
+  transformedContent: string;
+  transformedIsCompleted: boolean;
+  metadata?: {
+    contentLength: number;
+    lastModified: string;
+    version: string;
+  };
+}
+
+// 🔧 브릿지 설정 타입 정의 (타입단언 없음)
+interface BridgeConfiguration {
+  enableAutoTransfer: boolean;
+  enableValidation: boolean;
+  enableErrorRecovery: boolean;
+  validationMode: 'strict' | 'lenient' | 'permissive';
+  debugMode: boolean;
+}
+
+function MultiStepFormContainer(): React.ReactNode {
+  const [bridgeDebugEnabled, setBridgeDebugEnabled] = useState<boolean>(false);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const logIntervalRef = useRef<number>();
+  const isFirstRenderRef = useRef<boolean>(true);
+  const lastTransferResultRef = useRef<TransferResult | null>(null);
+
+  console.log('🔄 [MULTISTEP_DEBUG] 컴포넌트 렌더링 시작');
+
+  // 🔧 훅 결과를 안전하게 가져오기
+  const hookResult = useMultiStepFormState();
   const {
     methods,
     handleSubmit,
@@ -30,93 +71,208 @@ function MultiStepFormContainer(): React.ReactNode {
     goToPrevStep,
     goToStep,
     updateFormValue,
-  } = useMultiStepFormState();
+  } = hookResult;
 
+  // 🔧 isHookInitialized 안전하게 가져오기 (TypeScript 호환성)
+  const isHookInitialized = useMemo(() => {
+    // hookResult에 isHookInitialized 속성이 있는지 확인
+    const hasIsHookInitialized = 'isHookInitialized' in hookResult;
+
+    if (hasIsHookInitialized) {
+      const isInitialized = hookResult.isHookInitialized;
+      console.log(
+        '✅ [MULTISTEP_DEBUG] isHookInitialized 속성 발견:',
+        isInitialized
+      );
+      return typeof isInitialized === 'boolean' ? isInitialized : true;
+    }
+
+    // 속성이 없으면 currentStep 유효성으로 판단
+    const isValidStep =
+      currentStep !== null &&
+      currentStep !== undefined &&
+      isValidStepNumber(currentStep);
+    console.log(
+      '🔧 [MULTISTEP_DEBUG] isHookInitialized 속성 없음, currentStep으로 판단:',
+      {
+        currentStep,
+        isValidStep,
+      }
+    );
+
+    return isValidStep;
+  }, [hookResult, currentStep]);
+
+  // 🔧 개별 스토어 selector로 무한 리렌더링 방지
   const isPreviewPanelOpen = usePreviewPanelStore(
-    (state) => state.isPreviewPanelOpen
+    useCallback((state) => state?.isPreviewPanelOpen ?? false, [])
+  );
+  const deviceType = usePreviewPanelStore(
+    useCallback((state) => state?.deviceType ?? 'desktop', [])
   );
 
-  const deviceType = usePreviewPanelStore((state) => state.deviceType);
+  // 🔧 currentStep 안전성 확인 (useMultiStepFormState에서 이미 검증되었지만 추가 안전장치)
+  const safeCurrentStep = useMemo(() => {
+    console.log('🔍 [MULTISTEP_DEBUG] currentStep 최종 안전성 확인:', {
+      currentStep,
+      stepType: typeof currentStep,
+      isHookInitialized,
+      timestamp: new Date().toISOString(),
+    });
 
-  const currentFormValues = methods.getValues();
-  const { editorCompletedContent = '', isEditorCompleted = false } =
-    currentFormValues;
+    // 🔧 useMultiStepFormState에서 이미 안전한 값을 반환하므로 그대로 사용
+    // 하지만 추가 안전장치로 한 번 더 체크
+    const isValidStep =
+      currentStep !== null &&
+      currentStep !== undefined &&
+      isValidStepNumber(currentStep);
 
-  const setEditorCompleted = useCallback(
-    (completed: boolean) => {
-      updateFormValue('isEditorCompleted', completed);
-      console.log('🎯 [EDITOR_STATUS] 에디터 완료 상태 업데이트:', completed);
-    },
-    [updateFormValue]
-  );
+    if (!isValidStep) {
+      console.warn(
+        '⚠️ [MULTISTEP_DEBUG] currentStep 추가 안전장치 발동, fallback 적용'
+      );
+      const fallbackStep = getMinStep();
+      return fallbackStep;
+    }
 
-  const bridgeConfig = {
-    enableAutoTransfer: false,
-    enableValidation: true,
-    enableErrorRecovery: true,
-    validationMode: 'lenient' as const,
-    debugMode: bridgeDebugEnabled,
-  };
+    return currentStep;
+  }, [currentStep, isHookInitialized]);
 
-  const {
-    isTransferInProgress,
-    lastTransferResult,
-    transferErrors,
-    transferWarnings,
-    checkCanTransfer,
-  } = useBidirectionalBridge(bridgeConfig);
+  console.log('📊 [MULTISTEP_DEBUG] 스토어 상태:', {
+    isPreviewPanelOpen,
+    deviceType,
+    currentStep,
+    safeCurrentStep,
+    isInitialLoading,
+    isHookInitialized,
+    timestamp: new Date().toISOString(),
+  });
 
-  const logWithThrottle = useCallback(
-    (message: string, data?: any) => {
-      if (!bridgeDebugEnabled) return;
+  // 🔧 초기 로딩 완료 처리 (훅 초기화 상태 기반)
+  useEffect(() => {
+    const shouldCompleteInitialLoading = isHookInitialized && isInitialLoading;
 
-      const now = Date.now();
-      const timeDifference = now - lastLogTimeRef.current;
+    if (shouldCompleteInitialLoading) {
+      console.log('✅ [MULTISTEP_DEBUG] 훅 초기화 기반 로딩 완료:', {
+        currentStep,
+        safeCurrentStep,
+        isHookInitialized,
+        timestamp: new Date().toISOString(),
+      });
+      setIsInitialLoading(false);
+    }
+  }, [isHookInitialized, isInitialLoading, currentStep, safeCurrentStep]);
 
-      if (timeDifference > 10000) {
-        console.log(message, data);
-        lastLogTimeRef.current = now;
+  // 🔧 첫 렌더링 시에만 디버깅 로그 출력 (의존성 없음)
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      console.log('🎯 [MULTISTEP_DEBUG] 초기 렌더링 완료:', {
+        currentStep,
+        safeCurrentStep,
+        progressWidth,
+        isPreviewPanelOpen,
+        deviceType,
+        isInitialLoading,
+        isHookInitialized,
+        timestamp: new Date().toISOString(),
+      });
+      isFirstRenderRef.current = false;
+    }
+  }, []); // 의존성 없음 - 한 번만 실행
+
+  // 🔧 에디터 완료 상태 업데이트 함수 (안정화)
+  const setEditorCompletedStatus = useCallback(
+    (completedStatus: boolean) => {
+      if (bridgeDebugEnabled) {
+        console.log('🎯 [MULTISTEP_DEBUG] 에디터 완료 상태 업데이트:', {
+          completedStatus,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // 🔧 updateFormValue 함수 안전성 확인
+      if (typeof updateFormValue === 'function') {
+        updateFormValue('isEditorCompleted', completedStatus);
+      } else {
+        console.error(
+          '❌ [MULTISTEP_DEBUG] updateFormValue 함수를 찾을 수 없음'
+        );
       }
     },
-    [bridgeDebugEnabled]
+    [updateFormValue, bridgeDebugEnabled]
   );
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const { ctrlKey, shiftKey, key } = event;
+  // 🔧 브릿지 설정 (타입단언 없음)
+  const bridgeConfig = useMemo<BridgeConfiguration>(() => {
+    const config: BridgeConfiguration = {
+      enableAutoTransfer: false,
+      enableValidation: true,
+      enableErrorRecovery: true,
+      validationMode: 'lenient', // 리터럴 타입 직접 사용
+      debugMode: bridgeDebugEnabled,
+    };
+    return config;
+  }, [bridgeDebugEnabled]);
 
-      if (ctrlKey && shiftKey && key === 'D') {
-        event.preventDefault();
-        setBridgeDebugEnabled((prevMode) => {
-          const newMode = !prevMode;
-          console.log(
-            `🔧 [DEBUG] 브릿지 디버그 모드: ${newMode ? '활성화' : '비활성화'}`
-          );
+  // 🔧 필요한 브릿지 훅 결과만 추출 (미사용 변수 제거)
+  const { isTransferInProgress, lastTransferResult } =
+    useBidirectionalBridge(bridgeConfig);
+
+  // 🔧 키보드 이벤트 핸들러 (의존성 없음)
+  useEffect(() => {
+    const handleKeyboardShortcut = (keyboardEvent: KeyboardEvent) => {
+      const {
+        ctrlKey = false,
+        shiftKey = false,
+        key = '',
+      } = keyboardEvent ?? {};
+      const isDebugShortcut = ctrlKey && shiftKey && key === 'D';
+
+      if (isDebugShortcut) {
+        keyboardEvent.preventDefault();
+        setBridgeDebugEnabled((prev) => {
+          const newMode = !prev;
+          console.log('🔧 [MULTISTEP_DEBUG] 디버그 모드 전환:', {
+            previousMode: prev,
+            newMode,
+          });
           return newMode;
         });
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    window.addEventListener('keydown', handleKeyboardShortcut);
+    return () => window.removeEventListener('keydown', handleKeyboardShortcut);
+  }, []); // 의존성 없음
 
+  // 🔧 디버그 로그 인터벌 관리 (안정화)
   useEffect(() => {
     if (!bridgeDebugEnabled) {
-      if (logIntervalRef.current) {
-        clearInterval(logIntervalRef.current);
+      const currentIntervalId = logIntervalRef.current;
+      if (currentIntervalId) {
+        clearInterval(currentIntervalId);
         logIntervalRef.current = undefined;
+        console.log('🛑 [MULTISTEP_DEBUG] 디버그 로그 인터벌 정리');
       }
       return;
     }
 
-    logIntervalRef.current = window.setInterval(() => {
-      console.log('📈 [BRIDGE_SUMMARY] 브릿지 상태 요약', {
-        isActive: checkCanTransfer(),
+    const debugLogInterval = window.setInterval(() => {
+      const currentFormData = methods?.getValues?.();
+      const hasFormData =
+        currentFormData && Object.keys(currentFormData).length > 0;
+
+      console.log('📈 [MULTISTEP_DEBUG] 브릿지 상태 요약', {
         lastUpdate: new Date().toLocaleTimeString(),
-        status: isTransferInProgress ? 'transferring' : 'idle',
+        currentStep,
+        safeCurrentStep,
+        hasFormData: !!hasFormData,
+        isTransferInProgress,
+        isHookInitialized,
       });
     }, 30000);
+
+    logIntervalRef.current = debugLogInterval;
 
     return () => {
       if (logIntervalRef.current) {
@@ -124,141 +280,350 @@ function MultiStepFormContainer(): React.ReactNode {
         logIntervalRef.current = undefined;
       }
     };
-  }, [bridgeDebugEnabled, checkCanTransfer, isTransferInProgress]);
-
-  useEffect(() => {
-    if (!bridgeDebugEnabled) return;
-
-    logWithThrottle('📊 [BRIDGE_DEBUG] 멀티스텝 브릿지 실시간 상태', {
-      transferStatus: isTransferInProgress ? 'active' : 'idle',
-      canTransfer: checkCanTransfer(),
-      errorCount: transferErrors?.length || 0,
-      warningCount: transferWarnings?.length || 0,
-      timestamp: new Date().toLocaleTimeString(),
-    });
   }, [
     bridgeDebugEnabled,
+    currentStep,
+    safeCurrentStep,
+    methods,
     isTransferInProgress,
-    checkCanTransfer,
-    transferErrors,
-    transferWarnings,
-    logWithThrottle,
+    isHookInitialized,
   ]);
 
-  const handleStepChange = useCallback(
-    (step: StepNumber) => {
-      goToStep(step);
-      console.log('🔄 [STEP_CHANGE] 스텝 변경:', step);
-    },
-    [goToStep]
-  );
-
-  const handleNextStep = useCallback(() => {
-    goToNextStep();
-    console.log('➡️ [STEP_NEXT] 다음 스텝으로 이동');
-  }, [goToNextStep]);
-
-  const handlePrevStep = useCallback(() => {
-    goToPrevStep();
-    console.log('⬅️ [STEP_PREV] 이전 스텝으로 이동');
-  }, [goToPrevStep]);
-
-  const handleBridgeDataReceived = useCallback(
-    (transferredData: any) => {
+  // 🔧 스텝 변경 핸들러 (안정화)
+  const handleStepNavigation = useCallback(
+    (targetStep: StepNumber) => {
       if (bridgeDebugEnabled) {
-        console.group('📋 [BRIDGE_DEBUG] 브릿지 데이터 수신 상세 분석');
-        console.log('📊 [BRIDGE_DEBUG] 수신 데이터 기본 정보:', {
-          hasData: !!transferredData,
-          dataType: typeof transferredData,
-          dataKeys: transferredData ? Object.keys(transferredData) : [],
+        console.log('🔄 [MULTISTEP_DEBUG] 스텝 변경 요청:', {
+          previousStep: safeCurrentStep,
+          targetStep,
           timestamp: new Date().toISOString(),
         });
-
-        if (transferredData) {
-          const {
-            transformedContent,
-            transformedIsCompleted,
-            transformationSuccess,
-          } = transferredData;
-          console.log('📈 [BRIDGE_DEBUG] 변환된 콘텐츠 정보:', {
-            hasTransformedContent: !!transformedContent,
-            contentLength: transformedContent?.length || 0,
-            isCompleted: transformedIsCompleted || false,
-            transformationSuccess: transformationSuccess || false,
-          });
-        }
-        console.groupEnd();
       }
 
-      const { transformedContent, transformedIsCompleted } =
-        transferredData || {};
+      // 🔧 goToStep 함수 안전성 확인
+      if (typeof goToStep === 'function') {
+        goToStep(targetStep);
+      } else {
+        console.error('❌ [MULTISTEP_DEBUG] goToStep 함수를 찾을 수 없음');
+      }
+    },
+    [goToStep, bridgeDebugEnabled, safeCurrentStep]
+  );
 
-      if (!transformedContent) {
+  // 🔧 다음 스텝 이동 핸들러 (안정화)
+  const handleNextStepNavigation = useCallback(() => {
+    if (bridgeDebugEnabled) {
+      console.log('➡️ [MULTISTEP_DEBUG] 다음 스텝 이동 요청:', {
+        currentStep: safeCurrentStep,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 🔧 goToNextStep 함수 안전성 확인
+    if (typeof goToNextStep === 'function') {
+      goToNextStep();
+    } else {
+      console.error('❌ [MULTISTEP_DEBUG] goToNextStep 함수를 찾을 수 없음');
+    }
+  }, [goToNextStep, bridgeDebugEnabled, safeCurrentStep]);
+
+  // 🔧 이전 스텝 이동 핸들러 (안정화)
+  const handlePreviousStepNavigation = useCallback(() => {
+    if (bridgeDebugEnabled) {
+      console.log('⬅️ [MULTISTEP_DEBUG] 이전 스텝 이동 요청:', {
+        currentStep: safeCurrentStep,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 🔧 goToPrevStep 함수 안전성 확인
+    if (typeof goToPrevStep === 'function') {
+      goToPrevStep();
+    } else {
+      console.error('❌ [MULTISTEP_DEBUG] goToPrevStep 함수를 찾을 수 없음');
+    }
+  }, [goToPrevStep, bridgeDebugEnabled, safeCurrentStep]);
+
+  // 🔧 TransferResult 타입 가드 함수 (타입단언 제거)
+  const isValidTransferResult = useCallback(
+    (data: unknown): data is TransferResult => {
+      if (!data || typeof data !== 'object') {
+        return false;
+      }
+
+      const result = Object(data);
+
+      const hasOperationSuccess = 'operationSuccess' in result;
+      const hasTransferredData = 'transferredData' in result;
+
+      if (!hasOperationSuccess || !hasTransferredData) {
+        return false;
+      }
+
+      const operationSuccess = Reflect.get(result, 'operationSuccess');
+      const transferredData = Reflect.get(result, 'transferredData');
+
+      return (
+        typeof operationSuccess === 'boolean' &&
+        transferredData !== null &&
+        transferredData !== undefined &&
+        typeof transferredData === 'object'
+      );
+    },
+    []
+  );
+
+  // 🔧 TransferredDataStructure 타입 가드 함수 (타입단언 제거)
+  const isValidTransferredData = useCallback(
+    (data: unknown): data is TransferredDataStructure => {
+      if (!data || typeof data !== 'object') {
+        return false;
+      }
+
+      const transferredData = Object(data);
+
+      const hasTransformedContent = 'transformedContent' in transferredData;
+      const hasTransformedIsCompleted =
+        'transformedIsCompleted' in transferredData;
+
+      if (!hasTransformedContent || !hasTransformedIsCompleted) {
+        return false;
+      }
+
+      const transformedContent = Reflect.get(
+        transferredData,
+        'transformedContent'
+      );
+      const transformedIsCompleted = Reflect.get(
+        transferredData,
+        'transformedIsCompleted'
+      );
+
+      return (
+        typeof transformedContent === 'string' &&
+        typeof transformedIsCompleted === 'boolean'
+      );
+    },
+    []
+  );
+
+  // 🔧 브릿지 데이터 처리 함수 (타입단언 제거)
+  const processBridgeTransferredData = useCallback(
+    (transferredData: TransferredDataStructure) => {
+      if (bridgeDebugEnabled) {
+        console.log('📋 [MULTISTEP_DEBUG] 브릿지 데이터 수신:', {
+          hasContent: !!transferredData.transformedContent,
+          contentLength: transferredData.transformedContent?.length || 0,
+          isCompleted: transferredData.transformedIsCompleted,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const { transformedContent, transformedIsCompleted } = transferredData;
+
+      const isValidContent =
+        typeof transformedContent === 'string' && transformedContent.length > 0;
+
+      if (!isValidContent) {
         if (bridgeDebugEnabled) {
-          console.warn('⚠️ [BRIDGE_DEBUG] 수신된 데이터에 변환된 콘텐츠 없음');
+          console.warn('⚠️ [MULTISTEP_DEBUG] 수신 데이터에 유효한 콘텐츠 없음');
         }
         return;
       }
 
-      if (bridgeDebugEnabled) {
-        console.log('🔄 [BRIDGE_DEBUG] 폼 데이터 업데이트 시작');
+      // 🔧 폼 값 업데이트
+      if (typeof updateFormValue === 'function') {
+        updateFormValue('editorCompletedContent', transformedContent);
       }
 
-      updateFormValue('editorCompletedContent', transformedContent);
+      const completionStatus = transformedIsCompleted === true;
+      setEditorCompletedStatus(completionStatus);
 
-      const completionStatus = transformedIsCompleted || false;
-      setEditorCompleted(completionStatus);
-
-      if (transformedIsCompleted) {
+      if (completionStatus && typeof goToNextStep === 'function') {
         goToNextStep();
       }
     },
-    [updateFormValue, setEditorCompleted, goToNextStep, bridgeDebugEnabled]
+    [
+      updateFormValue,
+      setEditorCompletedStatus,
+      goToNextStep,
+      bridgeDebugEnabled,
+    ]
   );
 
-  const renderCurrentStep = useCallback(() => {
-    return renderStepComponent(currentStep);
-  }, [currentStep]);
+  // 🔧 안전한 스텝 컴포넌트 렌더링 (훅 초기화 상태 확인)
+  const renderCurrentStepComponent = useCallback(() => {
+    console.log('🔧 [MULTISTEP_DEBUG] 스텝 컴포넌트 렌더링 시작:', {
+      safeCurrentStep,
+      isInitialLoading,
+      isHookInitialized,
+    });
 
+    // 🔧 훅이 초기화되지 않았거나 초기 로딩 중일 때 로딩 UI
+    if (isInitialLoading || !isHookInitialized) {
+      console.log('⏳ [MULTISTEP_DEBUG] 훅 초기화 대기 중, 로딩 UI 표시');
+      return React.createElement(
+        'div',
+        {
+          className: 'flex items-center justify-center p-8',
+        },
+        [
+          React.createElement('div', {
+            key: 'loading-spinner',
+            className:
+              'w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin',
+          }),
+          React.createElement(
+            'span',
+            {
+              key: 'loading-text',
+              className: 'ml-3 text-gray-600',
+            },
+            !isHookInitialized
+              ? '훅을 초기화하고 있습니다...'
+              : '스텝을 준비하고 있습니다...'
+          ),
+        ]
+      );
+    }
+
+    // 🔧 유효성 재검증
+    const isValidStep = isValidStepNumber(safeCurrentStep);
+
+    if (!isValidStep) {
+      console.error('❌ [MULTISTEP_DEBUG] safeCurrentStep도 유효하지 않음:', {
+        safeCurrentStep,
+        stepType: typeof safeCurrentStep,
+      });
+
+      return renderStepComponent(getMinStep());
+    }
+
+    try {
+      const stepComponent = renderStepComponent(safeCurrentStep);
+      console.log('✅ [MULTISTEP_DEBUG] 스텝 컴포넌트 렌더링 성공:', {
+        safeCurrentStep,
+      });
+      return stepComponent;
+    } catch (renderError) {
+      const errorMessage =
+        renderError instanceof Error
+          ? renderError.message
+          : 'Unknown rendering error';
+
+      console.error('❌ [MULTISTEP_DEBUG] 스텝 컴포넌트 렌더링 실패:', {
+        safeCurrentStep,
+        errorMessage,
+      });
+
+      return React.createElement(
+        'div',
+        {
+          className: 'p-4 border border-red-300 bg-red-50 rounded-lg',
+        },
+        [
+          React.createElement(
+            'h3',
+            {
+              key: 'error-title',
+              className: 'text-red-700 font-semibold',
+            },
+            '스텝 로드 오류'
+          ),
+          React.createElement(
+            'p',
+            {
+              key: 'error-description',
+              className: 'text-red-600 text-sm mt-2',
+            },
+            `스텝 ${safeCurrentStep} 로드 중 오류가 발생했습니다.`
+          ),
+          React.createElement(
+            'button',
+            {
+              key: 'error-retry',
+              type: 'button',
+              className:
+                'mt-2 px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200',
+              onClick: () => {
+                console.log('🔄 [MULTISTEP_DEBUG] 페이지 새로고침 요청');
+                window.location.reload();
+              },
+            },
+            '페이지 새로고침'
+          ),
+        ]
+      );
+    }
+  }, [safeCurrentStep, isInitialLoading, isHookInitialized]);
+
+  // 🔧 lastTransferResult 처리 (타입단언 제거)
   useEffect(() => {
-    if (!lastTransferResult) return;
-
-    const { operationSuccess, transferredData, operationErrors } =
-      lastTransferResult;
-
-    if (operationSuccess && transferredData) {
-      handleBridgeDataReceived(transferredData);
+    if (!lastTransferResult) {
       return;
     }
 
-    if (!operationSuccess && bridgeDebugEnabled) {
-      console.error('❌ [BRIDGE_DEBUG] 브릿지 데이터 수신 실패:', {
-        operationSuccess,
-        errorCount: operationErrors.length,
-        errors: operationErrors,
-      });
-    }
-  }, [lastTransferResult, handleBridgeDataReceived, bridgeDebugEnabled]);
+    // 🔧 중복 처리 방지 - 타입 가드 사용
+    if (isValidTransferResult(lastTransferResult)) {
+      if (lastTransferResultRef.current === lastTransferResult) {
+        return;
+      }
 
-  useEffect(() => {
-    if (bridgeDebugEnabled && isEditorCompleted && editorCompletedContent) {
-      console.log(
-        '🎉 [BRIDGE_DEBUG] 에디터 데이터 완전 수신 완료 - 멀티스텝 폼 준비됨'
+      lastTransferResultRef.current = lastTransferResult;
+
+      const { operationSuccess, transferredData } = lastTransferResult;
+
+      if (operationSuccess && isValidTransferredData(transferredData)) {
+        console.log('✅ [MULTISTEP_DEBUG] 브릿지 전송 성공, 데이터 처리 시작');
+        processBridgeTransferredData(transferredData);
+      }
+    } else {
+      console.warn(
+        '⚠️ [MULTISTEP_DEBUG] 유효하지 않은 lastTransferResult 형식'
       );
     }
   }, [
-    editorCompletedContent,
-    isEditorCompleted,
-    currentStep,
-    bridgeDebugEnabled,
+    lastTransferResult,
+    processBridgeTransferredData,
+    isValidTransferResult,
+    isValidTransferredData,
   ]);
 
-  console.log('🎯 [MULTISTEP_RENDER] 렌더링 상태:', {
-    isPreviewPanelOpen,
-    deviceType,
-    currentStep,
-    timestamp: new Date().toISOString(),
-  });
+  // 🔧 초기 로딩 중일 때는 간단한 로딩 UI만 표시 (훅 초기화 기반)
+  if (isInitialLoading || !isHookInitialized) {
+    return React.createElement(
+      'div',
+      {
+        className: 'flex items-center justify-center min-h-screen',
+      },
+      [
+        React.createElement(
+          'div',
+          {
+            key: 'main-loading',
+            className: 'text-center',
+          },
+          [
+            React.createElement('div', {
+              key: 'spinner',
+              className:
+                'w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4',
+            }),
+            React.createElement(
+              'p',
+              {
+                key: 'text',
+                className: 'text-gray-600',
+              },
+              !isHookInitialized
+                ? '멀티스텝 폼 훅을 초기화하고 있습니다...'
+                : '멀티스텝 폼을 준비하고 있습니다...'
+            ),
+          ]
+        ),
+      ]
+    );
+  }
 
   return (
     <div className="relative">
@@ -275,19 +640,19 @@ function MultiStepFormContainer(): React.ReactNode {
           <FormProvider {...methods}>
             <form onSubmit={handleSubmit(onSubmit)} className="block w-full">
               <StepNavigationWrapper
-                currentStep={currentStep}
+                currentStep={safeCurrentStep}
                 progressWidth={progressWidth}
-                onStepChange={handleStepChange}
+                onStepChange={handleStepNavigation}
               />
 
-              <StepContentContainer currentStep={currentStep}>
-                {renderCurrentStep()}
+              <StepContentContainer currentStep={safeCurrentStep}>
+                {renderCurrentStepComponent()}
               </StepContentContainer>
 
               <NavigationButtons
-                currentStep={currentStep}
-                onNext={handleNextStep}
-                onPrev={handlePrevStep}
+                currentStep={safeCurrentStep}
+                onNext={handleNextStepNavigation}
+                onPrev={handlePreviousStepNavigation}
               />
             </form>
           </FormProvider>
@@ -300,107 +665,82 @@ function MultiStepFormContainer(): React.ReactNode {
         isOpen={isPreviewPanelOpen}
         deviceType={deviceType}
       />
-
-      {bridgeDebugEnabled ? (
-        <DebugPanel
-          isTransferInProgress={isTransferInProgress}
-          checkCanTransfer={checkCanTransfer}
-          transferErrors={transferErrors}
-          transferWarnings={transferWarnings}
-          isPreviewPanelOpen={isPreviewPanelOpen}
-          onClose={() => setBridgeDebugEnabled(false)}
-        />
-      ) : null}
     </div>
   );
 }
 
+// 🔧 ResponsivePreviewPanelOverlay 컴포넌트 (메모이제이션 강화)
 interface ResponsivePreviewPanelOverlayProps {
   isOpen: boolean;
   deviceType: 'mobile' | 'desktop';
 }
 
-function ResponsivePreviewPanelOverlay({
-  isOpen,
-  deviceType,
-}: ResponsivePreviewPanelOverlayProps): React.ReactNode {
-  const [isVisible, setIsVisible] = useState(false);
-  const [shouldAnimate, setShouldAnimate] = useState(false);
-
-  console.log('🎯 [OVERLAY] 애니메이션 상태:', {
+const ResponsivePreviewPanelOverlay = React.memo(
+  function ResponsivePreviewPanelOverlay({
     isOpen,
-    isVisible,
-    shouldAnimate,
     deviceType,
-    timestamp: new Date().toISOString(),
-  });
+  }: ResponsivePreviewPanelOverlayProps): React.ReactNode {
+    const [isVisible, setIsVisible] = useState<boolean>(false);
+    const [shouldAnimate, setShouldAnimate] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      // 🎬 열기: 확실한 시간 지연으로 첫 번째 열기부터 부드러운 애니메이션 보장
-      setIsVisible(true);
-      console.log('🎬 [ANIMATION] DOM 추가 완료');
+    useEffect(() => {
+      if (isOpen) {
+        setIsVisible(true);
+        const openTimeoutId = setTimeout(() => {
+          setShouldAnimate(true);
+        }, 50);
+        return () => clearTimeout(openTimeoutId);
+      }
 
-      // 🕐 확실한 50ms 지연: 브라우저가 DOM 렌더링과 초기 상태를 완전히 인식하도록 대기
-      const openTimeoutId = setTimeout(() => {
-        setShouldAnimate(true);
-        console.log('🎬 [ANIMATION] 열기 애니메이션 시작 - 50ms 지연 적용');
-      }, 50);
+      setShouldAnimate(false);
+      const closeTimeoutId = setTimeout(() => {
+        setIsVisible(false);
+      }, 1300);
+      return () => clearTimeout(closeTimeoutId);
+    }, [isOpen]);
 
-      return () => clearTimeout(openTimeoutId);
+    if (!isVisible) {
+      return null;
     }
 
-    // 🎬 닫기: 애니메이션 먼저 실행 후 DOM 제거
-    setShouldAnimate(false);
-    console.log('🎬 [ANIMATION] 닫기 애니메이션 시작');
+    const isMobileDevice = deviceType === 'mobile';
 
-    const closeTimeoutId = setTimeout(() => {
-      setIsVisible(false);
-      console.log('🎬 [ANIMATION] DOM 제거 완료');
-    }, 1300);
-
-    return () => clearTimeout(closeTimeoutId);
-  }, [isOpen]);
-
-  if (!isVisible) {
-    console.log('🚫 [OVERLAY] DOM에서 제거됨');
-    return null;
-  }
-
-  const isMobile = deviceType === 'mobile';
-
-  return (
-    <>
-      <BackgroundOverlay isMobile={isMobile} shouldAnimate={shouldAnimate} />
-
-      <div
-        className={`
+    return (
+      <>
+        <BackgroundOverlay
+          isMobile={isMobileDevice}
+          shouldAnimate={shouldAnimate}
+        />
+        <div
+          className={`
           ${
-            isMobile
+            isMobileDevice
               ? `preview-panel-bottom-sheet ${shouldAnimate ? 'is-open' : ''}`
               : `preview-panel-desktop-overlay ${
                   shouldAnimate ? 'is-open' : ''
                 }`
           }
         `}
-      >
-        <PreviewPanelContainer />
-      </div>
-    </>
-  );
-}
+        >
+          <PreviewPanelContainer />
+        </div>
+      </>
+    );
+  }
+);
 
+// 🔧 BackgroundOverlay 컴포넌트 (안정화)
 interface BackgroundOverlayProps {
   isMobile: boolean;
   shouldAnimate: boolean;
 }
 
-function BackgroundOverlay({
+const BackgroundOverlay = React.memo(function BackgroundOverlay({
   isMobile,
   shouldAnimate,
 }: BackgroundOverlayProps): React.ReactNode {
   const handleBackgroundClick = usePreviewPanelStore(
-    (state) => state.handleBackgroundClick
+    useCallback((state) => state?.handleBackgroundClick ?? (() => {}), [])
   );
 
   return (
@@ -419,74 +759,10 @@ function BackgroundOverlay({
       onClick={handleBackgroundClick}
     />
   );
-}
-
-interface DebugPanelProps {
-  isTransferInProgress: boolean;
-  checkCanTransfer: () => boolean;
-  transferErrors?: any[];
-  transferWarnings?: any[];
-  isPreviewPanelOpen: boolean;
-  onClose: () => void;
-}
-
-function DebugPanel({
-  isTransferInProgress,
-  checkCanTransfer,
-  transferErrors = [],
-  transferWarnings = [],
-  isPreviewPanelOpen,
-  onClose,
-}: DebugPanelProps): React.ReactNode {
-  const canTransferStatus = checkCanTransfer();
-
-  return (
-    <div className="fixed z-50 max-w-sm p-4 bg-gray-100 border border-gray-300 rounded debug-panel bottom-4 right-4">
-      <h3 className="mb-2 text-sm font-semibold">🌉 Bridge Status</h3>
-      <div className="space-y-1 text-xs">
-        <div>
-          Status:{' '}
-          <span
-            className={`font-mono ${
-              canTransferStatus ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {isTransferInProgress ? 'transferring' : 'idle'}
-          </span>
-        </div>
-        <div>
-          Can Transfer:{' '}
-          <span
-            className={canTransferStatus ? 'text-green-600' : 'text-red-600'}
-          >
-            {canTransferStatus ? 'Yes' : 'No'}
-          </span>
-        </div>
-        <div>
-          Errors: <span className="text-red-600">{transferErrors.length}</span>
-        </div>
-        <div>
-          Warnings:{' '}
-          <span className="text-yellow-600">{transferWarnings.length}</span>
-        </div>
-        <div>
-          Preview Panel:{' '}
-          <span
-            className={isPreviewPanelOpen ? 'text-green-600' : 'text-red-600'}
-          >
-            {isPreviewPanelOpen ? 'Open' : 'Closed'}
-          </span>
-        </div>
-      </div>
-      <button
-        onClick={onClose}
-        className="px-2 py-1 mt-2 text-xs bg-gray-200 rounded hover:bg-gray-300"
-        type="button"
-      >
-        Close Debug
-      </button>
-    </div>
-  );
-}
+});
 
 export default MultiStepFormContainer;
+
+console.log(
+  '📄 [MULTISTEP_CONTAINER] MultiStepFormContainer 모듈 로드 완료 - 미사용변수제거 및 TypeScript경고해결 완전버전'
+);

@@ -1,3 +1,5 @@
+// src/components/multiStepForm/store/multiStepForm/multiStepFormGetters.ts
+
 import { MultiStepFormState } from './initialMultiStepFormState';
 import { FormValues } from '../../types/formTypes';
 import { StepNumber } from '../../types/stepTypes';
@@ -14,16 +16,11 @@ export interface MultiStepFormGetters {
 /**
  * 멀티스텝 폼 Getter 함수들을 생성하는 팩토리 함수
  *
- * 변경사항 없음:
- * - 이 파일은 MIN_STEP, MAX_STEP 등을 직접 사용하지 않음
- * - 단순히 Zustand 상태값을 가져오는 함수들만 제공
- * - 초기화 순서 문제의 영향을 받지 않음
- * - 다른 파일들의 수정사항과 자동으로 호환됨
- *
- * 작동 방식:
- * 1. Zustand의 get 함수를 매개변수로 받음
- * 2. 각 상태값에 접근하는 getter 함수들을 반환
- * 3. 함수 호출 시점에 현재 상태값을 안전하게 가져옴
+ * 변경사항:
+ * - 타입단언 제거
+ * - 구조분해할당과 fallback 처리 추가
+ * - 안전한 상태 접근 방법 개선
+ * - 디버깅 로그 강화
  *
  * @param get Zustand 스토어의 get 함수
  * @returns MultiStepFormGetters 객체
@@ -31,74 +28,276 @@ export interface MultiStepFormGetters {
 export const createMultiStepFormGetters = (
   get: () => MultiStepFormState
 ): MultiStepFormGetters => {
-  console.log('🔧 MultiStepFormGetters 생성 중... (일관성 유지)');
+  console.log('🔧 [GETTERS] MultiStepFormGetters 생성 중...');
 
   return {
     /**
      * 현재 폼 값들을 가져오는 함수
-     * 이유: 모든 폼 필드의 현재 값들을 한 번에 조회할 때 사용
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getFormValues: () => {
-      const formValues = get().formValues;
-      console.log('📋 getFormValues 호출됨:', formValues);
-      return formValues;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn('⚠️ [GETTERS] 현재 상태가 없음, 기본값 반환');
+          return {
+            userImage: '',
+            nickname: '',
+            emailPrefix: '',
+            emailDomain: '',
+            bio: '',
+            title: '',
+            description: '',
+            tags: '',
+            content: '',
+            media: [],
+            mainImage: null,
+            sliderImages: [],
+            editorCompletedContent: '',
+            isEditorCompleted: false,
+          };
+        }
+
+        const { formValues } = currentState;
+
+        // formValues가 undefined인 경우 fallback 처리
+        if (!formValues) {
+          console.warn('⚠️ [GETTERS] formValues가 없음, 기본값 반환');
+          return {
+            userImage: '',
+            nickname: '',
+            emailPrefix: '',
+            emailDomain: '',
+            bio: '',
+            title: '',
+            description: '',
+            tags: '',
+            content: '',
+            media: [],
+            mainImage: null,
+            sliderImages: [],
+            editorCompletedContent: '',
+            isEditorCompleted: false,
+          };
+        }
+
+        console.log('📋 [GETTERS] getFormValues 호출됨:', {
+          hasUserImage: !!formValues.userImage,
+          nickname: formValues.nickname || '없음',
+          title: formValues.title || '없음',
+          mediaCount: Array.isArray(formValues.media)
+            ? formValues.media.length
+            : 0,
+          timestamp: new Date().toISOString(),
+        });
+
+        return formValues;
+      } catch (error) {
+        console.error('❌ [GETTERS] getFormValues 오류:', error);
+
+        // 에러 발생 시 기본값 반환
+        return {
+          userImage: '',
+          nickname: '',
+          emailPrefix: '',
+          emailDomain: '',
+          bio: '',
+          title: '',
+          description: '',
+          tags: '',
+          content: '',
+          media: [],
+          mainImage: null,
+          sliderImages: [],
+          editorCompletedContent: '',
+          isEditorCompleted: false,
+        };
+      }
     },
 
     /**
      * 현재 스텝 번호를 가져오는 함수
-     * 이유: 현재 진행 중인 스텝을 확인할 때 사용
-     *
-     * 참고: 이 값은 이제 STEP_CONFIG 기반으로 안전하게 계산된 값
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getCurrentStep: () => {
-      const currentStep = get().currentStep;
-      console.log('📍 getCurrentStep 호출됨:', currentStep);
-      return currentStep;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn('⚠️ [GETTERS] 현재 상태가 없음, 기본 스텝 1 반환');
+          return 1;
+        }
+
+        const { currentStep } = currentState;
+
+        // currentStep이 유효한 값인지 확인
+        if (
+          typeof currentStep !== 'number' ||
+          currentStep < 1 ||
+          currentStep > 5
+        ) {
+          console.warn(
+            '⚠️ [GETTERS] 유효하지 않은 스텝 번호, 기본 스텝 1 반환:',
+            currentStep
+          );
+          return 1;
+        }
+
+        console.log('📍 [GETTERS] getCurrentStep 호출됨:', {
+          currentStep,
+          timestamp: new Date().toISOString(),
+        });
+
+        return currentStep;
+      } catch (error) {
+        console.error('❌ [GETTERS] getCurrentStep 오류:', error);
+        return 1; // 에러 발생 시 기본 스텝 반환
+      }
     },
 
     /**
      * 현재 진행률 퍼센트를 가져오는 함수
-     * 이유: 프로그레스 바 UI 업데이트에 사용
-     *
-     * 참고: 이 값은 이제 STEP_CONFIG 기반으로 정확하게 계산된 값
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getProgressWidth: () => {
-      const progressWidth = get().progressWidth;
-      console.log('📊 getProgressWidth 호출됨:', progressWidth);
-      return progressWidth;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn('⚠️ [GETTERS] 현재 상태가 없음, 기본 진행률 0 반환');
+          return 0;
+        }
+
+        const { progressWidth } = currentState;
+
+        // progressWidth가 유효한 값인지 확인
+        if (
+          typeof progressWidth !== 'number' ||
+          progressWidth < 0 ||
+          progressWidth > 100
+        ) {
+          console.warn(
+            '⚠️ [GETTERS] 유효하지 않은 진행률, 기본값 0 반환:',
+            progressWidth
+          );
+          return 0;
+        }
+
+        console.log('📊 [GETTERS] getProgressWidth 호출됨:', {
+          progressWidth,
+          timestamp: new Date().toISOString(),
+        });
+
+        return progressWidth;
+      } catch (error) {
+        console.error('❌ [GETTERS] getProgressWidth 오류:', error);
+        return 0; // 에러 발생 시 기본값 반환
+      }
     },
 
     /**
      * 미리보기 패널 표시 상태를 가져오는 함수
-     * 이유: 미리보기 패널의 열림/닫힘 상태 확인에 사용
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getShowPreview: () => {
-      const showPreview = get().showPreview;
-      console.log('👀 getShowPreview 호출됨:', showPreview);
-      return showPreview;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn(
+            '⚠️ [GETTERS] 현재 상태가 없음, 미리보기 상태 false 반환'
+          );
+          return false;
+        }
+
+        const { showPreview } = currentState;
+
+        // showPreview가 boolean이 아닌 경우 fallback 처리
+        const validShowPreview =
+          typeof showPreview === 'boolean' ? showPreview : false;
+
+        console.log('👀 [GETTERS] getShowPreview 호출됨:', {
+          showPreview: validShowPreview,
+          timestamp: new Date().toISOString(),
+        });
+
+        return validShowPreview;
+      } catch (error) {
+        console.error('❌ [GETTERS] getShowPreview 오류:', error);
+        return false; // 에러 발생 시 기본값 반환
+      }
     },
 
     /**
      * 에디터 완성 내용을 가져오는 함수
-     * 이유: 모듈화 에디터에서 작성된 최종 내용 조회에 사용
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getEditorCompletedContent: () => {
-      const content = get().editorCompletedContent;
-      console.log(
-        '📝 getEditorCompletedContent 호출됨:',
-        content?.slice(0, 50) + '...'
-      );
-      return content;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn('⚠️ [GETTERS] 현재 상태가 없음, 빈 에디터 내용 반환');
+          return '';
+        }
+
+        const { editorCompletedContent } = currentState;
+
+        // editorCompletedContent가 문자열이 아닌 경우 fallback 처리
+        const validContent =
+          typeof editorCompletedContent === 'string'
+            ? editorCompletedContent
+            : '';
+
+        console.log('📝 [GETTERS] getEditorCompletedContent 호출됨:', {
+          contentLength: validContent.length,
+          hasContent: validContent.length > 0,
+          preview:
+            validContent.slice(0, 50) + (validContent.length > 50 ? '...' : ''),
+          timestamp: new Date().toISOString(),
+        });
+
+        return validContent;
+      } catch (error) {
+        console.error('❌ [GETTERS] getEditorCompletedContent 오류:', error);
+        return ''; // 에러 발생 시 빈 문자열 반환
+      }
     },
 
     /**
      * 에디터 완료 상태를 가져오는 함수
-     * 이유: 에디터 작업이 완료되었는지 확인할 때 사용
+     * 수정사항: 구조분해할당과 fallback 추가
      */
     getIsEditorCompleted: () => {
-      const isCompleted = get().isEditorCompleted;
-      console.log('✅ getIsEditorCompleted 호출됨:', isCompleted);
-      return isCompleted;
+      try {
+        const currentState = get();
+
+        if (!currentState) {
+          console.warn(
+            '⚠️ [GETTERS] 현재 상태가 없음, 에디터 완료 상태 false 반환'
+          );
+          return false;
+        }
+
+        const { isEditorCompleted } = currentState;
+
+        // isEditorCompleted가 boolean이 아닌 경우 fallback 처리
+        const validIsCompleted =
+          typeof isEditorCompleted === 'boolean' ? isEditorCompleted : false;
+
+        console.log('✅ [GETTERS] getIsEditorCompleted 호출됨:', {
+          isCompleted: validIsCompleted,
+          timestamp: new Date().toISOString(),
+        });
+
+        return validIsCompleted;
+      } catch (error) {
+        console.error('❌ [GETTERS] getIsEditorCompleted 오류:', error);
+        return false; // 에러 발생 시 기본값 반환
+      }
     },
   };
 };
+
+console.log('📄 [GETTERS] multiStepFormGetters 모듈 로드 완료');
