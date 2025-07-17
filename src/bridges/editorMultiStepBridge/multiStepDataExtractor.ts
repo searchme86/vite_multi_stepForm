@@ -22,10 +22,6 @@ const createDefaultFormValues = (): FormValues => ({
   isEditorCompleted: false,
 });
 
-const isFormValues = (candidate: unknown): candidate is FormValues => {
-  return candidate !== null && typeof candidate === 'object';
-};
-
 const isValidString = (value: unknown): value is string => {
   return typeof value === 'string';
 };
@@ -54,17 +50,130 @@ const getFormValueSafely = <K extends keyof FormValues>(
   key: K,
   defaultValue: NonNullable<FormValues[K]>
 ): NonNullable<FormValues[K]> => {
-  const value = formValues[key];
+  try {
+    const value = formValues[key];
 
-  if (typeof defaultValue === 'string' && isValidString(value)) {
-    return value;
-  }
-  if (typeof defaultValue === 'boolean' && isValidBoolean(value)) {
-    return value;
-  }
+    if (typeof defaultValue === 'string' && isValidString(value)) {
+      return value;
+    }
+    if (typeof defaultValue === 'boolean' && isValidBoolean(value)) {
+      return value;
+    }
+    if (Array.isArray(defaultValue) && Array.isArray(value)) {
+      return value as NonNullable<FormValues[K]>;
+    }
 
-  return defaultValue;
+    return defaultValue;
+  } catch (error) {
+    console.warn(
+      `⚠️ [MULTISTEP_EXTRACTOR] ${String(key)} 값 추출 실패:`,
+      error
+    );
+    return defaultValue;
+  }
 };
+
+// 🚨 핵심 추가: FormValues를 안전하게 정규화하는 함수
+const normalizeFormValues = (rawFormValues: unknown): FormValues => {
+  console.log('🔄 [MULTISTEP_EXTRACTOR] FormValues 정규화 시작');
+
+  const baseFormValues = createDefaultFormValues();
+
+  // rawFormValues가 객체가 아닌 경우 기본값 반환
+  if (
+    !rawFormValues ||
+    typeof rawFormValues !== 'object' ||
+    Array.isArray(rawFormValues)
+  ) {
+    console.log('✅ [MULTISTEP_EXTRACTOR] 원본이 유효하지 않음, 기본값 반환');
+    return baseFormValues;
+  }
+
+  const sourceObject = rawFormValues as Record<string, unknown>;
+
+  try {
+    // 각 필드를 안전하게 복사
+    const stringFields: Array<keyof FormValues> = [
+      'userImage',
+      'nickname',
+      'emailPrefix',
+      'emailDomain',
+      'bio',
+      'title',
+      'description',
+      'tags',
+      'content',
+      'editorCompletedContent',
+    ];
+
+    stringFields.forEach((field) => {
+      try {
+        if (field in sourceObject) {
+          const value = sourceObject[field];
+          if (typeof value === 'string') {
+            (baseFormValues as any)[field] = value;
+          }
+        }
+      } catch (fieldError) {
+        console.debug(
+          `🔍 [MULTISTEP_EXTRACTOR] ${String(field)} 필드 복사 실패:`,
+          fieldError
+        );
+      }
+    });
+
+    // boolean 필드 처리
+    if ('isEditorCompleted' in sourceObject) {
+      const value = sourceObject.isEditorCompleted;
+      if (typeof value === 'boolean') {
+        baseFormValues.isEditorCompleted = value;
+      }
+    }
+
+    // 배열 필드들 처리
+    if ('media' in sourceObject && Array.isArray(sourceObject.media)) {
+      baseFormValues.media = sourceObject.media.filter(
+        (item) => typeof item === 'string'
+      );
+    }
+
+    if (
+      'sliderImages' in sourceObject &&
+      Array.isArray(sourceObject.sliderImages)
+    ) {
+      baseFormValues.sliderImages = sourceObject.sliderImages.filter(
+        (item) => typeof item === 'string'
+      );
+    }
+
+    // mainImage 필드 처리
+    if ('mainImage' in sourceObject) {
+      const value = sourceObject.mainImage;
+      if (value === null || typeof value === 'string') {
+        baseFormValues.mainImage = value;
+      }
+    }
+  } catch (overallError) {
+    console.warn(
+      '⚠️ [MULTISTEP_EXTRACTOR] FormValues 정규화 중 오류:',
+      overallError
+    );
+  }
+
+  console.log('✅ [MULTISTEP_EXTRACTOR] FormValues 정규화 완료');
+  return baseFormValues;
+};
+
+// 🔧 multiStepDataUpdater.ts의 사용하지 않는 변수 제거
+// formObj 변수 사용하지 않음 경고 해결을 위해 아래와 같이 수정:
+/*
+기존 코드:
+const formObj = value;
+// formObj를 사용하지 않음
+
+수정된 코드:
+// formObj 변수 자체를 제거하고 직접 검증 로직 사용
+*/
 
 export const createMultiStepDataExtractor = () => {
   // 🔧 폼 메타데이터 생성 함수 - bridgeDataTypes와 호환되는 타입 사용
@@ -97,19 +206,31 @@ export const createMultiStepDataExtractor = () => {
         return null;
       }
 
-      const {
-        formValues,
-        currentStep,
-        progressWidth = 0,
-        showPreview = false,
-        editorCompletedContent = '',
-        isEditorCompleted = false,
-      } = formState;
+      // 🚨 핵심 수정: Reflect.get()을 사용하여 안전하게 속성 접근
+      const rawFormValues = Reflect.get(formState, 'formValues');
+      const currentStep = Reflect.get(formState, 'currentStep') ?? 1;
+      const progressWidth = Reflect.get(formState, 'progressWidth') ?? 0;
+      const showPreview = Reflect.get(formState, 'showPreview') ?? false;
+      const editorCompletedContent =
+        Reflect.get(formState, 'editorCompletedContent') ?? '';
+      const isEditorCompleted =
+        Reflect.get(formState, 'isEditorCompleted') ?? false;
 
-      // 🎯 타입 가드를 통한 안전한 타입 체크
-      const validatedFormValues = isFormValues(formValues)
-        ? formValues
-        : createDefaultFormValues();
+      console.log('🔍 [MULTISTEP_EXTRACTOR] 추출된 원시 값들:', {
+        hasFormValues: Boolean(rawFormValues),
+        currentStep,
+        progressWidth,
+        showPreview,
+        editorCompletedContentLength:
+          typeof editorCompletedContent === 'string'
+            ? editorCompletedContent.length
+            : 0,
+        isEditorCompleted,
+      });
+
+      // 🚨 핵심 변경: 타입 가드 대신 정규화 함수 사용
+      console.log('🔄 [MULTISTEP_EXTRACTOR] FormValues 정규화 처리');
+      const validatedFormValues = normalizeFormValues(rawFormValues);
 
       // 🔧 formMetadata 생성 - 구체적인 타입 전달
       const editorContentLength = getFormValueSafely(
@@ -119,24 +240,29 @@ export const createMultiStepDataExtractor = () => {
       ).length;
 
       const formMetadata = createFormMetadata(
-        currentStep,
+        typeof currentStep === 'number' ? currentStep : 1,
         validatedFormValues,
         editorContentLength
       );
 
       const snapshot: MultiStepFormSnapshotForBridge = {
         formValues: validatedFormValues,
-        formCurrentStep: currentStep,
-        formProgressWidth: progressWidth,
-        formShowPreview: showPreview,
-        formEditorCompletedContent: editorCompletedContent,
-        formIsEditorCompleted: isEditorCompleted,
+        formCurrentStep: typeof currentStep === 'number' ? currentStep : 1,
+        formProgressWidth:
+          typeof progressWidth === 'number' ? progressWidth : 0,
+        formShowPreview: typeof showPreview === 'boolean' ? showPreview : false,
+        formEditorCompletedContent:
+          typeof editorCompletedContent === 'string'
+            ? editorCompletedContent
+            : '',
+        formIsEditorCompleted:
+          typeof isEditorCompleted === 'boolean' ? isEditorCompleted : false,
         snapshotTimestamp: Date.now(),
         formMetadata, // ✅ 이제 타입이 일치함
       };
 
       console.log('✅ [MULTISTEP_EXTRACTOR] 데이터 추출 완료:', {
-        currentStep,
+        currentStep: snapshot.formCurrentStep,
         hasFormValues: Object.keys(validatedFormValues).length > 0,
         editorContentLength: getFormValueSafely(
           validatedFormValues,
@@ -161,7 +287,7 @@ export const createMultiStepDataExtractor = () => {
   const validateMultiStepData = (
     data: MultiStepFormSnapshotForBridge | null
   ): boolean => {
-    console.log('🔍 [MULTISTEP_EXTRACTOR] 데이터 검증');
+    console.log('🔍 [MULTISTEP_EXTRACTOR] 데이터 검증 (관대한 모드)');
 
     if (!data || typeof data !== 'object') {
       return false;
@@ -171,9 +297,20 @@ export const createMultiStepDataExtractor = () => {
       data.formValues && typeof data.formValues === 'object';
     const hasCurrentStep = typeof data.formCurrentStep === 'number';
     const hasTimestamp = typeof data.snapshotTimestamp === 'number';
-    const hasMetadata = data.formMetadata instanceof Map; // 🔧 formMetadata 검증 추가
+    const hasMetadata = data.formMetadata instanceof Map;
 
-    return hasFormValues && hasCurrentStep && hasTimestamp && hasMetadata;
+    const isBasicallyValid =
+      hasFormValues && hasCurrentStep && hasTimestamp && hasMetadata;
+
+    console.log('📊 [MULTISTEP_EXTRACTOR] 검증 결과:', {
+      hasFormValues,
+      hasCurrentStep,
+      hasTimestamp,
+      hasMetadata,
+      isBasicallyValid,
+    });
+
+    return isBasicallyValid;
   };
 
   const getEditorContentFromMultiStep = (): {
@@ -192,11 +329,8 @@ export const createMultiStepDataExtractor = () => {
 
       const { formValues: rawFormValues } = snapshot;
 
-      // 🎯 타입 안전한 FormValues 보장
-      const formValues: FormValues = {
-        ...createDefaultFormValues(),
-        ...rawFormValues,
-      };
+      // 🚨 핵심 변경: 정규화된 FormValues 사용
+      const formValues: FormValues = normalizeFormValues(rawFormValues);
 
       // 🎯 타입 가드를 통한 안전한 속성 접근
       const content = getFormValueSafely(
@@ -275,7 +409,10 @@ export const createMultiStepDataExtractor = () => {
         };
       }
 
-      const { formValues } = snapshot;
+      const { formValues: rawFormValues } = snapshot;
+
+      // 🚨 핵심 변경: 정규화된 FormValues 사용
+      const formValues = normalizeFormValues(rawFormValues);
 
       // 🎯 실제 FormValues에 존재하는 필드만 포함
       const requiredFields: Array<keyof FormValues> = [
@@ -294,8 +431,16 @@ export const createMultiStepDataExtractor = () => {
 
       // 🔧 타입 단언 제거 - 안전한 속성 접근
       const missingFields = requiredFields.filter((field) => {
-        const value = formValues[field];
-        return !value || (isValidString(value) && value.trim().length === 0);
+        try {
+          const value = formValues[field];
+          return !value || (isValidString(value) && value.trim().length === 0);
+        } catch (fieldError) {
+          console.debug(
+            `🔍 [MULTISTEP_EXTRACTOR] ${String(field)} 필드 검사 실패:`,
+            fieldError
+          );
+          return true; // 에러가 나면 missing으로 간주
+        }
       });
 
       const completedFields = requiredFields.length - missingFields.length;
@@ -331,20 +476,33 @@ export const createMultiStepDataExtractor = () => {
   ): candidate is MultiStepFormSnapshotForBridge => {
     if (!candidate || typeof candidate !== 'object') return false;
 
-    return (
+    const hasRequiredProperties =
       'formValues' in candidate &&
       'formCurrentStep' in candidate &&
       'snapshotTimestamp' in candidate &&
-      'formMetadata' in candidate &&
-      isValidNumber(Reflect.get(candidate, 'formCurrentStep')) &&
-      isValidNumber(Reflect.get(candidate, 'snapshotTimestamp')) &&
-      Reflect.get(candidate, 'formMetadata') instanceof Map
+      'formMetadata' in candidate;
+
+    if (!hasRequiredProperties) return false;
+
+    const currentStepValue = Reflect.get(candidate, 'formCurrentStep');
+    const timestampValue = Reflect.get(candidate, 'snapshotTimestamp');
+    const metadataValue = Reflect.get(candidate, 'formMetadata');
+
+    return (
+      isValidNumber(currentStepValue) &&
+      isValidNumber(timestampValue) &&
+      metadataValue instanceof Map
     );
   };
 
   const getValidatedSnapshot = (): MultiStepFormSnapshotForBridge | null => {
-    const snapshot = extractMultiStepData();
-    return isValidFormSnapshot(snapshot) ? snapshot : null;
+    try {
+      const snapshot = extractMultiStepData();
+      return isValidFormSnapshot(snapshot) ? snapshot : null;
+    } catch (error) {
+      console.error('❌ [MULTISTEP_EXTRACTOR] 검증된 스냅샷 추출 실패:', error);
+      return null;
+    }
   };
 
   return {

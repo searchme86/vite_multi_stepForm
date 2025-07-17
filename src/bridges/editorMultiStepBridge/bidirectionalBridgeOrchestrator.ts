@@ -453,15 +453,42 @@ function createBridgeTransferModule(
           throw new Error(`변환 실패: ${transformationErrors.join(', ')}`);
         }
 
-        const updateOperationSuccess =
-          await multiStepStateUpdater.performCompleteStateUpdate(
-            transformationResult
+        // 🚨 핵심 수정: MultiStep 상태 업데이트 에러 처리 강화
+        console.log('🔄 [ORCHESTRATOR] MultiStep 상태 업데이트 시작');
+
+        let updateOperationSuccess = false;
+        let updateErrorDetails = '';
+
+        try {
+          updateOperationSuccess =
+            await multiStepStateUpdater.performCompleteStateUpdate(
+              transformationResult
+            );
+        } catch (updateError) {
+          const errorMessage =
+            updateError instanceof Error
+              ? updateError.message
+              : String(updateError);
+          updateErrorDetails = `MultiStep 업데이트 실행 중 예외: ${errorMessage}`;
+          console.error(
+            '❌ [ORCHESTRATOR] MultiStep 업데이트 예외:',
+            updateError
           );
+          throw new Error(updateErrorDetails);
+        }
 
         // Early Return: 업데이트 실패
         if (!updateOperationSuccess) {
-          throw new Error('MultiStep 상태 업데이트 실패');
+          updateErrorDetails =
+            'MultiStep 상태 업데이트가 false를 반환했습니다. 스토어 상태, formValues 검증, 또는 업데이트 함수에 문제가 있을 수 있습니다.';
+          console.error(
+            '❌ [ORCHESTRATOR] MultiStep 업데이트 실패:',
+            updateErrorDetails
+          );
+          throw new Error(updateErrorDetails);
         }
+
+        console.log('✅ [ORCHESTRATOR] MultiStep 상태 업데이트 성공');
 
         const operationEndTime = performance.now();
         const operationDuration = operationEndTime - operationStartTime;
@@ -499,10 +526,19 @@ function createBridgeTransferModule(
     const operationEndTime = performance.now();
     const operationDuration = operationEndTime - operationStartTime;
 
+    // 🚨 핵심 수정: 더 구체적인 에러 메시지 제공
+    let detailedErrorMessage = 'Bridge 전송 실패';
+    if (bridgeTransferError instanceof Error) {
+      detailedErrorMessage = `Bridge 전송 실패: ${bridgeTransferError.message}`;
+    } else if (typeof bridgeTransferError === 'string') {
+      detailedErrorMessage = `Bridge 전송 실패: ${bridgeTransferError}`;
+    }
+
     console.error('❌ [ORCHESTRATOR] Bridge 전송 실패:', {
       operationId,
       error: bridgeTransferError,
       duration: `${operationDuration.toFixed(2)}ms`,
+      detailedMessage: detailedErrorMessage,
     });
 
     const bridgeErrorHandler = createBridgeErrorHandler();

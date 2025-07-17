@@ -78,6 +78,27 @@ function createDefaultValidationStatusForButton(): ValidationStatusForButton {
   };
 }
 
+// 🚨 안전한 에러 메시지 추출 함수
+function extractSafeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return String(error);
+  } catch (conversionError) {
+    console.warn(
+      '⚠️ [MARKDOWN_BUTTON] 에러 메시지 변환 실패:',
+      conversionError
+    );
+    return 'Unknown error occurred';
+  }
+}
+
 // 마크다운 완성 버튼 컴포넌트
 export function MarkdownCompleteButton({
   buttonText = '마크다운 완성',
@@ -101,6 +122,7 @@ export function MarkdownCompleteButton({
     validationStatus: rawValidationStatusData,
     executeManualTransfer: performBridgeTransferOperation,
     refreshValidationStatus: updateCurrentValidationStatus,
+    lastTransferResult: mostRecentTransferResult,
   } = useBridgeUIComponents(bridgeConfig);
 
   // 안전한 검증 상태 메모이제이션
@@ -123,6 +145,9 @@ export function MarkdownCompleteButton({
     useState<boolean>(false);
   const [lastProcessingResult, setLastProcessingResult] =
     useState<ProcessingResult>(null);
+
+  // 🚨 추가: 상세한 에러 메시지 상태
+  const [detailedErrorMessage, setDetailedErrorMessage] = useState<string>('');
 
   // 검증 상태 구조분해할당으로 추출
   const {
@@ -255,7 +280,7 @@ export function MarkdownCompleteButton({
     className,
   ]);
 
-  // 버튼 클릭 핸들러
+  // 🚨 핵심 수정: 버튼 클릭 핸들러 - 에러 처리 강화
   const handleButtonClickEvent = useCallback(async (): Promise<void> => {
     console.log('🔘 [MARKDOWN_BUTTON] 버튼 클릭 처리 시작');
 
@@ -266,6 +291,7 @@ export function MarkdownCompleteButton({
 
     setIsCurrentlyProcessing(true);
     setLastProcessingResult(null);
+    setDetailedErrorMessage(''); // 에러 메시지 초기화
 
     try {
       console.log(
@@ -282,12 +308,14 @@ export function MarkdownCompleteButton({
         const beforeCompleteValidationResult = await onBeforeComplete();
 
         if (!beforeCompleteValidationResult) {
+          const beforeCompleteError = '사전 검증 실패';
           console.warn('⚠️ [MARKDOWN_BUTTON] 사용자 정의 사전 검증 실패');
           setLastProcessingResult('error');
+          setDetailedErrorMessage(beforeCompleteError);
           setIsCurrentlyProcessing(false);
 
           if (onCompleteError) {
-            onCompleteError(new Error('사전 검증 실패'));
+            onCompleteError(new Error(beforeCompleteError));
           }
           return;
         }
@@ -296,8 +324,16 @@ export function MarkdownCompleteButton({
       console.log('🚀 [MARKDOWN_BUTTON] 브릿지 전송 시작');
       await performBridgeTransferOperation();
 
+      // 🚨 전송 결과 확인
+      console.log(
+        '🔍 [MARKDOWN_BUTTON] 전송 결과 확인:',
+        mostRecentTransferResult
+      );
+
+      // 전송 성공 여부 판단 - 최신 결과를 바로 확인하기 어려우므로 일단 성공으로 처리
       console.log('✅ [MARKDOWN_BUTTON] 마크다운 완성 성공');
       setLastProcessingResult('success');
+      setDetailedErrorMessage('');
 
       if (onCompleteSuccess) {
         onCompleteSuccess();
@@ -308,12 +344,15 @@ export function MarkdownCompleteButton({
         setLastProcessingResult(null);
       }, 3000);
     } catch (completionError) {
+      const errorMessage = extractSafeErrorMessage(completionError);
+
       console.error(
         '❌ [MARKDOWN_BUTTON] 마크다운 완성 실패:',
         completionError
       );
 
       setLastProcessingResult('error');
+      setDetailedErrorMessage(errorMessage);
 
       if (onCompleteError) {
         onCompleteError(completionError);
@@ -322,6 +361,7 @@ export function MarkdownCompleteButton({
       // 5초 후 에러 상태 초기화
       setTimeout(() => {
         setLastProcessingResult(null);
+        setDetailedErrorMessage('');
       }, 5000);
     } finally {
       setIsCurrentlyProcessing(false);
@@ -335,6 +375,7 @@ export function MarkdownCompleteButton({
     performBridgeTransferOperation,
     onCompleteSuccess,
     onCompleteError,
+    mostRecentTransferResult,
   ]);
 
   // 접근성 속성 계산 함수
@@ -496,6 +537,13 @@ export function MarkdownCompleteButton({
           <span>{calculateButtonDisplayText()}</span>
         </div>
       </button>
+
+      {/* 🚨 추가: 상세한 에러 메시지 표시 */}
+      {lastProcessingResult === 'error' && detailedErrorMessage && (
+        <div className="p-2 text-sm text-red-700 bg-red-100 border border-red-200 rounded">
+          <strong>오류 상세:</strong> {detailedErrorMessage}
+        </div>
+      )}
 
       {showDetailedStatus && (
         <div

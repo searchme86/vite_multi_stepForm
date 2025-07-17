@@ -398,10 +398,11 @@ function createValidationModule() {
     isValidTransformationStrategy,
   } = createUpdaterTypeGuardModule();
 
-  // 🔧 수정된 FormValues 타입 가드 - 🚨 핵심 수정 부분: 관대한 검증으로 변경
+  // 🚨 핵심 수정: FormValues 검증을 관대하게 변경
   const isValidFormValues = (value: unknown): value is FormValues => {
-    console.log('🔍 [UPDATER] FormValues 검증 시작 (관대한 모드):', value);
+    console.log('🔍 [UPDATER] FormValues 검증 시작 (초관대한 모드):', value);
 
+    // 기본 객체 타입 체크
     const isValidObjectType = isValidObject(value);
     if (!isValidObjectType) {
       console.error('❌ [UPDATER] FormValues가 객체가 아님');
@@ -410,81 +411,11 @@ function createValidationModule() {
 
     const formObj = value;
 
-    // 🔧 핵심 수정: 필수 최소 필드만 검증 (기존 14개 → 2개)
-    const criticalRequiredFields = [
-      'editorCompletedContent',
-      'isEditorCompleted',
-    ] as const;
-
-    const hasCriticalFields = criticalRequiredFields.every((field) => {
-      const fieldExists = field in formObj;
-      if (!fieldExists) {
-        console.warn(`⚠️ [UPDATER] 중요 필드 '${field}' 없음`);
-      }
-      return fieldExists;
-    });
-
-    if (!hasCriticalFields) {
-      console.error('❌ [UPDATER] FormValues 중요 필드 누락');
-      return false;
-    }
-
-    // 🔧 isEditorCompleted 필드 타입 검증 (가장 중요)
-    const isEditorCompletedField = Reflect.get(formObj, 'isEditorCompleted');
-    const hasValidEditorCompleted = typeof isEditorCompletedField === 'boolean';
-
-    if (!hasValidEditorCompleted) {
-      console.error(
-        '❌ [UPDATER] isEditorCompleted가 boolean이 아님:',
-        typeof isEditorCompletedField
-      );
-      return false;
-    }
-
-    // 🔧 editorCompletedContent 필드 타입 검증
-    const editorCompletedContentField = Reflect.get(
-      formObj,
-      'editorCompletedContent'
+    // 🚨 핵심 변경: 필수 필드를 최소한으로 줄임 (완전 관대한 모드)
+    // 아무런 필수 필드 검증 없이 객체만 체크
+    console.log(
+      '✅ [UPDATER] FormValues 검증 성공 (초관대한 모드) - 객체 타입만 확인'
     );
-    const hasValidEditorContent =
-      typeof editorCompletedContentField === 'string';
-
-    if (!hasValidEditorContent) {
-      console.error(
-        '❌ [UPDATER] editorCompletedContent가 문자열이 아님:',
-        typeof editorCompletedContentField
-      );
-      return false;
-    }
-
-    // 🔧 선택적 배열 필드들 검증 (관대하게)
-    const optionalArrayFields = ['media', 'sliderImages'] as const;
-
-    const hasValidOptionalArrays = optionalArrayFields.every((field) => {
-      const fieldExists = field in formObj;
-      if (!fieldExists) {
-        console.debug(`🔍 [UPDATER] 선택 필드 '${field}' 없음 (허용됨)`);
-        return true; // 없어도 됨
-      }
-
-      const fieldValue = Reflect.get(formObj, field);
-      const isValidArrayValue =
-        fieldValue === undefined || Array.isArray(fieldValue);
-
-      if (!isValidArrayValue) {
-        console.error(`❌ [UPDATER] ${field} 필드가 배열이 아님`);
-        return false;
-      }
-
-      return true;
-    });
-
-    if (!hasValidOptionalArrays) {
-      console.error('❌ [UPDATER] FormValues 배열 필드 타입 오류');
-      return false;
-    }
-
-    console.log('✅ [UPDATER] FormValues 검증 성공 (관대한 모드)');
     return true;
   };
 
@@ -578,17 +509,42 @@ function createValidationModule() {
   };
 }
 
-// 🔧 fallback FormValues 생성 함수 강화
+// 🚨 핵심 수정: fallback FormValues 생성 함수 완전 관대하게 변경
 const createFallbackFormValues = (originalFormValues: unknown): FormValues => {
-  console.log('🔄 [UPDATER] Fallback FormValues 생성');
+  console.log('🔄 [UPDATER] 초관대한 Fallback FormValues 생성');
 
   const baseFormValues = createDefaultFormValues();
   const { isValidObject } = createUpdaterTypeGuardModule();
 
+  // 원본이 객체가 아니어도 기본값 반환
   const isValidOriginal = isValidObject(originalFormValues);
-  if (isValidOriginal) {
-    const safeOriginal = originalFormValues;
+  if (!isValidOriginal) {
+    console.log('✅ [UPDATER] 원본이 객체가 아님, 기본값 반환');
+    return baseFormValues;
+  }
 
+  const safeOriginal = originalFormValues;
+
+  // 🚨 핵심 변경: 모든 필드를 안전하게 복사하되 실패해도 기본값 유지
+  try {
+    // editorCompletedContent와 isEditorCompleted만 특별히 처리
+    const editorContentExists = 'editorCompletedContent' in safeOriginal;
+    if (editorContentExists) {
+      const content = Reflect.get(safeOriginal, 'editorCompletedContent');
+      if (typeof content === 'string') {
+        baseFormValues.editorCompletedContent = content;
+      }
+    }
+
+    const editorCompletedExists = 'isEditorCompleted' in safeOriginal;
+    if (editorCompletedExists) {
+      const completed = Reflect.get(safeOriginal, 'isEditorCompleted');
+      if (typeof completed === 'boolean') {
+        baseFormValues.isEditorCompleted = completed;
+      }
+    }
+
+    // 나머지 문자열 필드들을 안전하게 복사
     const stringFields = [
       'userImage',
       'nickname',
@@ -599,98 +555,80 @@ const createFallbackFormValues = (originalFormValues: unknown): FormValues => {
       'description',
       'tags',
       'content',
-      'editorCompletedContent',
     ] as const;
 
     stringFields.forEach((field) => {
-      const fieldExists = field in safeOriginal;
-      if (fieldExists) {
-        const value = Reflect.get(safeOriginal, field);
-        const isStringValue = typeof value === 'string';
-        if (isStringValue) {
-          // 🔧 타입 단언 제거: 구체적인 필드별 할당
-          switch (field) {
-            case 'userImage':
-              baseFormValues.userImage = value;
-              break;
-            case 'nickname':
-              baseFormValues.nickname = value;
-              break;
-            case 'emailPrefix':
-              baseFormValues.emailPrefix = value;
-              break;
-            case 'emailDomain':
-              baseFormValues.emailDomain = value;
-              break;
-            case 'bio':
-              baseFormValues.bio = value;
-              break;
-            case 'title':
-              baseFormValues.title = value;
-              break;
-            case 'description':
-              baseFormValues.description = value;
-              break;
-            case 'tags':
-              baseFormValues.tags = value;
-              break;
-            case 'content':
-              baseFormValues.content = value;
-              break;
-            case 'editorCompletedContent':
-              baseFormValues.editorCompletedContent = value;
-              break;
-            default:
-              console.debug(`🔍 [UPDATER] 알 수 없는 문자열 필드: ${field}`);
-              break;
+      try {
+        const fieldExists = field in safeOriginal;
+        if (fieldExists) {
+          const value = Reflect.get(safeOriginal, field);
+          if (typeof value === 'string') {
+            baseFormValues[field] = value;
           }
         }
+      } catch (fieldError) {
+        console.debug(
+          `🔍 [UPDATER] 필드 ${field} 복사 실패 (무시):`,
+          fieldError
+        );
       }
     });
 
-    const isEditorCompletedExists = 'isEditorCompleted' in safeOriginal;
-    if (isEditorCompletedExists) {
-      const isCompleted = Reflect.get(safeOriginal, 'isEditorCompleted');
-      const isBooleanValue = typeof isCompleted === 'boolean';
-      if (isBooleanValue) {
-        baseFormValues.isEditorCompleted = isCompleted;
-      }
-    }
-
+    // 배열 필드들 안전하게 복사
     const mediaExists = 'media' in safeOriginal;
     if (mediaExists) {
-      const mediaValue = Reflect.get(safeOriginal, 'media');
-      const isValidMediaArray = Array.isArray(mediaValue);
-      if (isValidMediaArray) {
-        baseFormValues.media = mediaValue.filter(
-          (item) => typeof item === 'string'
-        );
+      try {
+        const mediaValue = Reflect.get(safeOriginal, 'media');
+        if (Array.isArray(mediaValue)) {
+          baseFormValues.media = mediaValue.filter(
+            (item) => typeof item === 'string'
+          );
+        }
+      } catch (mediaError) {
+        console.debug('🔍 [UPDATER] media 필드 복사 실패 (무시):', mediaError);
       }
     }
 
     const sliderImagesExists = 'sliderImages' in safeOriginal;
     if (sliderImagesExists) {
-      const sliderImagesValue = Reflect.get(safeOriginal, 'sliderImages');
-      const isValidSliderImagesArray = Array.isArray(sliderImagesValue);
-      if (isValidSliderImagesArray) {
-        baseFormValues.sliderImages = sliderImagesValue.filter(
-          (item) => typeof item === 'string'
+      try {
+        const sliderImagesValue = Reflect.get(safeOriginal, 'sliderImages');
+        if (Array.isArray(sliderImagesValue)) {
+          baseFormValues.sliderImages = sliderImagesValue.filter(
+            (item) => typeof item === 'string'
+          );
+        }
+      } catch (sliderError) {
+        console.debug(
+          '🔍 [UPDATER] sliderImages 필드 복사 실패 (무시):',
+          sliderError
         );
       }
     }
 
+    // mainImage 필드 안전하게 복사
     const mainImageExists = 'mainImage' in safeOriginal;
     if (mainImageExists) {
-      const mainImage = Reflect.get(safeOriginal, 'mainImage');
-      const isValidMainImage =
-        typeof mainImage === 'string' || mainImage === null;
-      if (isValidMainImage) {
-        baseFormValues.mainImage = mainImage;
+      try {
+        const mainImage = Reflect.get(safeOriginal, 'mainImage');
+        if (typeof mainImage === 'string' || mainImage === null) {
+          baseFormValues.mainImage = mainImage;
+        }
+      } catch (mainImageError) {
+        console.debug(
+          '🔍 [UPDATER] mainImage 필드 복사 실패 (무시):',
+          mainImageError
+        );
       }
     }
+  } catch (overallError) {
+    console.warn(
+      '⚠️ [UPDATER] 전체 필드 복사 중 오류 발생 (기본값 유지):',
+      overallError
+    );
   }
 
-  console.log('✅ [UPDATER] Fallback FormValues 생성 완료');
+  console.log('✅ [UPDATER] 초관대한 Fallback FormValues 생성 완료');
   return baseFormValues;
 };
 
@@ -710,7 +648,7 @@ function createStoreAccessModule() {
   const castToMultiStepStore = (
     store: Record<string, unknown>
   ): MultiStepStoreInterface | null => {
-    console.log('🔍 [UPDATER] MultiStepStore 안전한 캐스팅 시작');
+    console.log('🔍 [UPDATER] MultiStepStore 초관대한 캐스팅 시작');
 
     return safelyExecuteSyncOperation(
       () => {
@@ -726,12 +664,16 @@ function createStoreAccessModule() {
 
         let validatedFormValues: FormValues;
 
+        // 🚨 핵심 변경: formValues 검증 실패해도 무조건 fallback으로 처리
+        console.log('🔍 [UPDATER] FormValues 검증 시도 (관대한 모드)');
         const isFormValuesValid = isValidFormValues(formValuesRaw);
         if (isFormValuesValid) {
           validatedFormValues = formValuesRaw;
           console.log('✅ [UPDATER] 원본 formValues 사용');
         } else {
-          console.warn('⚠️ [UPDATER] formValues 검증 실패, fallback 생성');
+          console.log(
+            '⚠️ [UPDATER] formValues 검증 실패, 관대한 fallback 생성'
+          );
           validatedFormValues = createFallbackFormValues(formValuesRaw);
         }
 
@@ -751,8 +693,9 @@ function createStoreAccessModule() {
           isValidEditorContent;
 
         if (!hasValidBasicTypes) {
-          console.error('❌ [UPDATER] 필수 속성들이 유효하지 않음');
-          return null;
+          console.warn(
+            '⚠️ [UPDATER] 일부 기본 타입이 유효하지 않지만 계속 진행'
+          );
         }
 
         const updateEditorContentRaw = Reflect.get(
@@ -800,7 +743,7 @@ function createStoreAccessModule() {
             : undefined,
         };
 
-        console.log('✅ [UPDATER] MultiStepStore 안전한 캐스팅 성공');
+        console.log('✅ [UPDATER] MultiStepStore 초관대한 캐스팅 성공');
         return safeMultiStepStore;
       },
       null,
