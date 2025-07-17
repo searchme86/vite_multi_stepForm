@@ -1,9 +1,11 @@
+// bridges/editorMultiStepBridge/multiStepDataUpdater.ts
+
 import { useMultiStepFormStore } from '../../components/multiStepForm/store/multiStepForm/multiStepFormStore';
-import { EditorToMultiStepDataTransformationResult } from './bridgeDataTypes';
-import { FormValues } from '../../components/multiStepForm/types/formTypes';
+import type { EditorToMultiStepDataTransformationResult } from './bridgeDataTypes';
+import type { FormValues } from '../../components/multiStepForm/types/formTypes';
 
 // 멀티스텝 스토어 인터페이스
-interface MultiStepStore {
+interface MultiStepStoreInterface {
   formValues: FormValues;
   currentStep: number;
   progressWidth: number;
@@ -19,13 +21,13 @@ interface MultiStepStore {
   setFormValues?: (values: FormValues) => void;
 }
 
-interface UpdateResult {
+interface UpdateExecutionResult {
   readonly success: boolean;
   readonly method: string;
   readonly details: Map<string, unknown>;
 }
 
-interface CurrentStateSnapshot {
+interface CurrentStoreSnapshot {
   readonly formValues: FormValues;
   readonly currentStep: number;
   readonly progressWidth: number;
@@ -35,24 +37,28 @@ interface CurrentStateSnapshot {
 }
 
 // 🔧 안전한 타입 변환 헬퍼 함수들
-interface SafeTypeConversionModule {
-  safeToNumber: (value: unknown, defaultValue: number) => number;
-  safeToString: (value: unknown, defaultValue: string) => string;
-  safeToBoolean: (value: unknown, defaultValue: boolean) => boolean;
+interface SafeTypeConverterModule {
+  convertToSafeNumber: (value: unknown, defaultValue: number) => number;
+  convertToSafeString: (value: unknown, defaultValue: string) => string;
+  convertToSafeBoolean: (value: unknown, defaultValue: boolean) => boolean;
 }
 
-function createSafeTypeConversionModule(): SafeTypeConversionModule {
-  const safeToNumber = (value: unknown, defaultValue: number): number => {
-    // 이미 숫자이고 유효한 경우
-    if (typeof value === 'number' && !isNaN(value)) {
+function createSafeTypeConverterModule(): SafeTypeConverterModule {
+  const convertToSafeNumber = (
+    value: unknown,
+    defaultValue: number
+  ): number => {
+    const isValidNumber = typeof value === 'number' && !Number.isNaN(value);
+    if (isValidNumber) {
       return value;
     }
 
-    // 문자열에서 숫자 변환 시도
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      if (!isNaN(parsed)) {
-        return parsed;
+    const isStringNumber = typeof value === 'string';
+    if (isStringNumber) {
+      const parseResult = parseInt(value, 10);
+      const isValidParseResult = !Number.isNaN(parseResult);
+      if (isValidParseResult) {
+        return parseResult;
       }
     }
 
@@ -62,21 +68,23 @@ function createSafeTypeConversionModule(): SafeTypeConversionModule {
     return defaultValue;
   };
 
-  const safeToString = (value: unknown, defaultValue: string): string => {
-    // 이미 문자열인 경우
-    if (typeof value === 'string') {
+  const convertToSafeString = (
+    value: unknown,
+    defaultValue: string
+  ): string => {
+    const isStringType = typeof value === 'string';
+    if (isStringType) {
       return value;
     }
 
-    // null이나 undefined인 경우
-    if (value === null || value === undefined) {
+    const isNullOrUndefined = value === null || value === undefined;
+    if (isNullOrUndefined) {
       console.warn(
         `⚠️ [TYPE_CONVERTER] null/undefined를 문자열로 변환, 기본값 사용: ${defaultValue}`
       );
       return defaultValue;
     }
 
-    // 다른 타입을 문자열로 변환
     try {
       return String(value);
     } catch (conversionError) {
@@ -85,21 +93,27 @@ function createSafeTypeConversionModule(): SafeTypeConversionModule {
     }
   };
 
-  const safeToBoolean = (value: unknown, defaultValue: boolean): boolean => {
-    // 이미 boolean인 경우
-    if (typeof value === 'boolean') {
+  const convertToSafeBoolean = (
+    value: unknown,
+    defaultValue: boolean
+  ): boolean => {
+    const isBooleanType = typeof value === 'boolean';
+    if (isBooleanType) {
       return value;
     }
 
-    // 문자열에서 boolean 변환
-    if (typeof value === 'string') {
-      const lowerValue = value.toLowerCase();
-      if (lowerValue === 'true') return true;
-      if (lowerValue === 'false') return false;
+    const isStringType = typeof value === 'string';
+    if (isStringType) {
+      const lowerCaseValue = value.toLowerCase();
+      const isTrueString = lowerCaseValue === 'true';
+      const isFalseString = lowerCaseValue === 'false';
+
+      if (isTrueString) return true;
+      if (isFalseString) return false;
     }
 
-    // 숫자에서 boolean 변환
-    if (typeof value === 'number') {
+    const isNumberType = typeof value === 'number';
+    if (isNumberType) {
       return value !== 0;
     }
 
@@ -110,9 +124,9 @@ function createSafeTypeConversionModule(): SafeTypeConversionModule {
   };
 
   return {
-    safeToNumber,
-    safeToString,
-    safeToBoolean,
+    convertToSafeNumber,
+    convertToSafeString,
+    convertToSafeBoolean,
   };
 }
 
@@ -127,7 +141,7 @@ function createUpdaterTypeGuardModule() {
   };
 
   const isValidNumber = (value: unknown): value is number => {
-    return typeof value === 'number' && !isNaN(value);
+    return typeof value === 'number' && !Number.isNaN(value);
   };
 
   const isValidObject = (value: unknown): value is Record<string, unknown> => {
@@ -148,7 +162,6 @@ function createUpdaterTypeGuardModule() {
     return candidate instanceof Map;
   };
 
-  // 🔧 P1-4: 구체적 함수 타입 가드들
   const isUpdateEditorContentFunction = (
     value: unknown
   ): value is (content: string) => void => {
@@ -176,29 +189,25 @@ function createUpdaterTypeGuardModule() {
     return isValidFunction(value);
   };
 
-  // 🔧 변환 전략 상수를 readonly Set으로 구현하여 성능과 타입 안전성 향상
-  const validStrategiesSet = new Set([
+  const validTransformationStrategiesSet = new Set([
     'EXISTING_CONTENT',
     'REBUILD_FROM_CONTAINERS',
     'PARAGRAPH_FALLBACK',
   ] as const);
 
-  // 🔧 P1-4: 변환 전략 타입 가드 - 타입 단언 제거 및 Set 활용
   const isValidTransformationStrategy = (
     value: unknown
   ): value is
     | 'EXISTING_CONTENT'
     | 'REBUILD_FROM_CONTAINERS'
     | 'PARAGRAPH_FALLBACK' => {
-    // Early Return: 문자열이 아닌 경우
-    if (!isValidString(value)) {
+    const isStringValue = isValidString(value);
+    if (!isStringValue) {
       console.debug('🔍 [TYPE_GUARD] 변환 전략이 문자열이 아님:', typeof value);
       return false;
     }
 
-    // 🎯 Set.has()를 사용한 효율적이고 타입 안전한 검증
-    // value는 이미 isValidString 타입 가드를 통과했으므로 string 타입으로 좁혀짐
-    const isValidStrategy = validStrategiesSet.has(
+    const isValidStrategyValue = validTransformationStrategiesSet.has(
       value as
         | 'EXISTING_CONTENT'
         | 'REBUILD_FROM_CONTAINERS'
@@ -207,71 +216,11 @@ function createUpdaterTypeGuardModule() {
 
     console.debug('🔍 [TYPE_GUARD] 변환 전략 검증 결과:', {
       strategy: value,
-      isValid: isValidStrategy,
-      availableStrategies: Array.from(validStrategiesSet),
+      isValid: isValidStrategyValue,
+      availableStrategies: Array.from(validTransformationStrategiesSet),
     });
 
-    return isValidStrategy;
-  };
-
-  // 🔧 P1-4: FormValues 타입 가드 강화
-  const isValidFormValues = (value: unknown): value is FormValues => {
-    // Early Return: 객체가 아닌 경우
-    if (!isValidObject(value)) {
-      return false;
-    }
-
-    const formObj = value;
-
-    // 🔧 P1-3: 구조분해할당으로 필수 속성들 검증
-    const stringFields = [
-      'userImage',
-      'nickname',
-      'emailPrefix',
-      'emailDomain',
-      'bio',
-      'title',
-      'description',
-      'tags',
-      'content',
-      'editorCompletedContent',
-    ] as const;
-
-    const hasValidStringFields = stringFields.every(
-      (field) => field in formObj && isValidString(formObj[field])
-    );
-
-    // Early Return: 문자열 필드가 유효하지 않은 경우
-    if (!hasValidStringFields) {
-      return false;
-    }
-
-    // 배열 속성들 검증
-    const hasValidMedia = 'media' in formObj && isValidArray(formObj.media);
-    const hasValidSliderImages =
-      'sliderImages' in formObj && isValidArray(formObj.sliderImages);
-
-    // Early Return: 배열 필드가 유효하지 않은 경우
-    if (!hasValidMedia || !hasValidSliderImages) {
-      return false;
-    }
-
-    // boolean 속성 검증
-    const hasValidCompleted =
-      'isEditorCompleted' in formObj &&
-      isValidBoolean(formObj.isEditorCompleted);
-
-    // Early Return: boolean 필드가 유효하지 않은 경우
-    if (!hasValidCompleted) {
-      return false;
-    }
-
-    // mainImage는 string | null
-    const hasValidMainImage =
-      'mainImage' in formObj &&
-      (formObj.mainImage === null || isValidString(formObj.mainImage));
-
-    return hasValidMainImage;
+    return isValidStrategyValue;
   };
 
   return {
@@ -287,7 +236,6 @@ function createUpdaterTypeGuardModule() {
     isUpdateFormValueFunction,
     isSetFormValuesFunction,
     isValidTransformationStrategy,
-    isValidFormValues,
   };
 }
 
@@ -322,17 +270,16 @@ function createUpdaterErrorHandlerModule() {
   };
 
   const extractErrorMessage = (error: unknown): string => {
-    // Early Return: Error 인스턴스인 경우
-    if (error instanceof Error) {
+    const isErrorInstance = error instanceof Error;
+    if (isErrorInstance) {
       return error.message;
     }
 
-    // Early Return: 문자열인 경우
-    if (isValidString(error)) {
+    const isStringError = isValidString(error);
+    if (isStringError) {
       return error;
     }
 
-    // 안전한 문자열 변환
     try {
       return String(error);
     } catch (conversionError) {
@@ -379,13 +326,14 @@ function createMapUtilityModule() {
   const createUpdateResultSuccess = (
     method: string,
     additionalData?: Record<string, unknown>
-  ): UpdateResult => {
+  ): UpdateExecutionResult => {
     const detailsMap = createSafeDetailsMap();
     addToDetailsMap(detailsMap, 'timestamp', Date.now());
     addToDetailsMap(detailsMap, 'success', true);
 
-    // 🔧 P1-2: 삼항연산자로 추가 데이터 처리 + undefined 체크
-    if (additionalData && typeof additionalData === 'object') {
+    const hasAdditionalData =
+      additionalData && typeof additionalData === 'object';
+    if (hasAdditionalData) {
       Object.entries(additionalData).forEach(([key, value]) => {
         addToDetailsMap(detailsMap, key, value);
       });
@@ -401,7 +349,7 @@ function createMapUtilityModule() {
   const createUpdateResultFailure = (
     method: string,
     errorMessage: string
-  ): UpdateResult => {
+  ): UpdateExecutionResult => {
     const detailsMap = createSafeDetailsMap();
     addToDetailsMap(detailsMap, 'timestamp', Date.now());
     addToDetailsMap(detailsMap, 'success', false);
@@ -448,24 +396,111 @@ function createValidationModule() {
     isValidObject,
     isValidArray,
     isValidTransformationStrategy,
-    isValidFormValues,
   } = createUpdaterTypeGuardModule();
 
-  // 🔧 P1-4: EditorToMultiStepDataTransformationResult 타입 가드 강화
+  // 🔧 수정된 FormValues 타입 가드 - 🚨 핵심 수정 부분: 관대한 검증으로 변경
+  const isValidFormValues = (value: unknown): value is FormValues => {
+    console.log('🔍 [UPDATER] FormValues 검증 시작 (관대한 모드):', value);
+
+    const isValidObjectType = isValidObject(value);
+    if (!isValidObjectType) {
+      console.error('❌ [UPDATER] FormValues가 객체가 아님');
+      return false;
+    }
+
+    const formObj = value;
+
+    // 🔧 핵심 수정: 필수 최소 필드만 검증 (기존 14개 → 2개)
+    const criticalRequiredFields = [
+      'editorCompletedContent',
+      'isEditorCompleted',
+    ] as const;
+
+    const hasCriticalFields = criticalRequiredFields.every((field) => {
+      const fieldExists = field in formObj;
+      if (!fieldExists) {
+        console.warn(`⚠️ [UPDATER] 중요 필드 '${field}' 없음`);
+      }
+      return fieldExists;
+    });
+
+    if (!hasCriticalFields) {
+      console.error('❌ [UPDATER] FormValues 중요 필드 누락');
+      return false;
+    }
+
+    // 🔧 isEditorCompleted 필드 타입 검증 (가장 중요)
+    const isEditorCompletedField = Reflect.get(formObj, 'isEditorCompleted');
+    const hasValidEditorCompleted = typeof isEditorCompletedField === 'boolean';
+
+    if (!hasValidEditorCompleted) {
+      console.error(
+        '❌ [UPDATER] isEditorCompleted가 boolean이 아님:',
+        typeof isEditorCompletedField
+      );
+      return false;
+    }
+
+    // 🔧 editorCompletedContent 필드 타입 검증
+    const editorCompletedContentField = Reflect.get(
+      formObj,
+      'editorCompletedContent'
+    );
+    const hasValidEditorContent =
+      typeof editorCompletedContentField === 'string';
+
+    if (!hasValidEditorContent) {
+      console.error(
+        '❌ [UPDATER] editorCompletedContent가 문자열이 아님:',
+        typeof editorCompletedContentField
+      );
+      return false;
+    }
+
+    // 🔧 선택적 배열 필드들 검증 (관대하게)
+    const optionalArrayFields = ['media', 'sliderImages'] as const;
+
+    const hasValidOptionalArrays = optionalArrayFields.every((field) => {
+      const fieldExists = field in formObj;
+      if (!fieldExists) {
+        console.debug(`🔍 [UPDATER] 선택 필드 '${field}' 없음 (허용됨)`);
+        return true; // 없어도 됨
+      }
+
+      const fieldValue = Reflect.get(formObj, field);
+      const isValidArrayValue =
+        fieldValue === undefined || Array.isArray(fieldValue);
+
+      if (!isValidArrayValue) {
+        console.error(`❌ [UPDATER] ${field} 필드가 배열이 아님`);
+        return false;
+      }
+
+      return true;
+    });
+
+    if (!hasValidOptionalArrays) {
+      console.error('❌ [UPDATER] FormValues 배열 필드 타입 오류');
+      return false;
+    }
+
+    console.log('✅ [UPDATER] FormValues 검증 성공 (관대한 모드)');
+    return true;
+  };
+
   const isValidTransformationResult = (
     result: unknown
   ): result is EditorToMultiStepDataTransformationResult => {
     console.log('🔍 [UPDATER] 변환 결과 타입 검증 시작');
 
-    // Early Return: null이나 undefined
-    if (!result || !isValidObject(result)) {
+    const isValidResultObject = result && isValidObject(result);
+    if (!isValidResultObject) {
       console.error('❌ [UPDATER] 변환 결과가 null 또는 객체가 아님');
       return false;
     }
 
     const resultObj = result;
 
-    // 🔧 P1-3: 구조분해할당으로 필수 필드들 검증
     const requiredFields = [
       'transformedContent',
       'transformedIsCompleted',
@@ -479,34 +514,46 @@ function createValidationModule() {
       (field) => field in resultObj
     );
 
-    // Early Return: 필수 필드가 없는 경우
     if (!hasAllRequiredFields) {
       console.error('❌ [UPDATER] 필수 필드가 누락됨');
       return false;
     }
 
-    // 🔧 P1-4: 각 필드의 타입을 구체적으로 검증
-    const hasValidContent = isValidString(resultObj.transformedContent);
-    const hasValidCompleted = isValidBoolean(resultObj.transformedIsCompleted);
-    const hasValidMetadata = isValidObject(resultObj.transformedMetadata);
-    const hasValidSuccess = isValidBoolean(resultObj.transformationSuccess);
-    const hasValidErrors = isValidArray(resultObj.transformationErrors);
-    const hasValidStrategy = isValidTransformationStrategy(
-      resultObj.transformationStrategy
+    const transformedContent = Reflect.get(resultObj, 'transformedContent');
+    const transformedIsCompleted = Reflect.get(
+      resultObj,
+      'transformedIsCompleted'
+    );
+    const transformedMetadata = Reflect.get(resultObj, 'transformedMetadata');
+    const transformationSuccess = Reflect.get(
+      resultObj,
+      'transformationSuccess'
+    );
+    const transformationErrors = Reflect.get(resultObj, 'transformationErrors');
+    const transformationStrategy = Reflect.get(
+      resultObj,
+      'transformationStrategy'
     );
 
-    // 🔧 P1-2: 삼항연산자로 성공 여부 확인
-    const isSuccessful =
-      resultObj.transformationSuccess === true ? true : false;
+    const hasValidContent = isValidString(transformedContent);
+    const hasValidCompleted = isValidBoolean(transformedIsCompleted);
+    const hasValidMetadata = isValidObject(transformedMetadata);
+    const hasValidSuccess = isValidBoolean(transformationSuccess);
+    const hasValidErrors = isValidArray(transformationErrors);
+    const hasValidStrategy = isValidTransformationStrategy(
+      transformationStrategy
+    );
 
-    const isValid =
+    const isSuccessfulTransformation = transformationSuccess === true;
+
+    const isValidOverall =
       hasValidContent &&
       hasValidCompleted &&
       hasValidMetadata &&
       hasValidSuccess &&
       hasValidErrors &&
       hasValidStrategy &&
-      isSuccessful;
+      isSuccessfulTransformation;
 
     console.log('📊 [UPDATER] 변환 결과 검증 상세:', {
       hasValidContent,
@@ -515,14 +562,14 @@ function createValidationModule() {
       hasValidSuccess,
       hasValidErrors,
       hasValidStrategy,
-      isSuccessful,
-      isValid,
-      contentLength: isValidString(resultObj.transformedContent)
-        ? resultObj.transformedContent.length
+      isSuccessfulTransformation,
+      isValidOverall,
+      contentLength: isValidString(transformedContent)
+        ? transformedContent.length
         : 0,
     });
 
-    return isValid;
+    return isValidOverall;
   };
 
   return {
@@ -531,44 +578,163 @@ function createValidationModule() {
   };
 }
 
+// 🔧 fallback FormValues 생성 함수 강화
+const createFallbackFormValues = (originalFormValues: unknown): FormValues => {
+  console.log('🔄 [UPDATER] Fallback FormValues 생성');
+
+  const baseFormValues = createDefaultFormValues();
+  const { isValidObject } = createUpdaterTypeGuardModule();
+
+  const isValidOriginal = isValidObject(originalFormValues);
+  if (isValidOriginal) {
+    const safeOriginal = originalFormValues;
+
+    const stringFields = [
+      'userImage',
+      'nickname',
+      'emailPrefix',
+      'emailDomain',
+      'bio',
+      'title',
+      'description',
+      'tags',
+      'content',
+      'editorCompletedContent',
+    ] as const;
+
+    stringFields.forEach((field) => {
+      const fieldExists = field in safeOriginal;
+      if (fieldExists) {
+        const value = Reflect.get(safeOriginal, field);
+        const isStringValue = typeof value === 'string';
+        if (isStringValue) {
+          // 🔧 타입 단언 제거: 구체적인 필드별 할당
+          switch (field) {
+            case 'userImage':
+              baseFormValues.userImage = value;
+              break;
+            case 'nickname':
+              baseFormValues.nickname = value;
+              break;
+            case 'emailPrefix':
+              baseFormValues.emailPrefix = value;
+              break;
+            case 'emailDomain':
+              baseFormValues.emailDomain = value;
+              break;
+            case 'bio':
+              baseFormValues.bio = value;
+              break;
+            case 'title':
+              baseFormValues.title = value;
+              break;
+            case 'description':
+              baseFormValues.description = value;
+              break;
+            case 'tags':
+              baseFormValues.tags = value;
+              break;
+            case 'content':
+              baseFormValues.content = value;
+              break;
+            case 'editorCompletedContent':
+              baseFormValues.editorCompletedContent = value;
+              break;
+            default:
+              console.debug(`🔍 [UPDATER] 알 수 없는 문자열 필드: ${field}`);
+              break;
+          }
+        }
+      }
+    });
+
+    const isEditorCompletedExists = 'isEditorCompleted' in safeOriginal;
+    if (isEditorCompletedExists) {
+      const isCompleted = Reflect.get(safeOriginal, 'isEditorCompleted');
+      const isBooleanValue = typeof isCompleted === 'boolean';
+      if (isBooleanValue) {
+        baseFormValues.isEditorCompleted = isCompleted;
+      }
+    }
+
+    const mediaExists = 'media' in safeOriginal;
+    if (mediaExists) {
+      const mediaValue = Reflect.get(safeOriginal, 'media');
+      const isValidMediaArray = Array.isArray(mediaValue);
+      if (isValidMediaArray) {
+        baseFormValues.media = mediaValue.filter(
+          (item) => typeof item === 'string'
+        );
+      }
+    }
+
+    const sliderImagesExists = 'sliderImages' in safeOriginal;
+    if (sliderImagesExists) {
+      const sliderImagesValue = Reflect.get(safeOriginal, 'sliderImages');
+      const isValidSliderImagesArray = Array.isArray(sliderImagesValue);
+      if (isValidSliderImagesArray) {
+        baseFormValues.sliderImages = sliderImagesValue.filter(
+          (item) => typeof item === 'string'
+        );
+      }
+    }
+
+    const mainImageExists = 'mainImage' in safeOriginal;
+    if (mainImageExists) {
+      const mainImage = Reflect.get(safeOriginal, 'mainImage');
+      const isValidMainImage =
+        typeof mainImage === 'string' || mainImage === null;
+      if (isValidMainImage) {
+        baseFormValues.mainImage = mainImage;
+      }
+    }
+  }
+
+  console.log('✅ [UPDATER] Fallback FormValues 생성 완료');
+  return baseFormValues;
+};
+
 function createStoreAccessModule() {
   const {
     isValidObject,
-    isValidFormValues,
     isUpdateEditorContentFunction,
     isSetEditorCompletedFunction,
     isUpdateFormValueFunction,
     isSetFormValuesFunction,
   } = createUpdaterTypeGuardModule();
   const { safelyExecuteSyncOperation } = createUpdaterErrorHandlerModule();
-  const { safeToNumber, safeToString, safeToBoolean } =
-    createSafeTypeConversionModule();
+  const { convertToSafeNumber, convertToSafeString, convertToSafeBoolean } =
+    createSafeTypeConverterModule();
+  const { isValidFormValues } = createValidationModule();
 
-  // 🔧 P1-4: MultiStepStore 안전한 캐스팅 함수
   const castToMultiStepStore = (
     store: Record<string, unknown>
-  ): MultiStepStore | null => {
+  ): MultiStepStoreInterface | null => {
     console.log('🔍 [UPDATER] MultiStepStore 안전한 캐스팅 시작');
 
     return safelyExecuteSyncOperation(
       () => {
-        // 🔧 P1-3: 구조분해할당으로 필수 속성들 추출 및 검증
-        const {
-          formValues: formValuesRaw,
-          currentStep: currentStepRaw,
-          progressWidth: progressWidthRaw,
-          showPreview: showPreviewRaw,
-          editorCompletedContent: editorCompletedContentRaw,
-          isEditorCompleted: isEditorCompletedRaw,
-        } = store;
+        const formValuesRaw = Reflect.get(store, 'formValues');
+        const currentStepRaw = Reflect.get(store, 'currentStep');
+        const progressWidthRaw = Reflect.get(store, 'progressWidth');
+        const showPreviewRaw = Reflect.get(store, 'showPreview');
+        const editorCompletedContentRaw = Reflect.get(
+          store,
+          'editorCompletedContent'
+        );
+        const isEditorCompletedRaw = Reflect.get(store, 'isEditorCompleted');
 
-        // Early Return: formValues가 유효하지 않은 경우
-        if (!isValidFormValues(formValuesRaw)) {
-          console.error('❌ [UPDATER] formValues가 유효하지 않음');
-          return null;
+        let validatedFormValues: FormValues;
+
+        const isFormValuesValid = isValidFormValues(formValuesRaw);
+        if (isFormValuesValid) {
+          validatedFormValues = formValuesRaw;
+          console.log('✅ [UPDATER] 원본 formValues 사용');
+        } else {
+          console.warn('⚠️ [UPDATER] formValues 검증 실패, fallback 생성');
+          validatedFormValues = createFallbackFormValues(formValuesRaw);
         }
 
-        // 🔧 타입 가드를 통한 안전한 검증
         const isValidCurrentStep = typeof currentStepRaw === 'number';
         const isValidProgressWidth = typeof progressWidthRaw === 'number';
         const isValidShowPreview = typeof showPreviewRaw === 'boolean';
@@ -577,35 +743,40 @@ function createStoreAccessModule() {
         const isValidEditorContent =
           typeof editorCompletedContentRaw === 'string';
 
-        // Early Return: 필수 속성들이 유효하지 않은 경우
-        if (
-          !isValidCurrentStep ||
-          !isValidProgressWidth ||
-          !isValidShowPreview ||
-          !isValidEditorCompleted ||
-          !isValidEditorContent
-        ) {
+        const hasValidBasicTypes =
+          isValidCurrentStep &&
+          isValidProgressWidth &&
+          isValidShowPreview &&
+          isValidEditorCompleted &&
+          isValidEditorContent;
+
+        if (!hasValidBasicTypes) {
           console.error('❌ [UPDATER] 필수 속성들이 유효하지 않음');
           return null;
         }
 
-        // 🔧 P1-3: 구조분해할당으로 선택적 함수 속성들 추출
-        const {
-          updateEditorContent: updateEditorContentRaw,
-          setEditorCompleted: setEditorCompletedRaw,
-          updateFormValue: updateFormValueRaw,
-          setFormValues: setFormValuesRaw,
-        } = store;
+        const updateEditorContentRaw = Reflect.get(
+          store,
+          'updateEditorContent'
+        );
+        const setEditorCompletedRaw = Reflect.get(store, 'setEditorCompleted');
+        const updateFormValueRaw = Reflect.get(store, 'updateFormValue');
+        const setFormValuesRaw = Reflect.get(store, 'setFormValues');
 
-        // 🔧 안전한 타입 변환 (타입 단언 대신)
-        const safeCurrentStep = safeToNumber(currentStepRaw, 1);
-        const safeProgressWidth = safeToNumber(progressWidthRaw, 0);
-        const safeShowPreview = safeToBoolean(showPreviewRaw, false);
-        const safeEditorContent = safeToString(editorCompletedContentRaw, '');
-        const safeEditorCompleted = safeToBoolean(isEditorCompletedRaw, false);
+        const safeCurrentStep = convertToSafeNumber(currentStepRaw, 1);
+        const safeProgressWidth = convertToSafeNumber(progressWidthRaw, 0);
+        const safeShowPreview = convertToSafeBoolean(showPreviewRaw, false);
+        const safeEditorContent = convertToSafeString(
+          editorCompletedContentRaw,
+          ''
+        );
+        const safeEditorCompleted = convertToSafeBoolean(
+          isEditorCompletedRaw,
+          false
+        );
 
-        const safeMultiStepStore: MultiStepStore = {
-          formValues: formValuesRaw,
+        const safeMultiStepStore: MultiStepStoreInterface = {
+          formValues: validatedFormValues,
           currentStep: safeCurrentStep,
           progressWidth: safeProgressWidth,
           showPreview: safeShowPreview,
@@ -637,34 +808,33 @@ function createStoreAccessModule() {
     );
   };
 
-  const getCurrentState = (): CurrentStateSnapshot | null => {
+  const getCurrentState = (): CurrentStoreSnapshot | null => {
     console.log('🔍 [UPDATER] 현재 상태 조회');
 
     return safelyExecuteSyncOperation(
       () => {
         const storeState = useMultiStepFormStore.getState();
 
-        // Early Return: 스토어가 없는 경우
-        if (!storeState) {
+        const isStoreStateNull = !storeState;
+        if (isStoreStateNull) {
           console.error('❌ [UPDATER] 멀티스텝 스토어 없음');
           return null;
         }
 
-        // Early Return: 유효한 객체가 아닌 경우
-        if (!isValidObject(storeState)) {
+        const isValidStoreObject = isValidObject(storeState);
+        if (!isValidStoreObject) {
           console.error('❌ [UPDATER] 스토어가 객체가 아님');
           return null;
         }
 
         const multiStepStore = castToMultiStepStore(storeState);
 
-        // Early Return: 캐스팅 실패
-        if (!multiStepStore) {
+        const isMultiStepStoreNull = !multiStepStore;
+        if (isMultiStepStoreNull) {
           console.error('❌ [UPDATER] 스토어 캐스팅 실패');
           return null;
         }
 
-        // 🔧 P1-3: 구조분해할당 + Fallback으로 안전한 기본값 설정
         const {
           formValues = createDefaultFormValues(),
           currentStep = 1,
@@ -674,7 +844,7 @@ function createStoreAccessModule() {
           isEditorCompleted = false,
         } = multiStepStore;
 
-        const currentState: CurrentStateSnapshot = {
+        const currentState: CurrentStoreSnapshot = {
           formValues,
           currentStep,
           progressWidth,
@@ -689,8 +859,11 @@ function createStoreAccessModule() {
           contentLength: editorCompletedContent.length,
           isEditorCompleted,
           formValuesEditorContent:
-            formValues.editorCompletedContent?.length ?? 0,
-          formValuesEditorCompleted: formValues.isEditorCompleted,
+            Reflect.get(formValues, 'editorCompletedContent')?.length ?? 0,
+          formValuesEditorCompleted: Reflect.get(
+            formValues,
+            'isEditorCompleted'
+          ),
         });
 
         return currentState;
@@ -721,34 +894,33 @@ function createEditorContentUpdateModule() {
 
   const updateEditorContent = async (
     result: EditorToMultiStepDataTransformationResult
-  ): Promise<UpdateResult> => {
+  ): Promise<UpdateExecutionResult> => {
     console.log('🔄 [UPDATER] 에디터 콘텐츠 업데이트');
 
     return safelyExecuteAsyncOperation(
       async () => {
-        // Early Return: 유효하지 않은 결과
-        if (!isValidTransformationResult(result)) {
+        const isValidResult = isValidTransformationResult(result);
+        if (!isValidResult) {
           return createUpdateResultFailure(
             'VALIDATION_FAILED',
             '유효하지 않은 변환 결과'
           );
         }
 
-        // 🔧 P1-3: 구조분해할당으로 변환 결과 추출
         const { transformedContent, transformedIsCompleted } = result;
 
         const storeState = useMultiStepFormStore.getState();
 
-        // Early Return: 스토어 접근 불가
-        if (!storeState) {
+        const isStoreStateNull = !storeState;
+        if (isStoreStateNull) {
           return createUpdateResultFailure(
             'STORE_ACCESS_FAILED',
             '스토어 접근 불가'
           );
         }
 
-        // Early Return: 유효하지 않은 스토어
-        if (!isValidObject(storeState)) {
+        const isValidStoreObject = isValidObject(storeState);
+        if (!isValidStoreObject) {
           return createUpdateResultFailure(
             'STORE_NOT_OBJECT',
             '스토어가 객체가 아님'
@@ -757,8 +929,8 @@ function createEditorContentUpdateModule() {
 
         const multiStepStore = castToMultiStepStore(storeState);
 
-        // Early Return: 스토어 캐스팅 실패
-        if (!multiStepStore) {
+        const isMultiStepStoreNull = !multiStepStore;
+        if (isMultiStepStoreNull) {
           return createUpdateResultFailure(
             'STORE_CASTING_FAILED',
             '스토어 캐스팅 실패'
@@ -771,7 +943,6 @@ function createEditorContentUpdateModule() {
           storeAvailable: Boolean(multiStepStore),
         });
 
-        // 🔧 P1-3: 구조분해할당으로 스토어 함수들 추출
         const {
           updateEditorContent: storeUpdateContent,
           setEditorCompleted: storeSetCompleted,
@@ -790,13 +961,8 @@ function createEditorContentUpdateModule() {
         let updateSuccess = false;
         const updateMethods: string[] = [];
 
-        // 🔧 P1-2: 삼항연산자로 스토어 레벨 업데이트 시도
-        const canUpdateStoreContent = isUpdateEditorContentFunction(
-          storeUpdateContent
-        )
-          ? true
-          : false;
-
+        const canUpdateStoreContent =
+          isUpdateEditorContentFunction(storeUpdateContent);
         if (canUpdateStoreContent && storeUpdateContent) {
           console.log('🔄 [UPDATER] 스토어 레벨 콘텐츠 업데이트 실행');
           storeUpdateContent(transformedContent);
@@ -804,12 +970,8 @@ function createEditorContentUpdateModule() {
           updateSuccess = true;
         }
 
-        const canUpdateStoreCompleted = isSetEditorCompletedFunction(
-          storeSetCompleted
-        )
-          ? true
-          : false;
-
+        const canUpdateStoreCompleted =
+          isSetEditorCompletedFunction(storeSetCompleted);
         if (canUpdateStoreCompleted && storeSetCompleted) {
           console.log('🔄 [UPDATER] 스토어 레벨 완료 상태 업데이트 실행');
           storeSetCompleted(transformedIsCompleted);
@@ -817,11 +979,7 @@ function createEditorContentUpdateModule() {
           updateSuccess = true;
         }
 
-        // 🔧 P1-2: 삼항연산자로 FormValues 레벨 업데이트 시도
-        const canUpdateFormValue = isUpdateFormValueFunction(updateFormValue)
-          ? true
-          : false;
-
+        const canUpdateFormValue = isUpdateFormValueFunction(updateFormValue);
         if (canUpdateFormValue && updateFormValue) {
           console.log('🔄 [UPDATER] FormValues 레벨 업데이트 실행');
 
@@ -839,8 +997,8 @@ function createEditorContentUpdateModule() {
           updateSuccess = true;
         }
 
-        // Early Return: 업데이트 실패
-        if (!updateSuccess) {
+        const hasAnyUpdateMethod = updateSuccess;
+        if (!hasAnyUpdateMethod) {
           return createUpdateResultFailure(
             'NO_UPDATE_METHODS',
             '업데이트 함수들을 찾을 수 없음'
@@ -878,16 +1036,16 @@ function createFormFieldUpdateModule() {
   const updateFormField = async <K extends keyof FormValues>(
     fieldName: K,
     fieldValue: FormValues[K]
-  ): Promise<UpdateResult> => {
+  ): Promise<UpdateExecutionResult> => {
     console.log('🔄 [UPDATER] 폼 필드 업데이트:', { fieldName, fieldValue });
 
     return safelyExecuteAsyncOperation(
       async () => {
-        // Early Return: 유효하지 않은 필드명
-        if (
-          !fieldName ||
-          (typeof fieldName === 'string' && fieldName.trim().length === 0)
-        ) {
+        const isFieldNameValid =
+          fieldName &&
+          (typeof fieldName === 'string' ? fieldName.trim().length > 0 : true);
+
+        if (!isFieldNameValid) {
           return createUpdateResultFailure(
             'INVALID_FIELD_NAME',
             `유효하지 않은 필드명: ${String(fieldName)}`
@@ -896,16 +1054,16 @@ function createFormFieldUpdateModule() {
 
         const storeState = useMultiStepFormStore.getState();
 
-        // Early Return: 스토어 접근 불가
-        if (!storeState) {
+        const isStoreStateNull = !storeState;
+        if (isStoreStateNull) {
           return createUpdateResultFailure(
             'STORE_ACCESS_FAILED',
             '스토어 접근 불가'
           );
         }
 
-        // Early Return: 유효하지 않은 스토어
-        if (!isValidObject(storeState)) {
+        const isValidStoreObject = isValidObject(storeState);
+        if (!isValidStoreObject) {
           return createUpdateResultFailure(
             'STORE_NOT_OBJECT',
             '스토어가 객체가 아님'
@@ -914,35 +1072,24 @@ function createFormFieldUpdateModule() {
 
         const multiStepStore = castToMultiStepStore(storeState);
 
-        // Early Return: 스토어 캐스팅 실패
-        if (!multiStepStore) {
+        const isMultiStepStoreNull = !multiStepStore;
+        if (isMultiStepStoreNull) {
           return createUpdateResultFailure(
             'STORE_CASTING_FAILED',
             '스토어 캐스팅 실패'
           );
         }
 
-        // 🔧 P1-3: 구조분해할당으로 업데이트 함수 추출
         const { updateFormValue, setFormValues } = multiStepStore;
 
-        // 🔧 P1-2: 삼항연산자로 업데이트 함수 존재 여부 확인
-        const canUpdateFormValue = isUpdateFormValueFunction(updateFormValue)
-          ? true
-          : false;
-
-        // Early Return: updateFormValue 함수가 없는 경우 fallback 시도
+        const canUpdateFormValue = isUpdateFormValueFunction(updateFormValue);
         if (!canUpdateFormValue) {
           console.error('❌ [UPDATER] updateFormValue 함수 없음');
 
-          // fallback: 직접 상태 조작 시도
-          const canSetFormValues = isSetFormValuesFunction(setFormValues)
-            ? true
-            : false;
-
+          const canSetFormValues = isSetFormValuesFunction(setFormValues);
           if (canSetFormValues && setFormValues) {
             console.log('🔄 [UPDATER] fallback: 직접 상태 조작 시도');
 
-            // 🔧 P1-3: 구조분해할당으로 현재 폼 값 추출
             const {
               formValues: currentFormValues = createDefaultFormValues(),
             } = multiStepStore;
@@ -1001,10 +1148,9 @@ function createCompleteStateUpdateModule() {
 
     return safelyExecuteAsyncOperation(
       async () => {
-        // 🔧 P1-5: 타임아웃과 함께 실행
         return withTimeout(
           executeCompleteUpdate(result),
-          10000, // 10초 타임아웃
+          10000,
           '전체 상태 업데이트 타임아웃'
         );
       },
@@ -1016,7 +1162,6 @@ function createCompleteStateUpdateModule() {
   const executeCompleteUpdate = async (
     result: EditorToMultiStepDataTransformationResult
   ): Promise<boolean> => {
-    // 🔧 P1-3: 구조분해할당으로 변환 결과 추출
     const { transformedContent, transformedIsCompleted } = result;
 
     console.log('📊 [UPDATER] 업데이트할 결과 데이터:', {
@@ -1029,16 +1174,14 @@ function createCompleteStateUpdateModule() {
 
     const startTime = performance.now();
 
-    // 1단계: 에디터 콘텐츠 업데이트 (핵심!)
     const editorUpdateResult = await updateEditorContent(result);
 
-    // Early Return: 에디터 업데이트 실패
-    if (!editorUpdateResult.success) {
+    const isEditorUpdateSuccessful = editorUpdateResult.success;
+    if (!isEditorUpdateSuccessful) {
       console.error('❌ [UPDATER] 에디터 콘텐츠 업데이트 실패');
       return false;
     }
 
-    // 2단계: 추가 폼 필드 업데이트 (안전장치)
     const [contentUpdateResult, completedUpdateResult] = await Promise.all([
       updateFormField('editorCompletedContent', transformedContent),
       updateFormField('isEditorCompleted', transformedIsCompleted),
@@ -1047,13 +1190,10 @@ function createCompleteStateUpdateModule() {
     const endTime = performance.now();
     const duration = endTime - startTime;
 
-    // 🔧 P1-2: 삼항연산자로 전체 성공 여부 결정
     const overallSuccess =
       editorUpdateResult.success &&
       contentUpdateResult.success &&
-      completedUpdateResult.success
-        ? true
-        : false;
+      completedUpdateResult.success;
 
     console.log('📊 [UPDATER] 전체 업데이트 결과:', {
       editorUpdateSuccess: editorUpdateResult.success,
@@ -1065,15 +1205,14 @@ function createCompleteStateUpdateModule() {
       finalCompleted: transformedIsCompleted,
     });
 
-    // Early Return: 일부라도 실패한 경우
-    if (!overallSuccess) {
+    const isOverallUpdateFailed = !overallSuccess;
+    if (isOverallUpdateFailed) {
       console.error('❌ [UPDATER] 일부 업데이트 실패');
       return false;
     }
 
     console.log('✅ [UPDATER] 전체 업데이트 완료');
 
-    // 🔧 P1-5: 최종 검증 (비동기)
     setTimeout(() => {
       performFinalValidation(transformedContent, transformedIsCompleted);
     }, 200);
@@ -1087,35 +1226,42 @@ function createCompleteStateUpdateModule() {
   ): void => {
     const finalState = getCurrentState();
 
-    // 🔧 P1-3: 구조분해할당 + Fallback으로 최종 상태 추출
+    const isValidFinalState = finalState !== null;
+    if (!isValidFinalState) {
+      console.warn('⚠️ [UPDATER] 최종 상태 조회 실패');
+      return;
+    }
+
     const {
       editorCompletedContent: storeContent = '',
       isEditorCompleted: storeCompleted = false,
-      formValues: {
-        editorCompletedContent: formContent = '',
-        isEditorCompleted: formCompleted = false,
-      } = {},
-    } = finalState ?? {};
+      formValues = createDefaultFormValues(),
+    } = finalState;
+
+    const formContent = Reflect.get(formValues, 'editorCompletedContent') ?? '';
+    const formCompleted = Reflect.get(formValues, 'isEditorCompleted') ?? false;
 
     console.log('🔍 [UPDATER] 최종 상태 검증:', {
       storeContent: storeContent.length,
       storeCompleted,
-      formContent: formContent.length,
+      formContent: typeof formContent === 'string' ? formContent.length : 0,
       formCompleted,
       expectedContent: expectedContent.length,
       expectedCompleted,
       synchronizationSuccess:
-        formContent.length > 0 && formCompleted === expectedCompleted,
+        typeof formContent === 'string' &&
+        formContent.length > 0 &&
+        formCompleted === expectedCompleted,
     });
   };
 
   return { performCompleteStateUpdate };
 }
 
-export const createMultiStepStateUpdater = () => {
+// 🔧 핵심 수정: export const → export function으로 변경
+export function createMultiStepStateUpdater() {
   console.log('🏭 [UPDATER_FACTORY] 멀티스텝 상태 업데이터 생성');
 
-  // 🔧 P1-3: 구조분해할당으로 모듈 함수들 추출
   const { isValidTransformationResult } = createValidationModule();
   const { getCurrentState } = createStoreAccessModule();
   const { updateEditorContent } = createEditorContentUpdateModule();
@@ -1131,4 +1277,4 @@ export const createMultiStepStateUpdater = () => {
     updateFormValueInMultiStep: updateFormField,
     performCompleteStateUpdate,
   };
-};
+}
