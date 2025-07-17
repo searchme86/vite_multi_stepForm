@@ -1,6 +1,6 @@
 // blogBasicStep/hooks/useBlogBasicFormState.ts
 
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useMultiStepFormStore } from '../../../../store/multiStepForm/multiStepFormStore';
 
@@ -145,30 +145,6 @@ function sanitizeStringValue(value: unknown): string {
   return '';
 }
 
-// 🛡️ updateFormValue 함수 안전 실행
-function safeUpdateFormValue(
-  updateFormValue: unknown,
-  field: string,
-  value: string
-): boolean {
-  if (typeof updateFormValue !== 'function') {
-    console.error(
-      '❌ [STORE_DEBUG] updateFormValue가 함수가 아님:',
-      typeof updateFormValue
-    );
-    return false;
-  }
-
-  try {
-    updateFormValue(field, value);
-    console.log('✅ [STORE_DEBUG] updateFormValue 성공:', { field, value });
-    return true;
-  } catch (error) {
-    console.error('❌ [STORE_DEBUG] updateFormValue 실패:', error);
-    return false;
-  }
-}
-
 export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
   console.group('🎣 [FORM_STATE_DEBUG] useBlogBasicFormState 시작');
 
@@ -180,16 +156,6 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
     hasFormContext: formContext !== null,
     hasWatch: formContext && 'watch' in formContext,
     hasSetValue: formContext && 'setValue' in formContext,
-  });
-
-  // 🔍 디버깅: Store 상태 확인
-  console.log('🏪 [FORM_STATE_DEBUG] MultiStepFormStore 상태:', {
-    store: multiStepFormStore,
-    storeType: typeof multiStepFormStore,
-    storeKeys:
-      multiStepFormStore && typeof multiStepFormStore === 'object'
-        ? Object.keys(multiStepFormStore)
-        : '없음',
   });
 
   const { watch, setValue } = formContext;
@@ -217,14 +183,37 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
     storeDescription,
   });
 
-  const previousValuesRef = React.useRef<PreviousValues>({
+  // 🔄 이전 값 추적용 ref (무한 루프 방지)
+  const previousValuesRef = useRef<PreviousValues>({
     title: '',
     description: '',
   });
 
+  // 🚩 초기화 상태 ref (useState 대신 ref 사용으로 무한 루프 방지)
+  const isInitializedRef = useRef<boolean>(false);
   const [isInitialized, setIsInitialized] = React.useState<boolean>(false);
 
-  // 🔄 watch 값 변경 감지 및 store 업데이트
+  // 🛡️ 안전한 store 업데이트 함수 (메모이제이션으로 참조 안정화)
+  const safeUpdateFormValue = useCallback(
+    (field: string, value: string) => {
+      if (!isValidMultiStepFormStore(multiStepFormStore)) {
+        console.error('❌ [STORE_DEBUG] store가 유효하지 않음');
+        return false;
+      }
+
+      try {
+        multiStepFormStore.updateFormValue(field, value);
+        console.log('✅ [STORE_DEBUG] updateFormValue 성공:', { field, value });
+        return true;
+      } catch (error) {
+        console.error('❌ [STORE_DEBUG] updateFormValue 실패:', error);
+        return false;
+      }
+    },
+    [multiStepFormStore.updateFormValue]
+  ); // updateFormValue 함수만 의존성으로
+
+  // 🔄 watch 값 변경 감지 및 store 업데이트 (조건부 실행으로 무한 루프 방지)
   React.useEffect(() => {
     console.log('🔄 [FORM_STATE_DEBUG] watch 값 변경 감지 effect 실행');
 
@@ -242,44 +231,48 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
       currentDescription: watchedDescription,
     });
 
-    if (titleChanged && isValidMultiStepFormStore(multiStepFormStore)) {
+    // 🚫 실제 변경이 있을 때만 업데이트 (무한 루프 방지)
+    if (titleChanged && watchedTitle !== '') {
       console.log('📝 [FORM_STATE_DEBUG] 제목 업데이트 시도:', watchedTitle);
-      const success = safeUpdateFormValue(
-        multiStepFormStore.updateFormValue,
-        'title',
-        watchedTitle
-      );
+      const success = safeUpdateFormValue('title', watchedTitle);
 
       if (success) {
         previousValuesRef.current.title = watchedTitle;
       }
     }
 
-    if (descriptionChanged && isValidMultiStepFormStore(multiStepFormStore)) {
+    if (descriptionChanged && watchedDescription !== '') {
       console.log(
         '📝 [FORM_STATE_DEBUG] 설명 업데이트 시도:',
         watchedDescription
       );
-      const success = safeUpdateFormValue(
-        multiStepFormStore.updateFormValue,
-        'description',
-        watchedDescription
-      );
+      const success = safeUpdateFormValue('description', watchedDescription);
 
       if (success) {
         previousValuesRef.current.description = watchedDescription;
       }
     }
 
-    if (!isInitialized && (titleChanged || descriptionChanged)) {
+    // 🚩 초기화 상태 업데이트 (한 번만 실행)
+    if (
+      !isInitializedRef.current &&
+      (titleChanged || descriptionChanged || watchedTitle || watchedDescription)
+    ) {
       console.log('✅ [FORM_STATE_DEBUG] 초기화 완료 설정');
+      isInitializedRef.current = true;
       setIsInitialized(true);
     }
-  }, [watchedTitle, watchedDescription, multiStepFormStore, isInitialized]);
+  }, [watchedTitle, watchedDescription, safeUpdateFormValue]); // 안정한 의존성만
 
-  // 🔄 store 값으로 form 동기화
+  // 🔄 store 값으로 form 동기화 (초기화 시에만 실행)
   React.useEffect(() => {
     console.log('🔄 [FORM_STATE_DEBUG] store → form 동기화 effect 실행');
+
+    // 🚫 이미 초기화되었으면 실행하지 않음 (무한 루프 방지)
+    if (isInitializedRef.current) {
+      console.log('⏭️ [FORM_STATE_DEBUG] 이미 초기화됨, 동기화 스킵');
+      return;
+    }
 
     let hasUpdate = false;
 
@@ -307,22 +300,10 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
       }
     }
 
-    if (!isInitialized) {
-      console.log('✅ [FORM_STATE_DEBUG] 강제 초기화 완료 설정');
-      setIsInitialized(true);
-    }
-
     if (hasUpdate) {
       console.log('🔄 [FORM_STATE_DEBUG] form 값 업데이트 완료');
     }
-  }, [
-    storeTitle,
-    storeDescription,
-    watchedTitle,
-    watchedDescription,
-    setValue,
-    isInitialized,
-  ]);
+  }, [storeTitle, storeDescription]); // setValue는 제외 (React Hook Form에서 안정한 참조 보장)
 
   const result = {
     titleValue: watchedTitle,
