@@ -1,6 +1,8 @@
+// src/hooks/useImageUpload.ts
+
 import { useState, useCallback, useRef } from 'react';
+import type { ImageUploadState } from '../types/userInfoTypes';
 import {
-  ImageUploadState,
   isValidImageFile,
   debugTypeCheck,
   isStringValue,
@@ -54,10 +56,12 @@ const isValidFile = (file: File | null): file is File => {
     return false;
   }
 
+  const { name: fileName, type: fileType, size: fileSize } = file;
+
   return (
-    typeof file.name === 'string' &&
-    typeof file.type === 'string' &&
-    typeof file.size === 'number'
+    typeof fileName === 'string' &&
+    typeof fileType === 'string' &&
+    typeof fileSize === 'number'
   );
 };
 
@@ -77,47 +81,49 @@ const getFileFromInputEvent = (
     return null;
   }
 
-  if (!isHTMLInputElement(event.target)) {
+  const { target: eventTarget } = event;
+
+  if (!isHTMLInputElement(eventTarget)) {
     console.error(
       '❌ getFileFromInputEvent: target이 HTMLInputElement가 아님',
       {
-        target: event.target,
-        targetType: typeof event.target,
+        target: eventTarget,
+        targetType: typeof eventTarget,
       }
     );
     return null;
   }
 
-  const files = event.target.files;
+  const { files: inputFiles } = eventTarget;
 
-  if (!isValidFileList(files)) {
+  if (!isValidFileList(inputFiles)) {
     console.error('❌ getFileFromInputEvent: files가 FileList가 아님', {
-      files,
-      type: typeof files,
+      files: inputFiles,
+      type: typeof inputFiles,
     });
     return null;
   }
 
-  const file = files[0] || null;
+  const selectedFile = inputFiles[0] || null;
 
-  if (!isValidFile(file)) {
-    if (file !== null) {
+  if (!isValidFile(selectedFile)) {
+    if (selectedFile !== null) {
       console.error('❌ getFileFromInputEvent: 유효하지 않은 File 객체', {
-        file,
-        fileType: typeof file,
+        file: selectedFile,
+        fileType: typeof selectedFile,
       });
     }
     return null;
   }
 
-  if (!isValidImageFile(file)) {
+  if (!isValidImageFile(selectedFile)) {
     console.error('❌ getFileFromInputEvent: 유효하지 않은 이미지 파일');
     return null;
   }
 
   console.log('✅ getFileFromInputEvent: 파일 추출 성공');
 
-  return file;
+  return selectedFile;
 };
 
 export const useImageUpload = ({
@@ -131,11 +137,16 @@ export const useImageUpload = ({
   debugTypeCheck(onError, 'function');
   debugTypeCheck(maxFileSize, 'number');
 
-  if (
-    typeof maxFileSize !== 'number' ||
-    maxFileSize <= 0 ||
-    !Number.isFinite(maxFileSize)
-  ) {
+  const validatedMaxFileSize = (() => {
+    const isValidSize =
+      typeof maxFileSize === 'number' &&
+      maxFileSize > 0 &&
+      Number.isFinite(maxFileSize);
+
+    if (isValidSize) {
+      return maxFileSize;
+    }
+
     const fallbackSize = 5 * 1024 * 1024;
     console.warn('⚠️ useImageUpload: 유효하지 않은 maxFileSize, 기본값 사용', {
       providedSize: maxFileSize,
@@ -143,8 +154,9 @@ export const useImageUpload = ({
       isFinite: Number.isFinite(maxFileSize),
       fallbackSize,
     });
-    maxFileSize = fallbackSize;
-  }
+
+    return fallbackSize;
+  })();
 
   const [imageState, setImageState] = useState<ImageUploadState>({
     imageSrc: '',
@@ -171,9 +183,8 @@ export const useImageUpload = ({
       }
 
       if (!validateSize(file)) {
-        const errorMessage = `파일 크기는 ${(maxFileSize / 1024 / 1024).toFixed(
-          0
-        )}MB 이하여야 합니다.`;
+        const maxSizeInMB = (validatedMaxFileSize / 1024 / 1024).toFixed(0);
+        const errorMessage = `파일 크기는 ${maxSizeInMB}MB 이하여야 합니다.`;
         console.log('❌ validateImageFile: 파일 크기 오류');
         return { isValid: false, errorMessage };
       }
@@ -181,7 +192,7 @@ export const useImageUpload = ({
       console.log('✅ validateImageFile: 검증 통과');
       return { isValid: true };
     },
-    [maxFileSize]
+    [validatedMaxFileSize]
   );
 
   const handleImageUpload = useCallback(
@@ -198,9 +209,9 @@ export const useImageUpload = ({
         return;
       }
 
-      const file = getFileFromInputEvent(event);
+      const selectedFile = getFileFromInputEvent(event);
 
-      if (!file) {
+      if (!selectedFile) {
         console.log(
           '⚠️ handleImageUpload: 선택된 파일 없음 또는 유효하지 않은 파일'
         );
@@ -210,54 +221,65 @@ export const useImageUpload = ({
       setIsUploading(true);
 
       try {
-        const validation = validateImageFile(file);
-        if (!validation.isValid) {
-          const errorMessage =
-            validation.errorMessage || '파일 업로드에 실패했습니다.';
+        const validationResult = validateImageFile(selectedFile);
+        const { isValid: isFileValid, errorMessage: validationError } =
+          validationResult;
+
+        if (!isFileValid) {
+          const finalErrorMessage =
+            validationError || '파일 업로드에 실패했습니다.';
           console.log('❌ handleImageUpload: 파일 검증 실패');
-          onError(errorMessage);
+          onError(finalErrorMessage);
           return;
         }
 
         console.log('🔄 handleImageUpload: Base64 변환 시작');
-        const base64Result = await convertImageToBase64(file);
+        const base64ConversionResult = await convertImageToBase64(selectedFile);
 
-        if (!isStringValue(base64Result) || base64Result.trim().length === 0) {
-          const errorMessage = '이미지 변환 결과가 유효하지 않습니다.';
+        const isValidBase64Result =
+          isStringValue(base64ConversionResult) &&
+          base64ConversionResult.trim().length > 0;
+
+        if (!isValidBase64Result) {
+          const conversionErrorMessage =
+            '이미지 변환 결과가 유효하지 않습니다.';
           console.error('❌ handleImageUpload: Base64 변환 결과 검증 실패', {
-            result: base64Result,
-            resultType: typeof base64Result,
-            resultLength: isStringValue(base64Result) ? base64Result.length : 0,
-            errorMessage,
+            result: base64ConversionResult,
+            resultType: typeof base64ConversionResult,
+            resultLength: isStringValue(base64ConversionResult)
+              ? base64ConversionResult.length
+              : 0,
+            errorMessage: conversionErrorMessage,
           });
-          onError(errorMessage);
+          onError(conversionErrorMessage);
           return;
         }
 
-        setImageState((prevState) => ({
-          ...prevState,
-          imageSrc: base64Result,
+        setImageState((previousState) => ({
+          ...previousState,
+          imageSrc: base64ConversionResult,
           showCropper: false,
           cropData: null,
         }));
 
-        onImageUpdate(base64Result);
+        onImageUpdate(base64ConversionResult);
 
         console.log('✅ handleImageUpload: 이미지 업로드 성공');
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
+      } catch (uploadError) {
+        const finalErrorMessage =
+          uploadError instanceof Error
+            ? uploadError.message
             : '이미지 업로드에 실패했습니다.';
 
-        console.error('❌ handleImageUpload: 업로드 실패');
+        console.error('❌ handleImageUpload: 업로드 실패', { uploadError });
 
-        onError(errorMessage);
+        onError(finalErrorMessage);
       } finally {
         setIsUploading(false);
 
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+        const { current: fileInputElement } = fileInputRef;
+        if (fileInputElement) {
+          fileInputElement.value = '';
           console.log('🔄 handleImageUpload: 파일 입력 초기화 완료');
         }
       }
@@ -276,8 +298,9 @@ export const useImageUpload = ({
 
     onImageUpdate('');
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    const { current: fileInputElement } = fileInputRef;
+    if (fileInputElement) {
+      fileInputElement.value = '';
       console.log('🗑️ clearImage: 파일 입력 초기화 완료');
     }
 
@@ -287,18 +310,21 @@ export const useImageUpload = ({
   const triggerFileSelect = useCallback((): void => {
     console.log('📁 triggerFileSelect: 파일 선택 창 열기');
 
-    if (
-      fileInputRef.current &&
-      typeof fileInputRef.current.click === 'function'
-    ) {
+    const { current: fileInputElement } = fileInputRef;
+    const hasFileInputElement = fileInputElement !== null;
+    const hasClickMethod =
+      fileInputElement && typeof fileInputElement.click === 'function';
+
+    if (hasFileInputElement && hasClickMethod) {
       try {
-        fileInputRef.current.click();
+        fileInputElement.click();
         console.log('✅ triggerFileSelect: 파일 선택 창 열기 성공');
-      } catch (error) {
+      } catch (clickError) {
+        const clickErrorMessage =
+          clickError instanceof Error ? clickError.message : '알 수 없는 오류';
         console.error('❌ triggerFileSelect: 파일 선택 창 열기 실패', {
-          error,
-          errorMessage:
-            error instanceof Error ? error.message : '알 수 없는 오류',
+          error: clickError,
+          errorMessage: clickErrorMessage,
         });
         onError('파일 선택 창을 열 수 없습니다.');
       }
@@ -306,10 +332,8 @@ export const useImageUpload = ({
       console.error(
         '❌ triggerFileSelect: 파일 입력 참조 없음 또는 click 메서드 없음',
         {
-          hasRef: !!fileInputRef.current,
-          hasClick: fileInputRef.current
-            ? typeof fileInputRef.current.click
-            : 'no ref',
+          hasRef: hasFileInputElement,
+          hasClick: hasClickMethod,
         }
       );
       onError('파일 선택 창을 열 수 없습니다.');

@@ -1,4 +1,4 @@
-// userInfoStep/UserInfoStepContainer.tsx - 디버깅 버전
+// src/components/multiStepForm/steps/stepsSections/userInfoStep/UserInfoStepContainer.tsx
 
 import { useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -6,12 +6,26 @@ import { useUserInfoFormSync } from './hooks/useUserInfoFormSync';
 import UserProfileImageSection from './parts/UserProfileImageSection';
 import UserBasicInfoSection from './parts/UserBasicInfoSection';
 import UserBioSection from './parts/UserBioSection';
+import type { ToastColor } from './types/userInfoTypes';
 import {
   debugTypeCheck,
   isStringValue,
   ensureStringValue,
-  ToastColor,
 } from './types/userInfoTypes';
+
+const isDevelopmentMode = (): boolean => {
+  try {
+    const { hostname = '' } = window?.location || {};
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isDevPort =
+      window?.location?.port && parseInt(window.location.port, 10) >= 3000;
+
+    return isLocalhost || Boolean(isDevPort);
+  } catch (debugError) {
+    console.log('⚠️ 개발 모드 감지 실패, 기본값 false 사용:', { debugError });
+    return false;
+  }
+};
 
 function UserInfoStepContainer() {
   console.group('🎯 [USER_INFO_DEBUG] UserInfoStepContainer 렌더링');
@@ -20,31 +34,25 @@ function UserInfoStepContainer() {
     new Date().toISOString()
   );
 
-  // React Hook Form 컨텍스트 (기존 코드와 호환성 유지)
   const { watch, setValue, getValues } = useFormContext();
-
-  // zustand 스토어와 실시간 동기화 훅
   const { updateFormValue, addToast, formValues } = useUserInfoFormSync();
 
-  // 🔍 디버깅: 현재 상태 로깅
   console.log('🔍 [USER_INFO_DEBUG] 현재 상태:', {
     formValues,
     nickname: formValues.nickname || '없음',
     emailPrefix: formValues.emailPrefix || '없음',
     emailDomain: formValues.emailDomain || '없음',
     bioLength: isStringValue(formValues.bio) ? formValues.bio.length : 0,
-    hasUserImage: !!formValues.userImage,
+    hasUserImage: Boolean(formValues.userImage),
     timestamp: new Date().toISOString(),
   });
 
-  // 현재 사용자 이미지 값 감시 (타입단언 없이)
   const watchedUserImage = watch('userImage');
   const currentUserImage = ensureStringValue(
     watchedUserImage || formValues.userImage,
     ''
   );
 
-  // 🔍 디버깅: React Hook Form 값들과 비교
   const reactHookFormValues = getValues();
   console.log('🔍 [USER_INFO_DEBUG] React Hook Form vs 커스텀 훅 비교:', {
     reactHookForm: {
@@ -72,33 +80,39 @@ function UserInfoStepContainer() {
   });
 
   console.log('🖼️ [USER_INFO_DEBUG] 현재 이미지 상태:', {
-    hasWatchedImage: !!watchedUserImage,
-    hasStoreImage: !!formValues.userImage,
+    hasWatchedImage: Boolean(watchedUserImage),
+    hasStoreImage: Boolean(formValues.userImage),
     imageLength: currentUserImage.length,
     watchedImageType: typeof watchedUserImage,
     storeImageType: typeof formValues.userImage,
     timestamp: new Date().toISOString(),
   });
 
-  // 🔍 디버깅: 실시간 폼 변경 감지
   useEffect(() => {
     console.log('🔍 [USER_INFO_DEBUG] 실시간 폼 변경 감지 설정');
 
-    const subscription = watch((value, { name, type }) => {
-      if (
-        name &&
-        ['userImage', 'nickname', 'emailPrefix', 'emailDomain', 'bio'].includes(
-          name
-        )
-      ) {
-        console.log('🔄 [USER_INFO_DEBUG] 폼 필드 변경 감지:', {
-          fieldName: name,
-          newValue: value[name],
-          changeType: type,
-          timestamp: new Date().toISOString(),
-        });
+    const subscription = watch(
+      (formValue, { name: fieldName, type: changeType }) => {
+        const validFieldNames = [
+          'userImage',
+          'nickname',
+          'emailPrefix',
+          'emailDomain',
+          'bio',
+        ];
+        const isValidField = fieldName && validFieldNames.includes(fieldName);
+
+        if (isValidField) {
+          const { [fieldName]: newValue } = formValue;
+          console.log('🔄 [USER_INFO_DEBUG] 폼 필드 변경 감지:', {
+            fieldName,
+            newValue,
+            changeType,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
-    });
+    );
 
     return () => {
       console.log('🔄 [USER_INFO_DEBUG] 실시간 폼 변경 감지 해제');
@@ -106,7 +120,6 @@ function UserInfoStepContainer() {
     };
   }, [watch]);
 
-  // 🔍 디버깅: 상태 변경 시 로깅
   useEffect(() => {
     console.log('📊 [USER_INFO_DEBUG] 상태 변경 감지:', {
       formValues,
@@ -114,16 +127,14 @@ function UserInfoStepContainer() {
     });
   }, [formValues]);
 
-  // 이미지 변경 처리 함수 (타입단언 없이)
   const handleImageChange = (imageData: unknown): void => {
     console.log('🖼️ [USER_INFO_DEBUG] 이미지 변경 처리:', {
-      hasData: !!imageData,
+      hasData: Boolean(imageData),
       dataType: typeof imageData,
       timestamp: new Date().toISOString(),
     });
     debugTypeCheck(imageData, 'string');
 
-    // 이미지 데이터 타입 검증
     const safeImageData = ensureStringValue(imageData);
 
     if (!isStringValue(imageData)) {
@@ -141,7 +152,10 @@ function UserInfoStepContainer() {
     try {
       updateFormValue('userImage', safeImageData);
 
-      if (safeImageData && safeImageData.trim().length > 0) {
+      const hasValidImageData =
+        safeImageData && safeImageData.trim().length > 0;
+
+      if (hasValidImageData) {
         addToast({
           title: '프로필 이미지 업데이트',
           description: '프로필 이미지가 성공적으로 업데이트되었습니다.',
@@ -153,13 +167,17 @@ function UserInfoStepContainer() {
         imageLength: safeImageData.length,
         timestamp: new Date().toISOString(),
       });
-    } catch (error) {
+    } catch (imageUpdateError) {
+      const errorMessage =
+        imageUpdateError instanceof Error
+          ? imageUpdateError.message
+          : '알 수 없는 오류';
+
       console.error('❌ [USER_INFO_DEBUG] 이미지 변경 실패:', {
-        error,
+        error: imageUpdateError,
         imageData: safeImageData,
-        errorType: typeof error,
-        errorMessage:
-          error instanceof Error ? error.message : '알 수 없는 오류',
+        errorType: typeof imageUpdateError,
+        errorMessage,
         timestamp: new Date().toISOString(),
       });
 
@@ -171,7 +189,6 @@ function UserInfoStepContainer() {
     }
   };
 
-  // 이메일 도메인 선택 처리 함수 (타입단언 없이)
   const handleDomainSelect = (domain: unknown): void => {
     console.log('📧 [USER_INFO_DEBUG] 도메인 선택 처리:', {
       domain,
@@ -191,7 +208,9 @@ function UserInfoStepContainer() {
       });
     }
 
-    if (!safeDomain || safeDomain.trim().length === 0) {
+    const hasDomainValue = safeDomain && safeDomain.trim().length > 0;
+
+    if (!hasDomainValue) {
       console.warn('⚠️ [USER_INFO_DEBUG] 빈 도메인 값:', {
         domain: safeDomain,
         timestamp: new Date().toISOString(),
@@ -205,13 +224,17 @@ function UserInfoStepContainer() {
         domain: safeDomain,
         timestamp: new Date().toISOString(),
       });
-    } catch (error) {
+    } catch (domainUpdateError) {
+      const errorMessage =
+        domainUpdateError instanceof Error
+          ? domainUpdateError.message
+          : '알 수 없는 오류';
+
       console.error('❌ [USER_INFO_DEBUG] 도메인 선택 실패:', {
-        error,
+        error: domainUpdateError,
         domain: safeDomain,
-        errorType: typeof error,
-        errorMessage:
-          error instanceof Error ? error.message : '알 수 없는 오류',
+        errorType: typeof domainUpdateError,
+        errorMessage,
         timestamp: new Date().toISOString(),
       });
 
@@ -223,7 +246,6 @@ function UserInfoStepContainer() {
     }
   };
 
-  // 도메인 검증 성공 처리 (타입단언 없이)
   const handleValidationSuccess = (domain: unknown): void => {
     console.log('✅ [USER_INFO_DEBUG] 도메인 검증 성공:', {
       domain,
@@ -242,7 +264,9 @@ function UserInfoStepContainer() {
       });
     }
 
-    if (safeDomain && safeDomain.trim().length > 0) {
+    const hasDomainValue = safeDomain && safeDomain.trim().length > 0;
+
+    if (hasDomainValue) {
       addToast({
         title: '도메인 선택 완료',
         description: `${safeDomain}이 선택되었습니다.`,
@@ -251,7 +275,6 @@ function UserInfoStepContainer() {
     }
   };
 
-  // 검증 오류 처리 (타입단언 없이)
   const handleValidationError = (message: unknown): void => {
     console.log('❌ [USER_INFO_DEBUG] 검증 오류:', {
       message,
@@ -277,7 +300,6 @@ function UserInfoStepContainer() {
     });
   };
 
-  // 이미지 업로드 오류 처리 (타입단언 없이)
   const handleImageError = (message: unknown): void => {
     console.log('❌ [USER_INFO_DEBUG] 이미지 오류:', {
       message,
@@ -309,10 +331,11 @@ function UserInfoStepContainer() {
   console.log('🎯 [USER_INFO_DEBUG] 렌더링 준비 완료');
   console.groupEnd();
 
+  const isDevMode = isDevelopmentMode();
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* 안내 메시지 섹션 */}
-      <div className="p-3 rounded-lg bg-default-50 sm:p-4">
+    <main className="space-y-4 sm:space-y-6">
+      <section className="p-3 rounded-lg bg-default-50 sm:p-4">
         <h3 className="mb-2 text-base font-medium sm:text-lg">
           유저 정보 입력 안내
         </h3>
@@ -320,35 +343,32 @@ function UserInfoStepContainer() {
           블로그 작성자 정보를 입력해주세요. 닉네임, 이메일은 필수 입력
           항목입니다.
         </p>
-      </div>
+      </section>
 
-      {/* 사용자 프로필 섹션 (반응형 레이아웃) */}
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6 sm:items-start">
-        {/* 프로필 이미지 섹션 */}
+      <section className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6 sm:items-start">
         <UserProfileImageSection
           currentImage={currentUserImage}
           onImageChange={handleImageChange}
           onError={handleImageError}
         />
 
-        {/* 기본 정보 입력 섹션 */}
         <UserBasicInfoSection
           onDomainSelect={handleDomainSelect}
           onValidationSuccess={handleValidationSuccess}
           onValidationError={handleValidationError}
           setValue={setValue}
         />
-      </div>
+      </section>
 
-      {/* 자기소개 섹션 (전체 너비) */}
-      <UserBioSection
-        maxLength={500}
-        placeholder="간단한 자기소개를 입력하세요"
-      />
+      <section>
+        <UserBioSection
+          maxLength={500}
+          placeholder="간단한 자기소개를 입력하세요"
+        />
+      </section>
 
-      {/* 🔍 디버깅 정보 표시 (개발 모드에서만) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="p-4 mt-4 text-xs bg-gray-100 rounded-lg">
+      {isDevMode ? (
+        <section className="p-4 mt-4 text-xs bg-gray-100 rounded-lg">
           <h4 className="font-bold text-blue-600">🔍 디버깅 정보 (UserInfo)</h4>
           <div className="mt-2 space-y-1">
             <div>닉네임: {formValues.nickname || '없음'}</div>
@@ -363,9 +383,9 @@ function UserInfoStepContainer() {
               프로필 이미지: {formValues.userImage ? '설정됨' : '미설정'}
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        </section>
+      ) : null}
+    </main>
   );
 }
 
