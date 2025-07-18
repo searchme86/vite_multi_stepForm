@@ -1,7 +1,7 @@
 // bridges/common/componentStandardization.ts
 
 import type { ReactNode, KeyboardEvent, MouseEvent } from 'react';
-import type { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
+import type { BridgeSystemConfiguration } from '../editorMultiStepBridge/modernBridgeTypes';
 
 // 🔧 표준 Size 시스템 (5단계 통일)
 export type StandardSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -330,30 +330,46 @@ export const createAccessibilityHelper = () => {
       const shouldExecuteClick = onClick !== undefined && isEnterOrSpace;
       if (shouldExecuteClick) {
         event.preventDefault();
-        // 안전한 타입 변환 - unknown을 거쳐서 타입 변환
-        const mockMouseEvent = {
-          ...event,
-          button: 0,
-          buttons: 1,
-          clientX: 0,
-          clientY: 0,
-          movementX: 0,
-          movementY: 0,
-          offsetX: 0,
-          offsetY: 0,
-          pageX: 0,
-          pageY: 0,
-          screenX: 0,
-          screenY: 0,
-          x: 0,
-          y: 0,
-          altKey: event.altKey,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-          shiftKey: event.shiftKey,
-          getModifierState: event.getModifierState.bind(event),
-          relatedTarget: null,
-        } as unknown as MouseEvent<HTMLElement>;
+        // 키보드 이벤트에서 마우스 이벤트 속성들을 안전하게 생성
+        const mockMouseEvent: MouseEvent<HTMLElement> = Object.create(
+          MouseEvent.prototype,
+          {
+            button: { value: 0, writable: false },
+            buttons: { value: 1, writable: false },
+            clientX: { value: 0, writable: false },
+            clientY: { value: 0, writable: false },
+            movementX: { value: 0, writable: false },
+            movementY: { value: 0, writable: false },
+            offsetX: { value: 0, writable: false },
+            offsetY: { value: 0, writable: false },
+            pageX: { value: 0, writable: false },
+            pageY: { value: 0, writable: false },
+            screenX: { value: 0, writable: false },
+            screenY: { value: 0, writable: false },
+            x: { value: 0, writable: false },
+            y: { value: 0, writable: false },
+            altKey: { value: event.altKey, writable: false },
+            ctrlKey: { value: event.ctrlKey, writable: false },
+            metaKey: { value: event.metaKey, writable: false },
+            shiftKey: { value: event.shiftKey, writable: false },
+            getModifierState: {
+              value: event.getModifierState.bind(event),
+              writable: false,
+            },
+            relatedTarget: { value: null, writable: false },
+            currentTarget: { value: event.currentTarget, writable: false },
+            target: { value: event.target, writable: false },
+            type: { value: 'click', writable: false },
+            timeStamp: { value: event.timeStamp, writable: false },
+            preventDefault: { value: () => {}, writable: false },
+            stopPropagation: { value: () => {}, writable: false },
+            bubbles: { value: true, writable: false },
+            cancelable: { value: true, writable: false },
+            defaultPrevented: { value: false, writable: false },
+            eventPhase: { value: 2, writable: false },
+            isTrusted: { value: true, writable: false },
+          }
+        );
 
         onClick(mockMouseEvent);
       }

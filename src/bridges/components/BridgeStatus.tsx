@@ -13,7 +13,6 @@ interface BridgeStatusProps extends StandardCardProps {
   readonly hideTransferStatus?: boolean;
   readonly hideValidationDetails?: boolean;
   readonly hideStatistics?: boolean;
-  readonly hideErrorsWarnings?: boolean;
   readonly hideLastResult?: boolean;
   readonly showProgressBar?: boolean;
   readonly maxErrorDisplay?: number;
@@ -31,7 +30,7 @@ interface StatusInfo {
   readonly icon: string;
 }
 
-export function BridgeStatus({
+function BridgeStatus({
   size = 'md',
   variant = 'default',
   className = '',
@@ -41,7 +40,6 @@ export function BridgeStatus({
   hideTransferStatus = false,
   hideValidationDetails = false,
   hideStatistics = false,
-  hideErrorsWarnings = false,
   hideLastResult = false,
   showProgressBar = true,
   bridgeConfig,
@@ -82,7 +80,6 @@ export function BridgeStatus({
     hasWarning,
     statusMessage,
     canExecuteAction,
-    progressData,
     editorStatistics,
     bridgeConfiguration,
     executionMetrics,
@@ -205,7 +202,21 @@ export function BridgeStatus({
     const shouldExecuteClick = onClick !== undefined && safeClickable;
     if (shouldExecuteClick) {
       logComponentAction('BRIDGE_STATUS', '카드 클릭됨');
-      onClick!({} as any);
+      const mockEvent: React.MouseEvent<HTMLElement> = Object.create(
+        MouseEvent.prototype,
+        {
+          button: { value: 0, writable: false },
+          buttons: { value: 1, writable: false },
+          clientX: { value: 0, writable: false },
+          clientY: { value: 0, writable: false },
+          currentTarget: { value: null, writable: false },
+          target: { value: null, writable: false },
+          type: { value: 'click', writable: false },
+          preventDefault: { value: () => {}, writable: false },
+          stopPropagation: { value: () => {}, writable: false },
+        }
+      );
+      onClick(mockEvent);
     }
   };
 
@@ -640,3 +651,9 @@ export function BridgeStatus({
     </div>
   );
 }
+
+// 🔧 BridgeStatus 컴포넌트 (기본 export)
+export default BridgeStatus;
+
+// 🔧 MarkdownStatusCard 별칭 export (BridgeModal 호환성을 위해)
+export const MarkdownStatusCard = BridgeStatus;

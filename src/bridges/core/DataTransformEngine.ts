@@ -6,15 +6,10 @@ import type {
   EditorToMultiStepDataTransformationResult,
   MultiStepToEditorDataTransformationResult,
   TransformationMetadata,
-} from '../editorMultiStepBridge/bridgeDataTypes';
+  TransformationStrategyType,
+} from '../editorMultiStepBridge/modernBridgeTypes';
 import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import type { FormValues } from '../../components/multiStepForm/types/formTypes';
-
-// 변환 전략 타입 정의 - bridgeDataTypes와 일치시킴
-type TransformationStrategyType =
-  | 'EXISTING_CONTENT'
-  | 'REBUILD_FROM_CONTAINERS'
-  | 'PARAGRAPH_FALLBACK';
 
 // 변환 옵션 인터페이스
 interface TransformationOptions {
@@ -69,14 +64,31 @@ function createTransformEngineTypeGuardModule() {
   ): snapshot is EditorStateSnapshotForBridge => {
     const isValidSnapshotObject = isValidObject(snapshot);
     if (!isValidSnapshotObject) {
+      console.log('🔍 [DEBUG] isValidEditorSnapshot - not valid object');
       return false;
     }
 
-    const hasEditorContainers = 'editorContainers' in snapshot;
-    const hasEditorParagraphs = 'editorParagraphs' in snapshot;
-    const hasEditorCompletedContent = 'editorCompletedContent' in snapshot;
-    const hasEditorIsCompleted = 'editorIsCompleted' in snapshot;
-    const hasExtractedTimestamp = 'extractedTimestamp' in snapshot;
+    const {
+      editorContainers,
+      editorParagraphs,
+      editorCompletedContent,
+      editorIsCompleted,
+      extractedTimestamp,
+    } = snapshot;
+
+    const hasEditorContainers = editorContainers !== undefined;
+    const hasEditorParagraphs = editorParagraphs !== undefined;
+    const hasEditorCompletedContent = editorCompletedContent !== undefined;
+    const hasEditorIsCompleted = editorIsCompleted !== undefined;
+    const hasExtractedTimestamp = extractedTimestamp !== undefined;
+
+    console.log('🔍 [DEBUG] isValidEditorSnapshot 검증:', {
+      hasEditorContainers,
+      hasEditorParagraphs,
+      hasEditorCompletedContent,
+      hasEditorIsCompleted,
+      hasExtractedTimestamp,
+    });
 
     return (
       hasEditorContainers &&
@@ -92,12 +104,21 @@ function createTransformEngineTypeGuardModule() {
   ): snapshot is MultiStepFormSnapshotForBridge => {
     const isValidSnapshotObject = isValidObject(snapshot);
     if (!isValidSnapshotObject) {
+      console.log('🔍 [DEBUG] isValidMultiStepSnapshot - not valid object');
       return false;
     }
 
-    const hasFormValues = 'formValues' in snapshot;
-    const hasFormCurrentStep = 'formCurrentStep' in snapshot;
-    const hasSnapshotTimestamp = 'snapshotTimestamp' in snapshot;
+    const { formValues, formCurrentStep, snapshotTimestamp } = snapshot;
+
+    const hasFormValues = formValues !== undefined;
+    const hasFormCurrentStep = formCurrentStep !== undefined;
+    const hasSnapshotTimestamp = snapshotTimestamp !== undefined;
+
+    console.log('🔍 [DEBUG] isValidMultiStepSnapshot 검증:', {
+      hasFormValues,
+      hasFormCurrentStep,
+      hasSnapshotTimestamp,
+    });
 
     return hasFormValues && hasFormCurrentStep && hasSnapshotTimestamp;
   };
@@ -108,14 +129,17 @@ function createTransformEngineTypeGuardModule() {
       return false;
     }
 
-    const hasValidId =
-      'id' in container && isValidString(Reflect.get(container, 'id'));
-    const hasValidName =
-      'name' in container && isValidString(Reflect.get(container, 'name'));
-    const hasValidOrder =
-      'order' in container &&
-      typeof Reflect.get(container, 'order') === 'number' &&
-      !Number.isNaN(Reflect.get(container, 'order'));
+    const { id, name, order } = container;
+
+    const hasValidId = isValidString(id);
+    const hasValidName = isValidString(name);
+    const hasValidOrder = typeof order === 'number' && !Number.isNaN(order);
+
+    console.log('🔍 [DEBUG] isValidContainer 검증:', {
+      hasValidId,
+      hasValidName,
+      hasValidOrder,
+    });
 
     return hasValidId && hasValidName && hasValidOrder;
   };
@@ -128,16 +152,19 @@ function createTransformEngineTypeGuardModule() {
       return false;
     }
 
-    const hasValidId =
-      'id' in paragraph && isValidString(Reflect.get(paragraph, 'id'));
-    const hasValidContent =
-      'content' in paragraph &&
-      isValidString(Reflect.get(paragraph, 'content'));
-    const hasValidOrder =
-      'order' in paragraph &&
-      typeof Reflect.get(paragraph, 'order') === 'number' &&
-      !Number.isNaN(Reflect.get(paragraph, 'order'));
-    const hasValidContainerId = 'containerId' in paragraph;
+    const { id, content, order, containerId } = paragraph;
+
+    const hasValidId = isValidString(id);
+    const hasValidContent = isValidString(content);
+    const hasValidOrder = typeof order === 'number' && !Number.isNaN(order);
+    const hasValidContainerId = containerId !== undefined;
+
+    console.log('🔍 [DEBUG] isValidParagraph 검증:', {
+      hasValidId,
+      hasValidContent,
+      hasValidOrder,
+      hasValidContainerId,
+    });
 
     return (
       hasValidId && hasValidContent && hasValidOrder && hasValidContainerId
@@ -150,8 +177,15 @@ function createTransformEngineTypeGuardModule() {
       return false;
     }
 
-    const hasEditorCompletedContent = 'editorCompletedContent' in formValues;
-    const hasIsEditorCompleted = 'isEditorCompleted' in formValues;
+    const { editorCompletedContent, isEditorCompleted } = formValues;
+
+    const hasEditorCompletedContent = editorCompletedContent !== undefined;
+    const hasIsEditorCompleted = isEditorCompleted !== undefined;
+
+    console.log('🔍 [DEBUG] isValidFormValues 검증:', {
+      hasEditorCompletedContent,
+      hasIsEditorCompleted,
+    });
 
     return hasEditorCompletedContent && hasIsEditorCompleted;
   };
@@ -378,7 +412,7 @@ function createCacheManagerModule() {
       const isExpired = currentTime - entry.timestamp >= CACHE_EXPIRY_MS;
       if (isExpired) {
         editorToMultiStepCache.delete(key);
-        clearedCount++;
+        clearedCount = clearedCount + 1;
       }
     }
 
@@ -387,7 +421,7 @@ function createCacheManagerModule() {
       const isExpired = currentTime - entry.timestamp >= CACHE_EXPIRY_MS;
       if (isExpired) {
         multiStepToEditorCache.delete(key);
-        clearedCount++;
+        clearedCount = clearedCount + 1;
       }
     }
 
@@ -501,12 +535,9 @@ function createDataExtractionModule() {
     return safelyExecuteTransformation(
       () => {
         const { formValues } = multiStepSnapshot;
-        const formContentField = Reflect.get(
-          formValues,
-          'editorCompletedContent'
-        );
-        const isValidContent = isValidString(formContentField);
-        const extractedContent = isValidContent ? formContentField : '';
+        const { editorCompletedContent = '' } = formValues;
+        const isValidContent = isValidString(editorCompletedContent);
+        const extractedContent = isValidContent ? editorCompletedContent : '';
 
         console.log(
           `🔍 [TRANSFORM_ENGINE] 폼 콘텐츠 추출: ${extractedContent.length}자`
@@ -524,13 +555,10 @@ function createDataExtractionModule() {
     return safelyExecuteTransformation(
       () => {
         const { formValues } = multiStepSnapshot;
-        const formCompletionField = Reflect.get(
-          formValues,
-          'isEditorCompleted'
-        );
-        const isValidCompletion = isValidBoolean(formCompletionField);
+        const { isEditorCompleted = false } = formValues;
+        const isValidCompletion = isValidBoolean(isEditorCompleted);
         const extractedCompletion = isValidCompletion
-          ? formCompletionField
+          ? isEditorCompleted
           : false;
 
         console.log(
@@ -562,7 +590,8 @@ function createMetadataGeneratorModule() {
     paragraphs: ParagraphBlock[],
     transformedContent: string,
     transformationStartTime: number,
-    transformationEndTime: number
+    transformationEndTime: number,
+    strategy: TransformationStrategyType
   ): TransformationMetadata => {
     const assignedParagraphs = paragraphs.filter(
       ({ containerId = null }) => containerId !== null
@@ -572,23 +601,34 @@ function createMetadataGeneratorModule() {
     );
 
     const validationWarnings = new Set<string>();
+    const performanceMetrics = new Map<string, number>();
 
     const hasNoContainers = containers.length === 0;
-    if (hasNoContainers) {
-      validationWarnings.add('컨테이너가 없습니다');
-    }
+    hasNoContainers ? validationWarnings.add('컨테이너가 없습니다') : null;
 
     const hasUnassignedParagraphs = unassignedParagraphs.length > 0;
-    if (hasUnassignedParagraphs) {
-      validationWarnings.add(
-        `${unassignedParagraphs.length}개의 할당되지 않은 문단이 있습니다`
-      );
-    }
+    hasUnassignedParagraphs
+      ? validationWarnings.add(
+          `${unassignedParagraphs.length}개의 할당되지 않은 문단이 있습니다`
+        )
+      : null;
 
     const hasEmptyContent = transformedContent.length === 0;
-    if (hasEmptyContent) {
-      validationWarnings.add('변환된 콘텐츠가 비어있습니다');
-    }
+    hasEmptyContent
+      ? validationWarnings.add('변환된 콘텐츠가 비어있습니다')
+      : null;
+
+    // 성능 메트릭 설정
+    performanceMetrics.set(
+      'processingTime',
+      transformationEndTime - transformationStartTime
+    );
+    performanceMetrics.set('containerProcessingRate', containers.length / 100);
+    performanceMetrics.set('paragraphProcessingRate', paragraphs.length / 100);
+    performanceMetrics.set(
+      'contentProcessingRate',
+      transformedContent.length / 1000
+    );
 
     const metadata: TransformationMetadata = {
       containerCount: containers.length,
@@ -596,9 +636,11 @@ function createMetadataGeneratorModule() {
       assignedParagraphCount: assignedParagraphs.length,
       unassignedParagraphCount: unassignedParagraphs.length,
       totalContentLength: transformedContent.length,
-      lastModified: new Date(),
+      lastModifiedDate: new Date(),
       processingTimeMs: transformationEndTime - transformationStartTime,
       validationWarnings,
+      performanceMetrics,
+      transformationStrategy: strategy,
     };
 
     console.log('📊 [TRANSFORM_ENGINE] 메타데이터 생성 완료:', {
@@ -751,20 +793,27 @@ export function createDataTransformEngine() {
               validParagraphs,
               transformedContent,
               context.startTime,
-              transformationEndTime
+              transformationEndTime,
+              transformationStrategy
             )
           : createDefaultTransformationMetadata();
 
         // 결과 구성
         const result: EditorToMultiStepDataTransformationResult = {
           transformedContent,
-          transformedIsCompleted: Boolean(
-            editorCompletion || transformedContent.length > 0
-          ),
+          transformedIsCompleted:
+            editorCompletion || transformedContent.length > 0,
           transformedMetadata,
           transformationSuccess: true,
           transformationErrors: [],
           transformationStrategy,
+          transformationTimestamp: Date.now(),
+          qualityMetrics: new Map<string, number>([
+            ['contentLength', transformedContent.length],
+            ['containerCount', validContainers.length],
+            ['paragraphCount', validParagraphs.length],
+          ]),
+          contentIntegrityHash: generateContentHash(transformedContent),
         };
 
         // 결과 검증
@@ -778,13 +827,13 @@ export function createDataTransformEngine() {
 
         // 캐시 저장
         const shouldCacheResult = enableCaching;
-        if (shouldCacheResult) {
-          cacheManager.setCachedEditorToMultiStep(
-            editorSnapshot,
-            transformationStrategy,
-            result
-          );
-        }
+        shouldCacheResult
+          ? cacheManager.setCachedEditorToMultiStep(
+              editorSnapshot,
+              transformationStrategy,
+              result
+            )
+          : null;
 
         console.log(
           `✅ [TRANSFORM_ENGINE] Editor → MultiStep 변환 완료: ${context.operationId}`
@@ -861,6 +910,8 @@ export function createDataTransformEngine() {
           transformationErrors: [],
           transformedTimestamp: Date.now(),
           contentMetadata,
+          reverseTransformationStrategy: strategy,
+          dataIntegrityValidation: true,
         };
 
         // 결과 검증
@@ -874,13 +925,13 @@ export function createDataTransformEngine() {
 
         // 캐시 저장
         const shouldCacheResult = enableCaching;
-        if (shouldCacheResult) {
-          cacheManager.setCachedMultiStepToEditor(
-            multiStepSnapshot,
-            strategy,
-            result
-          );
-        }
+        shouldCacheResult
+          ? cacheManager.setCachedMultiStepToEditor(
+              multiStepSnapshot,
+              strategy,
+              result
+            )
+          : null;
 
         console.log(
           `✅ [TRANSFORM_ENGINE] MultiStep → Editor 변환 완료: ${context.operationId}`
@@ -928,9 +979,9 @@ export function createDataTransformEngine() {
 
           containerParagraphs.forEach(({ content: paragraphContent = '' }) => {
             const hasTrimmedContent = paragraphContent.trim().length > 0;
-            if (hasTrimmedContent) {
-              contentParts.push(paragraphContent.trim());
-            }
+            hasTrimmedContent
+              ? contentParts.push(paragraphContent.trim())
+              : null;
           });
 
           contentParts.push('');
@@ -980,10 +1031,27 @@ export function createDataTransformEngine() {
     assignedParagraphCount: 0,
     unassignedParagraphCount: 0,
     totalContentLength: 0,
-    lastModified: new Date(),
+    lastModifiedDate: new Date(),
     processingTimeMs: 0,
     validationWarnings: new Set<string>(),
+    performanceMetrics: new Map<string, number>(),
+    transformationStrategy: 'PARAGRAPH_FALLBACK',
   });
+
+  const generateContentHash = (content: string): string => {
+    try {
+      const hash = content
+        .split('')
+        .reduce(
+          (acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff,
+          0
+        );
+      return Math.abs(hash).toString(36);
+    } catch (hashError) {
+      console.warn('⚠️ [TRANSFORM_ENGINE] 콘텐츠 해시 생성 실패:', hashError);
+      return Date.now().toString(36);
+    }
+  };
 
   const createFailedEditorToMultiStepResult =
     (): EditorToMultiStepDataTransformationResult => ({
@@ -993,6 +1061,9 @@ export function createDataTransformEngine() {
       transformationSuccess: false,
       transformationErrors: ['변환 실행 실패'],
       transformationStrategy: 'PARAGRAPH_FALLBACK',
+      transformationTimestamp: Date.now(),
+      qualityMetrics: new Map<string, number>(),
+      contentIntegrityHash: '',
     });
 
   const createFailedMultiStepToEditorResult =
@@ -1003,6 +1074,8 @@ export function createDataTransformEngine() {
       transformationErrors: ['변환 실행 실패'],
       transformedTimestamp: Date.now(),
       contentMetadata: new Map<string, unknown>(),
+      reverseTransformationStrategy: 'PARAGRAPH_FALLBACK',
+      dataIntegrityValidation: false,
     });
 
   const validateEditorToMultiStepResult = (
@@ -1015,6 +1088,14 @@ export function createDataTransformEngine() {
     const hasValidSuccess = isValidBoolean(result.transformationSuccess);
     const hasValidMetadata = isValidObject(result.transformedMetadata);
     const hasValidErrors = Array.isArray(result.transformationErrors);
+
+    console.log('🔍 [DEBUG] validateEditorToMultiStepResult:', {
+      hasValidContent,
+      hasValidCompleted,
+      hasValidSuccess,
+      hasValidMetadata,
+      hasValidErrors,
+    });
 
     return (
       hasValidContent &&
@@ -1035,6 +1116,14 @@ export function createDataTransformEngine() {
     const hasValidSuccess = isValidBoolean(result.transformationSuccess);
     const hasValidErrors = Array.isArray(result.transformationErrors);
     const hasValidMetadata = result.contentMetadata instanceof Map;
+
+    console.log('🔍 [DEBUG] validateMultiStepToEditorResult:', {
+      hasValidContent,
+      hasValidCompleted,
+      hasValidSuccess,
+      hasValidErrors,
+      hasValidMetadata,
+    });
 
     return (
       hasValidContent &&

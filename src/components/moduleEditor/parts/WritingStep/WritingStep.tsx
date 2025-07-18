@@ -12,7 +12,9 @@ import {
   ErrorStatusModal,
   useErrorStatusModal,
 } from '../../../../bridges/parts/ErrorStatusModal';
-import { useBridgeUIComponents } from '../../../../bridges/hooks/useBridgeUIComponents';
+
+// 🔧 수정: useBridgeUIComponents → useBridgeUI로 변경
+import { useBridgeUI } from '../../../../bridges/hooks/useBridgeUI';
 
 import { EditorSidebarContainer } from './sidebar/EditorSidebarContainer';
 import { StructureManagementSlide } from './sidebar/slides/StructureManagementSlide';
@@ -21,8 +23,8 @@ import { FinalPreviewSlide } from './sidebar/slides/FinalPreviewSlide';
 import { PreviewPanelProps } from '../../../swipeableSection/types/swipeableTypes.ts';
 import type { Container } from '../../../../store/shared/commonTypes';
 
-// 🔧 BridgeSystemConfiguration import 추가
-import { BridgeSystemConfiguration } from '../../../../bridges/editorMultiStepBridge/bridgeDataTypes';
+// 🔧 수정: bridgeDataTypes → modernBridgeTypes로 변경
+import { BridgeSystemConfiguration } from '../../../../bridges/editorMultiStepBridge/modernBridgeTypes';
 import { editorStyles } from './editorStyle.ts';
 
 type SubStep = 'structure' | 'writing';
@@ -78,6 +80,7 @@ interface WritingStepProps {
   moveToContainer: (paragraphId: string, targetContainerId: string) => void;
 }
 
+// 🔧 기본 검증 상태 생성 함수
 const createDefaultValidationStatus = () => ({
   containerCount: 0,
   paragraphCount: 0,
@@ -89,6 +92,7 @@ const createDefaultValidationStatus = () => ({
   isReadyForTransfer: false,
 });
 
+// 🔧 검증 상태 유효성 검사 함수 (사용됨)
 const isValidValidationStatus = (status: unknown): boolean => {
   if (!status || typeof status !== 'object') {
     return false;
@@ -140,22 +144,29 @@ function WritingStep({
     console.log('🔧 [WRITING_STEP] Bridge 설정 생성');
 
     const config: BridgeSystemConfiguration = {
-      enableValidation: true, // 검증 활성화
-      enableErrorRecovery: true, // 에러 복구 활성화
-      debugMode: true, // 🔍 디버그 모드 활성화 (문제 해결용)
+      enableValidation: true,
+      enableErrorRecovery: true,
+      debugMode: true,
+      maxRetryAttempts: 3,
+      timeoutMs: 10000,
+      performanceLogging: false,
+      strictTypeChecking: true,
+      customValidationRules: new Map(),
+      featureFlags: new Set(),
     };
 
     console.log('📊 [WRITING_STEP] 생성된 Bridge 설정:', config);
     return config;
   }, []);
 
-  // 🔧 핵심 수정: 브리지 UI 컴포넌트에서 전송 함수들 추가
+  // 🔧 핵심 수정: useBridgeUI 훅 사용 (useBridgeUIComponents 대신)
   const {
-    validationStatus: rawValidationStatus,
-    executeManualTransfer, // ✅ 브리지 전송 함수 추가
-    canTransfer, // ✅ 전송 가능 여부 추가
-    isTransferring, // ✅ 전송 중 상태 추가
-  } = useBridgeUIComponents(bridgeConfiguration);
+    editorStatistics,
+    validationState,
+    isLoading: isTransferring,
+    canExecuteAction: canTransfer,
+    handleForwardTransfer: executeManualTransfer,
+  } = useBridgeUI(bridgeConfiguration);
 
   const {
     isOpen: isErrorModalOpen,
@@ -163,20 +174,31 @@ function WritingStep({
     closeModal: closeErrorModal,
   } = useErrorStatusModal();
 
+  // 🔧 수정: validationState에서 정보 추출 (isValidValidationStatus 사용)
   const currentValidationStatus = useMemo(() => {
     console.log('🔍 [WRITING_STEP] 검증 상태 안전성 확인:', {
-      rawStatus: rawValidationStatus,
-      isValid: isValidValidationStatus(rawValidationStatus),
+      validationState,
+      editorStatistics,
       bridgeConfigProvided: !!bridgeConfiguration,
     });
 
-    if (!isValidValidationStatus(rawValidationStatus)) {
+    // 🔧 isValidValidationStatus 함수 사용하여 검증
+    if (!validationState || !isValidValidationStatus(validationState)) {
       console.warn('⚠️ [WRITING_STEP] 유효하지 않은 검증 상태, 기본값 사용');
       return createDefaultValidationStatus();
     }
 
-    return rawValidationStatus;
-  }, [rawValidationStatus, bridgeConfiguration]);
+    return {
+      containerCount: editorStatistics?.containerCount || 0,
+      paragraphCount: editorStatistics?.paragraphCount || 0,
+      assignedParagraphCount: editorStatistics?.assignedParagraphCount || 0,
+      unassignedParagraphCount: editorStatistics?.unassignedParagraphCount || 0,
+      totalContentLength: editorStatistics?.totalContentLength || 0,
+      validationErrors: validationState?.errors || [],
+      validationWarnings: validationState?.warnings || [],
+      isReadyForTransfer: canTransfer,
+    };
+  }, [validationState, editorStatistics, bridgeConfiguration, canTransfer]);
 
   const {
     validationErrors = [],
@@ -483,24 +505,25 @@ function WritingStep({
   return (
     <div className="w-full h-full">
       <div className="hidden h-full md:flex md:flex-col">
+        {/* 🔧 수정: variant="minimal" → variant="default" */}
         <QuickStatusBar
           position="top"
-          variant="minimal"
+          variant="default"
           showProgressBar={true}
           showQuickActions={true}
           showStatistics={false}
-          collapsible={true}
-          onQuickTransfer={handleCompleteEditor} // ✅ 수정된 핸들러 사용
+          enableCollapse={true}
+          onQuickTransfer={handleCompleteEditor}
           onShowDetails={() => {}}
+          bridgeConfig={bridgeConfiguration}
           className="border-b border-gray-200 backdrop-blur-sm"
         />
 
-        {/* 🔧 핵심 수정: bridgeConfig prop과 수정된 핸들러 전달 */}
         <StepControls
           sortedContainers={sortedContainers}
           goToStructureStep={goToStructureStep}
           saveAllToContext={saveAllToContext}
-          completeEditor={handleCompleteEditor} // ✅ 수정된 핸들러 전달
+          completeEditor={handleCompleteEditor}
           bridgeConfig={bridgeConfiguration}
         />
         <div className="mt-[30px]">
@@ -524,36 +547,39 @@ function WritingStep({
         </div>
 
         <div className="flex flex-col flex-1">
-          {/* 🔧 핵심 수정: 모바일에서도 bridgeConfig prop과 수정된 핸들러 전달 */}
           <StepControls
             sortedContainers={sortedContainers}
             goToStructureStep={goToStructureStep}
             saveAllToContext={saveAllToContext}
-            completeEditor={handleCompleteEditor} // ✅ 모바일에서도 수정된 핸들러 전달
+            completeEditor={handleCompleteEditor}
             bridgeConfig={bridgeConfiguration}
           />
           <div className="mt-4 space-y-4">
+            {/* 🔧 수정: size="compact" → size="sm", variant="bordered" → variant="default" */}
             <MarkdownStatusCard
-              size="compact"
-              variant="bordered"
+              size="sm"
+              variant="default"
               hideTransferStatus={true}
               hideValidationDetails={true}
               hideStatistics={false}
               hideErrorsWarnings={true}
+              bridgeConfig={bridgeConfiguration}
               className="text-sm transition-all duration-200"
               onClick={() => {
                 handleShowErrorDetails();
               }}
             />
 
+            {/* 🔧 수정: size="medium" → size="md" */}
             <MarkdownCompleteButton
               buttonText="마크다운 완성하기"
-              size="medium"
+              size="md"
               variant="primary"
               fullWidth={true}
-              onCompleteSuccess={handleCompleteEditor} // ✅ 수정된 핸들러 사용
+              onCompleteSuccess={handleCompleteEditor}
               showDetailedStatus={false}
               forceDisabled={hasErrorsForCompleteButton}
+              bridgeConfig={bridgeConfiguration}
               className="py-3 text-sm transition-all duration-200"
             />
           </div>
@@ -571,37 +597,41 @@ function WritingStep({
             </div>
           </div>
 
+          {/* 🔧 수정: variant="tab-bar" → variant="default" */}
           <QuickStatusBar
             position="bottom"
-            variant="tab-bar"
+            variant="default"
             showProgressBar={true}
             showQuickActions={true}
             showStatistics={true}
-            collapsible={false}
-            onQuickTransfer={handleCompleteEditor} // ✅ 수정된 핸들러 사용
+            enableCollapse={false}
+            onQuickTransfer={handleCompleteEditor}
             onShowDetails={() => {}}
+            bridgeConfig={bridgeConfiguration}
             className="border-t border-gray-200 backdrop-blur-sm"
           />
         </div>
       </div>
 
+      {/* 🔧 수정: defaultDuration → duration */}
       <MarkdownResultToast
         position={isMobile ? 'top-center' : 'top-right'}
-        defaultDuration={5000}
+        duration={5000}
         maxToasts={3}
+        bridgeConfig={bridgeConfiguration}
         className="z-50"
         onToastClick={() => {}}
         onToastClose={() => {}}
       />
 
+      {/* 🔧 수정: statusCardProps에서 variant 속성 제거 (지원되지 않는 속성) */}
       <ErrorStatusModal
         isOpen={isErrorModalOpen}
         onClose={closeErrorModal}
         size="lg"
         title="브릿지 상태 및 오류 정보"
+        bridgeConfig={bridgeConfiguration}
         statusCardProps={{
-          size: 'detailed',
-          variant: 'default',
           hideTransferStatus: false,
           hideValidationDetails: false,
           hideStatistics: false,

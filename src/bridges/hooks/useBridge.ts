@@ -5,10 +5,10 @@ import type {
   BridgeSystemConfiguration,
   BridgeOperationExecutionResult,
   BidirectionalSyncResult,
-} from '../editorMultiStepBridge/bridgeDataTypes';
+} from '../editorMultiStepBridge/modernBridgeTypes'; // 🔧 경로 수정: bridgeDataTypes → modernBridgeTypes
 import { createBridgeEngine } from '../core/BridgeEngine';
 import { createSyncEngine } from '../core/SyncEngine';
-import { createEditorStateExtractor } from '../editorMultiStepBridge/editorDataExtractor';
+import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateCapture'; // 🔧 경로 수정: editorDataExtractor → editorStateCapture, 함수명 수정
 
 // 🔧 통합 브릿지 상태 인터페이스 - 단순화된 3개 핵심 상태
 interface SimplifiedBridgeState {
@@ -389,6 +389,14 @@ export function useBridge(
             ['operation', 'REVERSE_TRANSFER'],
             ['timestamp', Date.now()],
           ]),
+          performanceProfile: new Map<string, number>([
+            ['executionTime', performance.now() - startTimeRef.current],
+            ['memoryUsage', 0],
+          ]),
+          resourceUsage: new Map<string, number>([
+            ['cpuUsage', 0],
+            ['memoryAllocated', 0],
+          ]),
         }
       : null;
 
@@ -412,7 +420,7 @@ export function useBridge(
     updateExecutionStart();
 
     const executeBidirectional = async (): Promise<BidirectionalSyncResult> => {
-      // 실제 에디터 데이터 추출
+      // 실제 에디터 데이터 추출 - 🔧 함수명 수정
       const editorExtractor = createEditorStateExtractor();
       const editorData = editorExtractor.getEditorStateWithValidation();
 
@@ -435,7 +443,7 @@ export function useBridge(
     );
 
     const mockResult: BridgeOperationExecutionResult | null =
-      bidirectionalResult?.overallSuccess
+      bidirectionalResult?.overallSyncSuccess
         ? {
             operationSuccess: true,
             operationErrors: [],
@@ -445,12 +453,22 @@ export function useBridge(
             executionMetadata: new Map<string, unknown>([
               ['operation', 'BIDIRECTIONAL_SYNC'],
               ['timestamp', Date.now()],
-              ['overallSuccess', bidirectionalResult.overallSuccess],
+              ['overallSuccess', bidirectionalResult.overallSyncSuccess],
+            ]),
+            performanceProfile: new Map<string, number>([
+              ['executionTime', performance.now() - startTimeRef.current],
+              ['memoryUsage', 0],
+              ['syncOperations', 2],
+            ]),
+            resourceUsage: new Map<string, number>([
+              ['cpuUsage', 0],
+              ['memoryAllocated', 0],
+              ['networkCalls', 0],
             ]),
           }
         : null;
 
-    const errorMessage = bidirectionalResult?.overallSuccess
+    const errorMessage = bidirectionalResult?.overallSyncSuccess
       ? null
       : '양방향 동기화 현재 지원 불가 (MultiStep 추출기 미구현)';
 
@@ -530,6 +548,10 @@ export function useBridge(
         debugMode: false,
         maxRetryAttempts: 3,
         timeoutMs: 5000,
+        performanceLogging: false,
+        strictTypeChecking: true,
+        customValidationRules: new Map<string, (data: unknown) => boolean>(),
+        featureFlags: new Set<string>(),
       };
     }
   }, [bridgeEngine]);

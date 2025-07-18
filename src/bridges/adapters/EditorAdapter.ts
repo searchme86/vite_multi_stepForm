@@ -5,14 +5,14 @@ import type {
   EditorStateSnapshotForBridge,
   SnapshotMetadata,
   ValidationResult,
-} from '../editorMultiStepBridge/bridgeDataTypes';
+} from '../editorMultiStepBridge/modernBridgeTypes';
 import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import { generateCompletedContent } from '../../store/shared/utilityFunctions';
 import {
   validateEditorContainers,
   validateEditorParagraphs,
   calculateEditorStatistics,
-} from '../utils/editorStateUtils';
+} from '../utils/editorDataUtils';
 import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
 import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
 
@@ -52,28 +52,40 @@ interface ExtractedEditorData {
 }
 
 function createEditorAdapterTypeGuards() {
-  const isValidString = (value: unknown): value is string => {
-    return typeof value === 'string';
+  const isValidString = (candidateValue: unknown): candidateValue is string => {
+    return typeof candidateValue === 'string';
   };
 
-  const isValidNumber = (value: unknown): value is number => {
-    return typeof value === 'number' && !Number.isNaN(value);
+  const isValidNumber = (candidateValue: unknown): candidateValue is number => {
+    return typeof candidateValue === 'number' && !Number.isNaN(candidateValue);
   };
 
-  const isValidBoolean = (value: unknown): value is boolean => {
-    return typeof value === 'boolean';
+  const isValidBoolean = (
+    candidateValue: unknown
+  ): candidateValue is boolean => {
+    return typeof candidateValue === 'boolean';
   };
 
-  const isValidObject = (value: unknown): value is Record<string, unknown> => {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  const isValidObject = (
+    candidateValue: unknown
+  ): candidateValue is Record<string, unknown> => {
+    return (
+      candidateValue !== null &&
+      typeof candidateValue === 'object' &&
+      !Array.isArray(candidateValue)
+    );
   };
 
-  const isValidArray = (value: unknown): value is unknown[] => {
-    return Array.isArray(value);
+  const isValidArray = (
+    candidateValue: unknown
+  ): candidateValue is unknown[] => {
+    return Array.isArray(candidateValue);
   };
 
-  const isValidFunction = (value: unknown): value is Function => {
-    return typeof value === 'function';
+  const isValidFunction = (
+    candidateValue: unknown
+  ): candidateValue is Function => {
+    return typeof candidateValue === 'function';
   };
 
   const isValidContainer = (
@@ -85,12 +97,13 @@ function createEditorAdapterTypeGuards() {
     }
 
     const containerObject = candidateContainer;
-    const hasRequiredId =
-      'id' in containerObject && isValidString(containerObject.id);
-    const hasRequiredName =
-      'name' in containerObject && isValidString(containerObject.name);
-    const hasRequiredOrder =
-      'order' in containerObject && isValidNumber(containerObject.order);
+    const containerIdProperty = Reflect.get(containerObject, 'id');
+    const containerNameProperty = Reflect.get(containerObject, 'name');
+    const containerOrderProperty = Reflect.get(containerObject, 'order');
+
+    const hasRequiredId = isValidString(containerIdProperty);
+    const hasRequiredName = isValidString(containerNameProperty);
+    const hasRequiredOrder = isValidNumber(containerOrderProperty);
 
     return hasRequiredId && hasRequiredName && hasRequiredOrder;
   };
@@ -104,17 +117,21 @@ function createEditorAdapterTypeGuards() {
     }
 
     const paragraphObject = candidateParagraph;
-    const hasRequiredId =
-      'id' in paragraphObject && isValidString(paragraphObject.id);
-    const hasRequiredContent =
-      'content' in paragraphObject && isValidString(paragraphObject.content);
-    const hasRequiredOrder =
-      'order' in paragraphObject && isValidNumber(paragraphObject.order);
+    const paragraphIdProperty = Reflect.get(paragraphObject, 'id');
+    const paragraphContentProperty = Reflect.get(paragraphObject, 'content');
+    const paragraphOrderProperty = Reflect.get(paragraphObject, 'order');
+    const paragraphContainerIdProperty = Reflect.get(
+      paragraphObject,
+      'containerId'
+    );
+
+    const hasRequiredId = isValidString(paragraphIdProperty);
+    const hasRequiredContent = isValidString(paragraphContentProperty);
+    const hasRequiredOrder = isValidNumber(paragraphOrderProperty);
 
     const hasValidContainerId =
-      'containerId' in paragraphObject &&
-      (paragraphObject.containerId === null ||
-        isValidString(paragraphObject.containerId));
+      paragraphContainerIdProperty === null ||
+      isValidString(paragraphContainerIdProperty);
 
     return (
       hasRequiredId &&
@@ -133,15 +150,18 @@ function createEditorAdapterTypeGuards() {
     }
 
     const stateObject = candidateState;
-    const hasContainers =
-      !('containers' in stateObject) || isValidArray(stateObject.containers);
-    const hasParagraphs =
-      !('paragraphs' in stateObject) || isValidArray(stateObject.paragraphs);
-    const hasValidCompletion =
-      !('isCompleted' in stateObject) ||
-      isValidBoolean(stateObject.isCompleted);
+    const containersProperty = Reflect.get(stateObject, 'containers');
+    const paragraphsProperty = Reflect.get(stateObject, 'paragraphs');
+    const isCompletedProperty = Reflect.get(stateObject, 'isCompleted');
 
-    return hasContainers && hasParagraphs && hasValidCompletion;
+    const hasValidContainers =
+      !containersProperty || isValidArray(containersProperty);
+    const hasValidParagraphs =
+      !paragraphsProperty || isValidArray(paragraphsProperty);
+    const hasValidCompletion =
+      !isCompletedProperty || isValidBoolean(isCompletedProperty);
+
+    return hasValidContainers && hasValidParagraphs && hasValidCompletion;
   };
 
   const isValidEditorUIState = (
@@ -153,16 +173,25 @@ function createEditorAdapterTypeGuards() {
     }
 
     const stateObject = candidateState;
+    const activeParagraphIdProperty = Reflect.get(
+      stateObject,
+      'activeParagraphId'
+    );
+    const selectedParagraphIdsProperty = Reflect.get(
+      stateObject,
+      'selectedParagraphIds'
+    );
+    const isPreviewOpenProperty = Reflect.get(stateObject, 'isPreviewOpen');
+
     const hasValidActiveParagraph =
-      !('activeParagraphId' in stateObject) ||
-      stateObject.activeParagraphId === null ||
-      isValidString(stateObject.activeParagraphId);
+      !activeParagraphIdProperty ||
+      activeParagraphIdProperty === null ||
+      isValidString(activeParagraphIdProperty);
     const hasValidSelectedParagraphs =
-      !('selectedParagraphIds' in stateObject) ||
-      isValidArray(stateObject.selectedParagraphIds);
+      !selectedParagraphIdsProperty ||
+      isValidArray(selectedParagraphIdsProperty);
     const hasValidPreviewOpen =
-      !('isPreviewOpen' in stateObject) ||
-      isValidBoolean(stateObject.isPreviewOpen);
+      !isPreviewOpenProperty || isValidBoolean(isPreviewOpenProperty);
 
     return (
       hasValidActiveParagraph &&
@@ -186,15 +215,15 @@ function createEditorAdapterTypeGuards() {
 }
 
 function createEditorDataExtractorModule() {
-  const typeGuards = createEditorAdapterTypeGuards();
+  const typeGuardHelpers = createEditorAdapterTypeGuards();
 
   const safelyExecuteExtraction = <T>(
-    operation: () => T,
+    extractionOperation: () => T,
     fallbackValue: T,
     operationName: string
   ): T => {
     try {
-      return operation();
+      return extractionOperation();
     } catch (extractionError) {
       console.error(
         `❌ [EDITOR_ADAPTER] ${operationName} 실행 실패:`,
@@ -215,7 +244,8 @@ function createEditorDataExtractorModule() {
           return null;
         }
 
-        const isValidState = typeGuards.isValidEditorStoreState(coreStoreState);
+        const isValidState =
+          typeGuardHelpers.isValidEditorStoreState(coreStoreState);
         if (!isValidState) {
           console.warn('⚠️ [EDITOR_ADAPTER] 유효하지 않은 코어 상태');
           return null;
@@ -240,7 +270,8 @@ function createEditorDataExtractorModule() {
           return createDefaultUIState();
         }
 
-        const isValidState = typeGuards.isValidEditorUIState(uiStoreState);
+        const isValidState =
+          typeGuardHelpers.isValidEditorUIState(uiStoreState);
         if (!isValidState) {
           console.warn('⚠️ [EDITOR_ADAPTER] UI 상태 타입 오류, 기본값 사용');
           return createDefaultUIState();
@@ -267,7 +298,7 @@ function createEditorDataExtractorModule() {
     return safelyExecuteExtraction(
       () => {
         const isValidContainerArray =
-          typeGuards.isValidArray(containersForContent);
+          typeGuardHelpers.isValidArray(containersForContent);
         if (!isValidContainerArray) {
           console.warn(
             '⚠️ [EDITOR_ADAPTER] 유효하지 않은 컨테이너 배열, 빈 콘텐츠 반환'
@@ -276,7 +307,7 @@ function createEditorDataExtractorModule() {
         }
 
         const isValidParagraphArray =
-          typeGuards.isValidArray(paragraphsForContent);
+          typeGuardHelpers.isValidArray(paragraphsForContent);
         if (!isValidParagraphArray) {
           console.warn(
             '⚠️ [EDITOR_ADAPTER] 유효하지 않은 문단 배열, 빈 콘텐츠 반환'
@@ -319,12 +350,12 @@ function createEditorDataExtractorModule() {
   };
 
   const generateManualContent = (
-    containers: readonly Container[],
-    paragraphs: readonly ParagraphBlock[]
+    sourceContainers: readonly Container[],
+    sourceParagraphs: readonly ParagraphBlock[]
   ): string => {
     return safelyExecuteExtraction(
       () => {
-        const sortedContainerList = [...containers].sort(
+        const sortedContainerList = [...sourceContainers].sort(
           (firstContainer, secondContainer) => {
             const { order: firstOrder = 0 } = firstContainer;
             const { order: secondOrder = 0 } = secondContainer;
@@ -346,7 +377,7 @@ function createEditorDataExtractorModule() {
             return;
           }
 
-          const containerParagraphList = paragraphs
+          const containerParagraphList = sourceParagraphs
             .filter((paragraphItem) => {
               const { containerId: paragraphContainerId } = paragraphItem;
               return paragraphContainerId === containerId;
@@ -410,12 +441,16 @@ function createEditorDataExtractorModule() {
           isPreviewOpen: currentPreviewOpenStatus = false,
         } = uiState;
 
-        const validContainerList = typeGuards.isValidArray(rawContainerList)
-          ? rawContainerList.filter(typeGuards.isValidContainer)
+        const validContainerList = typeGuardHelpers.isValidArray(
+          rawContainerList
+        )
+          ? rawContainerList.filter(typeGuardHelpers.isValidContainer)
           : [];
 
-        const validParagraphList = typeGuards.isValidArray(rawParagraphList)
-          ? rawParagraphList.filter(typeGuards.isValidParagraph)
+        const validParagraphList = typeGuardHelpers.isValidArray(
+          rawParagraphList
+        )
+          ? rawParagraphList.filter(typeGuardHelpers.isValidParagraph)
           : [];
 
         const generatedContent = generateCompletedContentSafely(
@@ -426,16 +461,20 @@ function createEditorDataExtractorModule() {
         const extractedData: ExtractedEditorData = {
           containerList: validContainerList,
           paragraphList: validParagraphList,
-          completionStatus: typeGuards.isValidBoolean(editorCompletionStatus)
+          completionStatus: typeGuardHelpers.isValidBoolean(
+            editorCompletionStatus
+          )
             ? editorCompletionStatus
             : false,
           activeParagraphId: currentActiveParagraphId,
-          selectedParagraphIdList: typeGuards.isValidArray(
+          selectedParagraphIdList: typeGuardHelpers.isValidArray(
             currentSelectedParagraphIds
           )
             ? [...currentSelectedParagraphIds]
             : [],
-          previewOpenStatus: typeGuards.isValidBoolean(currentPreviewOpenStatus)
+          previewOpenStatus: typeGuardHelpers.isValidBoolean(
+            currentPreviewOpenStatus
+          )
             ? currentPreviewOpenStatus
             : false,
           generatedContent,
@@ -474,15 +513,15 @@ function createEditorDataExtractorModule() {
 }
 
 function createEditorDataUpdaterModule() {
-  const typeGuards = createEditorAdapterTypeGuards();
+  const typeGuardHelpers = createEditorAdapterTypeGuards();
 
   const safelyExecuteUpdate = async <T>(
-    operation: () => Promise<T>,
+    updateOperation: () => Promise<T>,
     fallbackValue: T,
     operationName: string
   ): Promise<T> => {
     try {
-      return await operation();
+      return await updateOperation();
     } catch (updateError) {
       console.error(
         `❌ [EDITOR_ADAPTER] ${operationName} 실행 실패:`,
@@ -492,12 +531,15 @@ function createEditorDataUpdaterModule() {
     }
   };
 
-  const updateEditorContent = async (content: string): Promise<boolean> => {
+  const updateEditorContent = async (
+    targetContent: string
+  ): Promise<boolean> => {
     console.log('🔄 [EDITOR_ADAPTER] Editor 콘텐츠 업데이트');
 
     return safelyExecuteUpdate(
       async () => {
-        const isValidContentString = typeGuards.isValidString(content);
+        const isValidContentString =
+          typeGuardHelpers.isValidString(targetContent);
         if (!isValidContentString) {
           console.error('❌ [EDITOR_ADAPTER] 유효하지 않은 콘텐츠 타입');
           return false;
@@ -511,9 +553,9 @@ function createEditorDataUpdaterModule() {
           return false;
         }
 
-        const { setCompletedContent } = editorState;
+        const { setCompletedContent = null } = editorState;
         const isValidSetFunction =
-          typeGuards.isValidFunction(setCompletedContent);
+          typeGuardHelpers.isValidFunction(setCompletedContent);
 
         if (!isValidSetFunction) {
           console.error('❌ [EDITOR_ADAPTER] setCompletedContent 함수 없음');
@@ -521,11 +563,11 @@ function createEditorDataUpdaterModule() {
         }
 
         if (setCompletedContent) {
-          setCompletedContent(content);
+          setCompletedContent(targetContent);
         }
 
         console.log('✅ [EDITOR_ADAPTER] 콘텐츠 업데이트 완료:', {
-          contentLength: content.length,
+          contentLength: targetContent.length,
         });
 
         return true;
@@ -536,13 +578,15 @@ function createEditorDataUpdaterModule() {
   };
 
   const updateEditorCompletion = async (
-    isCompleted: boolean
+    targetCompletionStatus: boolean
   ): Promise<boolean> => {
     console.log('🔄 [EDITOR_ADAPTER] Editor 완료 상태 업데이트');
 
     return safelyExecuteUpdate(
       async () => {
-        const isValidCompletionBoolean = typeGuards.isValidBoolean(isCompleted);
+        const isValidCompletionBoolean = typeGuardHelpers.isValidBoolean(
+          targetCompletionStatus
+        );
         if (!isValidCompletionBoolean) {
           console.error('❌ [EDITOR_ADAPTER] 유효하지 않은 완료 상태 타입');
           return false;
@@ -556,8 +600,9 @@ function createEditorDataUpdaterModule() {
           return false;
         }
 
-        const { setIsCompleted } = editorState;
-        const isValidSetFunction = typeGuards.isValidFunction(setIsCompleted);
+        const { setIsCompleted = null } = editorState;
+        const isValidSetFunction =
+          typeGuardHelpers.isValidFunction(setIsCompleted);
 
         if (!isValidSetFunction) {
           console.error('❌ [EDITOR_ADAPTER] setIsCompleted 함수 없음');
@@ -565,11 +610,11 @@ function createEditorDataUpdaterModule() {
         }
 
         if (setIsCompleted) {
-          setIsCompleted(isCompleted);
+          setIsCompleted(targetCompletionStatus);
         }
 
         console.log('✅ [EDITOR_ADAPTER] 완료 상태 업데이트 완료:', {
-          isCompleted,
+          isCompleted: targetCompletionStatus,
         });
 
         return true;
@@ -580,27 +625,28 @@ function createEditorDataUpdaterModule() {
   };
 
   const updateEditorState = async (
-    content: string,
-    isCompleted: boolean
+    targetContent: string,
+    targetCompletionStatus: boolean
   ): Promise<boolean> => {
     console.log('🔄 [EDITOR_ADAPTER] Editor 전체 상태 업데이트');
 
     return safelyExecuteUpdate(
       async () => {
-        const contentUpdateSuccess = await updateEditorContent(content);
+        const contentUpdateSuccess = await updateEditorContent(targetContent);
         const completionUpdateSuccess = await updateEditorCompletion(
-          isCompleted
+          targetCompletionStatus
         );
 
-        const overallSuccess = contentUpdateSuccess && completionUpdateSuccess;
+        const overallUpdateSuccess =
+          contentUpdateSuccess && completionUpdateSuccess;
 
         console.log('📊 [EDITOR_ADAPTER] 전체 상태 업데이트 결과:', {
           contentUpdateSuccess,
           completionUpdateSuccess,
-          overallSuccess,
+          overallUpdateSuccess,
         });
 
-        return overallSuccess;
+        return overallUpdateSuccess;
       },
       false,
       'UPDATE_STATE'
@@ -608,11 +654,13 @@ function createEditorDataUpdaterModule() {
   };
 
   const validateUpdateData = (
-    content: string,
-    isCompleted: boolean
+    contentToValidate: string,
+    completionStatusToValidate: boolean
   ): boolean => {
-    const hasValidContent = typeGuards.isValidString(content);
-    const hasValidCompletion = typeGuards.isValidBoolean(isCompleted);
+    const hasValidContent = typeGuardHelpers.isValidString(contentToValidate);
+    const hasValidCompletion = typeGuardHelpers.isValidBoolean(
+      completionStatusToValidate
+    );
 
     return hasValidContent && hasValidCompletion;
   };
@@ -627,16 +675,19 @@ function createEditorDataUpdaterModule() {
         return null;
       }
 
-      const { completedContent, isCompleted } = editorState;
+      const { completedContent = '', isCompleted = false } = editorState;
 
       return {
-        currentContent: completedContent ? completedContent : '',
-        currentCompletion: typeGuards.isValidBoolean(isCompleted)
+        currentContent: completedContent,
+        currentCompletion: typeGuardHelpers.isValidBoolean(isCompleted)
           ? isCompleted
           : false,
       };
-    } catch (error) {
-      console.error('❌ [EDITOR_ADAPTER] 현재 상태 조회 실패:', error);
+    } catch (stateRetrievalError) {
+      console.error(
+        '❌ [EDITOR_ADAPTER] 현재 상태 조회 실패:',
+        stateRetrievalError
+      );
       return null;
     }
   };
@@ -654,17 +705,19 @@ class EditorAdapter extends BaseAdapter<
   EditorStateSnapshotForBridge,
   EditorStateSnapshotForBridge
 > {
-  private readonly editorConfiguration: EditorAdapterConfiguration;
+  private readonly editorAdapterConfiguration: EditorAdapterConfiguration;
   private readonly extractorModule: ReturnType<
     typeof createEditorDataExtractorModule
   >;
   private readonly updaterModule: ReturnType<
     typeof createEditorDataUpdaterModule
   >;
-  private readonly typeGuards: ReturnType<typeof createEditorAdapterTypeGuards>;
+  private readonly typeGuardHelpers: ReturnType<
+    typeof createEditorAdapterTypeGuards
+  >;
   private lastSnapshotTimestamp: number;
 
-  constructor(configuration?: Partial<EditorAdapterConfiguration>) {
+  constructor(customConfiguration?: Partial<EditorAdapterConfiguration>) {
     console.log('🔧 [EDITOR_ADAPTER] 에디터 어댑터 초기화 시작');
 
     const defaultConfiguration: EditorAdapterConfiguration = {
@@ -675,8 +728,8 @@ class EditorAdapter extends BaseAdapter<
       enableContentGeneration: true,
     };
 
-    const finalConfiguration = configuration
-      ? { ...defaultConfiguration, ...configuration }
+    const finalConfiguration = customConfiguration
+      ? { ...defaultConfiguration, ...customConfiguration }
       : defaultConfiguration;
 
     super('EDITOR_ADAPTER', '1.0.0', {
@@ -687,17 +740,19 @@ class EditorAdapter extends BaseAdapter<
       healthCheckIntervalMs: finalConfiguration.stateChangePollingInterval,
     });
 
-    this.editorConfiguration = finalConfiguration;
+    this.editorAdapterConfiguration = finalConfiguration;
     this.extractorModule = createEditorDataExtractorModule();
     this.updaterModule = createEditorDataUpdaterModule();
-    this.typeGuards = createEditorAdapterTypeGuards();
+    this.typeGuardHelpers = createEditorAdapterTypeGuards();
     this.lastSnapshotTimestamp = 0;
 
     console.log('✅ [EDITOR_ADAPTER] 에디터 어댑터 초기화 완료:', {
       enableStateChangeDetection:
-        this.editorConfiguration.enableStateChangeDetection,
-      pollingInterval: this.editorConfiguration.stateChangePollingInterval,
-      enableAutoValidation: this.editorConfiguration.enableAutoValidation,
+        this.editorAdapterConfiguration.enableStateChangeDetection,
+      pollingInterval:
+        this.editorAdapterConfiguration.stateChangePollingInterval,
+      enableAutoValidation:
+        this.editorAdapterConfiguration.enableAutoValidation,
     });
   }
 
@@ -705,20 +760,20 @@ class EditorAdapter extends BaseAdapter<
     console.log('🔗 [EDITOR_ADAPTER] 에디터 연결 수행');
 
     try {
-      const coreState = this.extractorModule.extractCoreStoreState();
-      const uiState = this.extractorModule.extractUIStoreState();
+      const extractedCoreState = this.extractorModule.extractCoreStoreState();
+      const extractedUIState = this.extractorModule.extractUIStoreState();
 
-      const hasCoreState = coreState !== null;
-      const hasUIState = uiState !== null;
-      const isConnected = hasCoreState && hasUIState;
+      const hasCoreState = extractedCoreState !== null;
+      const hasUIState = extractedUIState !== null;
+      const isSuccessfullyConnected = hasCoreState && hasUIState;
 
       console.log('📊 [EDITOR_ADAPTER] 연결 결과:', {
-        isConnected,
+        isSuccessfullyConnected,
         hasCoreState,
         hasUIState,
       });
 
-      return isConnected;
+      return isSuccessfullyConnected;
     } catch (connectionError) {
       console.error('❌ [EDITOR_ADAPTER] 연결 실패:', connectionError);
       return false;
@@ -738,21 +793,22 @@ class EditorAdapter extends BaseAdapter<
     console.log('💓 [EDITOR_ADAPTER] 에디터 헬스 체크');
 
     try {
-      const currentState = this.updaterModule.getCurrentEditorState();
-      const hasValidState = currentState !== null;
+      const currentEditorState = this.updaterModule.getCurrentEditorState();
+      const hasValidCurrentState = currentEditorState !== null;
 
       const testSnapshot = this.extractorModule.extractRawEditorData();
-      const hasValidExtraction = testSnapshot !== null;
+      const hasValidExtractionCapability = testSnapshot !== null;
 
-      const isHealthy = hasValidState && hasValidExtraction;
+      const isHealthyState =
+        hasValidCurrentState && hasValidExtractionCapability;
 
       console.log('📊 [EDITOR_ADAPTER] 헬스 체크 결과:', {
-        isHealthy,
-        hasValidState,
-        hasValidExtraction,
+        isHealthyState,
+        hasValidCurrentState,
+        hasValidExtractionCapability,
       });
 
-      return isHealthy;
+      return isHealthyState;
     } catch (healthCheckError) {
       console.error('❌ [EDITOR_ADAPTER] 헬스 체크 실패:', healthCheckError);
       return false;
@@ -764,7 +820,8 @@ class EditorAdapter extends BaseAdapter<
     const extractionStartTime = performance.now();
 
     try {
-      const cacheKey = `editor_snapshot_${Date.now()}`;
+      const currentTimestamp = Date.now();
+      const cacheKey = `editor_snapshot_${currentTimestamp}`;
       const cachedSnapshot = this.getCachedData(cacheKey);
 
       const shouldUseCachedData = cachedSnapshot !== null;
@@ -792,17 +849,23 @@ class EditorAdapter extends BaseAdapter<
       } = rawEditorData;
 
       const extractionEndTime = performance.now();
-      const extractionDuration = extractionEndTime - extractionStartTime;
+      const extractionDurationMs = extractionEndTime - extractionStartTime;
 
       const snapshotMetadata: SnapshotMetadata = {
-        extractionTimestamp: Date.now(),
-        processingDurationMs: extractionDuration,
+        extractionTimestamp: currentTimestamp,
+        processingDurationMs: extractionDurationMs,
         validationStatus: true,
         dataIntegrity: completedContent.length > 0,
         sourceInfo: {
           coreStoreVersion: '1.0.0',
           uiStoreVersion: '1.0.0',
         },
+        additionalMetrics: new Map([
+          ['containerCount', extractedContainerList.length],
+          ['paragraphCount', extractedParagraphList.length],
+          ['contentLength', completedContent.length],
+        ]),
+        processingFlags: new Set(['EXTRACTION_COMPLETE', 'CONTENT_GENERATED']),
       };
 
       const editorSnapshot: EditorStateSnapshotForBridge = {
@@ -813,15 +876,25 @@ class EditorAdapter extends BaseAdapter<
         editorActiveParagraphId: currentActiveParagraphId,
         editorSelectedParagraphIds: [...currentSelectedParagraphIds],
         editorIsPreviewOpen: currentPreviewOpenStatus,
-        extractedTimestamp: Date.now(),
+        extractedTimestamp: currentTimestamp,
         snapshotMetadata,
+        contentStatistics: new Map([
+          ['totalContainers', extractedContainerList.length],
+          ['totalParagraphs', extractedParagraphList.length],
+          ['totalContentLength', completedContent.length],
+        ]),
+        validationCache: new Map([
+          ['hasContainers', extractedContainerList.length > 0],
+          ['hasParagraphs', extractedParagraphList.length > 0],
+          ['hasContent', completedContent.length > 0],
+        ]),
       };
 
       this.setCachedData(cacheKey, editorSnapshot);
       this.lastSnapshotTimestamp = editorSnapshot.extractedTimestamp;
 
       console.log('✅ [EDITOR_ADAPTER] 데이터 추출 완료:', {
-        duration: `${extractionDuration.toFixed(2)}ms`,
+        durationMs: `${extractionDurationMs.toFixed(2)}ms`,
         containerCount: extractedContainerList.length,
         paragraphCount: extractedParagraphList.length,
         contentLength: completedContent.length,
@@ -841,27 +914,30 @@ class EditorAdapter extends BaseAdapter<
     console.log('📥 [EDITOR_ADAPTER] 시스템에 데이터 업데이트');
 
     try {
-      const { editorCompletedContent, editorIsCompleted } = dataPayload;
+      const {
+        editorCompletedContent: contentToUpdate,
+        editorIsCompleted: completionStatusToUpdate,
+      } = dataPayload;
 
-      const isValidData = this.updaterModule.validateUpdateData(
-        editorCompletedContent,
-        editorIsCompleted
+      const isValidUpdateData = this.updaterModule.validateUpdateData(
+        contentToUpdate,
+        completionStatusToUpdate
       );
 
-      if (!isValidData) {
+      if (!isValidUpdateData) {
         console.error('❌ [EDITOR_ADAPTER] 유효하지 않은 업데이트 데이터');
         return false;
       }
 
       const updateResult = await this.updaterModule.updateEditorState(
-        editorCompletedContent,
-        editorIsCompleted
+        contentToUpdate,
+        completionStatusToUpdate
       );
 
       console.log('📊 [EDITOR_ADAPTER] 시스템 업데이트 결과:', {
         updateResult,
-        contentLength: editorCompletedContent.length,
-        isCompleted: editorIsCompleted,
+        contentLength: contentToUpdate.length,
+        isCompleted: completionStatusToUpdate,
       });
 
       return updateResult;
@@ -889,7 +965,7 @@ class EditorAdapter extends BaseAdapter<
       const validationWarnings: string[] = [];
       const errorDetails = new Map<string, string>();
 
-      const hasValidContainers = this.typeGuards.isValidArray(
+      const hasValidContainers = this.typeGuardHelpers.isValidArray(
         snapshotContainerList
       );
       if (!hasValidContainers) {
@@ -897,7 +973,7 @@ class EditorAdapter extends BaseAdapter<
         errorDetails.set('containers', '배열 타입 검증 실패');
       }
 
-      const hasValidParagraphs = this.typeGuards.isValidArray(
+      const hasValidParagraphs = this.typeGuardHelpers.isValidArray(
         snapshotParagraphList
       );
       if (!hasValidParagraphs) {
@@ -905,7 +981,7 @@ class EditorAdapter extends BaseAdapter<
         errorDetails.set('paragraphs', '배열 타입 검증 실패');
       }
 
-      const hasValidContent = this.typeGuards.isValidString(
+      const hasValidContent = this.typeGuardHelpers.isValidString(
         snapshotCompletedContent
       );
       if (!hasValidContent) {
@@ -913,7 +989,7 @@ class EditorAdapter extends BaseAdapter<
         errorDetails.set('content', '문자열 타입 검증 실패');
       }
 
-      const hasValidCompleted = this.typeGuards.isValidBoolean(
+      const hasValidCompleted = this.typeGuardHelpers.isValidBoolean(
         snapshotCompletionStatus
       );
       if (!hasValidCompleted) {
@@ -922,7 +998,7 @@ class EditorAdapter extends BaseAdapter<
       }
 
       const hasValidTimestamp =
-        this.typeGuards.isValidNumber(snapshotTimestamp) &&
+        this.typeGuardHelpers.isValidNumber(snapshotTimestamp) &&
         snapshotTimestamp > 0;
       if (!hasValidTimestamp) {
         validationErrors.push('타임스탬프가 유효하지 않음');
@@ -937,21 +1013,21 @@ class EditorAdapter extends BaseAdapter<
         validationWarnings.push('문단이 없습니다');
       }
 
-      const { enableAutoValidation } = this.editorConfiguration;
+      const { enableAutoValidation } = this.editorAdapterConfiguration;
       if (enableAutoValidation && hasValidContainers && hasValidParagraphs) {
         try {
-          const containersValid = validateEditorContainers([
+          const containersValidationResult = validateEditorContainers([
             ...snapshotContainerList,
           ]);
-          if (!containersValid) {
+          if (!containersValidationResult) {
             validationErrors.push('컨테이너 구조 검증 실패');
             errorDetails.set('containerStructure', '상세 구조 검증 실패');
           }
 
-          const paragraphsValid = validateEditorParagraphs([
+          const paragraphsValidationResult = validateEditorParagraphs([
             ...snapshotParagraphList,
           ]);
-          if (!paragraphsValid) {
+          if (!paragraphsValidationResult) {
             validationErrors.push('문단 구조 검증 실패');
             errorDetails.set('paragraphStructure', '상세 구조 검증 실패');
           }
@@ -975,6 +1051,16 @@ class EditorAdapter extends BaseAdapter<
         hasMinimumContent,
         hasRequiredStructure,
         errorDetails,
+        validationMetrics: new Map([
+          ['errorCount', validationErrors.length],
+          ['warningCount', validationWarnings.length],
+          ['contentLength', snapshotCompletedContent.length],
+        ]),
+        validationFlags: new Set([
+          isValidForTransfer ? 'VALID' : 'INVALID',
+          hasMinimumContent ? 'HAS_CONTENT' : 'NO_CONTENT',
+          hasRequiredStructure ? 'STRUCTURED' : 'UNSTRUCTURED',
+        ]),
       };
 
       console.log('📊 [EDITOR_ADAPTER] 데이터 검증 결과:', {
@@ -996,6 +1082,8 @@ class EditorAdapter extends BaseAdapter<
         hasMinimumContent: false,
         hasRequiredStructure: false,
         errorDetails: new Map([['validation', '검증 실행 실패']]),
+        validationMetrics: new Map([['errorCount', 1]]),
+        validationFlags: new Set(['VALIDATION_FAILED']),
       };
 
       return fallbackValidationResult;
@@ -1008,11 +1096,11 @@ class EditorAdapter extends BaseAdapter<
     console.log('📸 [EDITOR_ADAPTER] 데이터 스냅샷 생성');
 
     try {
-      const snapshotTimestamp = Date.now();
+      const currentTimestamp = Date.now();
       const { snapshotMetadata: originalMetadata } = dataPayload;
 
       const updatedMetadata: SnapshotMetadata = {
-        extractionTimestamp: snapshotTimestamp,
+        extractionTimestamp: currentTimestamp,
         processingDurationMs: originalMetadata.processingDurationMs,
         validationStatus: originalMetadata.validationStatus,
         dataIntegrity: originalMetadata.dataIntegrity,
@@ -1020,16 +1108,18 @@ class EditorAdapter extends BaseAdapter<
           coreStoreVersion: originalMetadata.sourceInfo.coreStoreVersion,
           uiStoreVersion: originalMetadata.sourceInfo.uiStoreVersion,
         },
+        additionalMetrics: new Map(originalMetadata.additionalMetrics),
+        processingFlags: new Set(originalMetadata.processingFlags),
       };
 
       const snapshotResult: EditorStateSnapshotForBridge = {
         ...dataPayload,
-        extractedTimestamp: snapshotTimestamp,
+        extractedTimestamp: currentTimestamp,
         snapshotMetadata: updatedMetadata,
       };
 
       console.log('✅ [EDITOR_ADAPTER] 스냅샷 생성 완료:', {
-        timestamp: snapshotTimestamp,
+        timestamp: currentTimestamp,
         containerCount: snapshotResult.editorContainers.length,
         paragraphCount: snapshotResult.editorParagraphs.length,
       });
@@ -1044,8 +1134,9 @@ class EditorAdapter extends BaseAdapter<
   private createFallbackSnapshot(): EditorStateSnapshotForBridge {
     console.log('🔄 [EDITOR_ADAPTER] fallback 스냅샷 생성');
 
+    const fallbackTimestamp = Date.now();
     const fallbackMetadata: SnapshotMetadata = {
-      extractionTimestamp: Date.now(),
+      extractionTimestamp: fallbackTimestamp,
       processingDurationMs: 0,
       validationStatus: false,
       dataIntegrity: false,
@@ -1053,6 +1144,12 @@ class EditorAdapter extends BaseAdapter<
         coreStoreVersion: '1.0.0-fallback',
         uiStoreVersion: '1.0.0-fallback',
       },
+      additionalMetrics: new Map([
+        ['containerCount', 0],
+        ['paragraphCount', 0],
+        ['contentLength', 0],
+      ]),
+      processingFlags: new Set(['FALLBACK_SNAPSHOT']),
     };
 
     return {
@@ -1063,19 +1160,33 @@ class EditorAdapter extends BaseAdapter<
       editorActiveParagraphId: null,
       editorSelectedParagraphIds: [],
       editorIsPreviewOpen: false,
-      extractedTimestamp: Date.now(),
+      extractedTimestamp: fallbackTimestamp,
       snapshotMetadata: fallbackMetadata,
+      contentStatistics: new Map([
+        ['totalContainers', 0],
+        ['totalParagraphs', 0],
+        ['totalContentLength', 0],
+      ]),
+      validationCache: new Map([
+        ['hasContainers', false],
+        ['hasParagraphs', false],
+        ['hasContent', false],
+      ]),
     };
   }
 
-  public async updateContent(content: string): Promise<boolean> {
+  public async updateContent(targetContent: string): Promise<boolean> {
     console.log('🔄 [EDITOR_ADAPTER] 콘텐츠 업데이트 (공개 메서드)');
-    return await this.updaterModule.updateEditorContent(content);
+    return await this.updaterModule.updateEditorContent(targetContent);
   }
 
-  public async updateCompletion(isCompleted: boolean): Promise<boolean> {
+  public async updateCompletion(
+    targetCompletionStatus: boolean
+  ): Promise<boolean> {
     console.log('🔄 [EDITOR_ADAPTER] 완료 상태 업데이트 (공개 메서드)');
-    return await this.updaterModule.updateEditorCompletion(isCompleted);
+    return await this.updaterModule.updateEditorCompletion(
+      targetCompletionStatus
+    );
   }
 
   public getCurrentState(): EditorStateSnapshotForBridge | null {
@@ -1099,8 +1210,9 @@ class EditorAdapter extends BaseAdapter<
         generatedContent,
       } = currentSnapshot;
 
+      const currentTimestamp = Date.now();
       const snapshotMetadata: SnapshotMetadata = {
-        extractionTimestamp: Date.now(),
+        extractionTimestamp: currentTimestamp,
         processingDurationMs: 0,
         validationStatus: true,
         dataIntegrity: generatedContent.length > 0,
@@ -1108,6 +1220,12 @@ class EditorAdapter extends BaseAdapter<
           coreStoreVersion: '1.0.0',
           uiStoreVersion: '1.0.0',
         },
+        additionalMetrics: new Map([
+          ['containerCount', containerList.length],
+          ['paragraphCount', paragraphList.length],
+          ['contentLength', generatedContent.length],
+        ]),
+        processingFlags: new Set(['CURRENT_STATE_SNAPSHOT']),
       };
 
       const stateSnapshot: EditorStateSnapshotForBridge = {
@@ -1118,8 +1236,18 @@ class EditorAdapter extends BaseAdapter<
         editorActiveParagraphId: activeParagraphId,
         editorSelectedParagraphIds: [...selectedParagraphIdList],
         editorIsPreviewOpen: previewOpenStatus,
-        extractedTimestamp: Date.now(),
+        extractedTimestamp: currentTimestamp,
         snapshotMetadata,
+        contentStatistics: new Map([
+          ['totalContainers', containerList.length],
+          ['totalParagraphs', paragraphList.length],
+          ['totalContentLength', generatedContent.length],
+        ]),
+        validationCache: new Map([
+          ['hasContainers', containerList.length > 0],
+          ['hasParagraphs', paragraphList.length > 0],
+          ['hasContent', generatedContent.length > 0],
+        ]),
       };
 
       return stateSnapshot;
@@ -1185,7 +1313,7 @@ class EditorAdapter extends BaseAdapter<
     paragraphList: readonly ParagraphBlock[]
   ) {
     const assignedParagraphsCount = paragraphList.filter(
-      ({ containerId }) => containerId !== null
+      ({ containerId = null }) => containerId !== null
     ).length;
     const totalContentLength = paragraphList.reduce(
       (totalLength, { content = '' }) => totalLength + content.length,
@@ -1209,27 +1337,27 @@ class EditorAdapter extends BaseAdapter<
   }
 
   public getConfiguration(): EditorAdapterConfiguration {
-    return { ...this.editorConfiguration };
+    return { ...this.editorAdapterConfiguration };
   }
 }
 
 export function createEditorAdapter(
-  configuration?: Partial<EditorAdapterConfiguration>
+  customConfiguration?: Partial<EditorAdapterConfiguration>
 ): EditorAdapter {
   console.log('🏭 [EDITOR_ADAPTER_FACTORY] 에디터 어댑터 생성');
-  return new EditorAdapter(configuration);
+  return new EditorAdapter(customConfiguration);
 }
 
 let editorAdapterSingletonInstance: EditorAdapter | null = null;
 
 export function getEditorAdapterInstance(
-  configuration?: Partial<EditorAdapterConfiguration>
+  customConfiguration?: Partial<EditorAdapterConfiguration>
 ): EditorAdapter {
   if (!editorAdapterSingletonInstance) {
     console.log(
       '🏭 [EDITOR_ADAPTER_SINGLETON] 에디터 어댑터 싱글톤 인스턴스 생성'
     );
-    editorAdapterSingletonInstance = new EditorAdapter(configuration);
+    editorAdapterSingletonInstance = new EditorAdapter(customConfiguration);
   }
   return editorAdapterSingletonInstance;
 }

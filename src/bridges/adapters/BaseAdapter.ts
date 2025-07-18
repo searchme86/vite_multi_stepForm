@@ -4,7 +4,7 @@ import type {
   ValidationResult,
   ErrorDetails,
   BridgeErrorContext,
-} from '../editorMultiStepBridge/bridgeDataTypes';
+} from '../editorMultiStepBridge/modernBridgeTypes';
 
 import {
   extractErrorMessage,
@@ -89,26 +89,27 @@ const createInitialPerformanceMetrics = (): AdapterPerformanceMetrics => {
 
 function createSimpleCacheManager<T>() {
   const createCacheEntry = (
-    data: T,
-    expirationMs: number = 300000
+    entryData: T,
+    cacheExpirationMs: number = 300000
   ): SimpleCacheEntry<T> => {
     console.log('💾 [BASE_ADAPTER] 캐시 엔트리 생성');
 
     return {
-      data,
+      data: entryData,
       timestamp: Date.now(),
-      expirationMs,
+      expirationMs: cacheExpirationMs,
     };
   };
 
-  const isCacheEntryExpired = (entry: SimpleCacheEntry<T>): boolean => {
-    const currentTime = Date.now();
-    const entryAge = currentTime - entry.timestamp;
-    const isExpired = entryAge > entry.expirationMs;
+  const isCacheEntryExpired = (cacheEntry: SimpleCacheEntry<T>): boolean => {
+    const currentTimestamp = Date.now();
+    const { timestamp: entryTimestamp, expirationMs } = cacheEntry;
+    const cacheAge = currentTimestamp - entryTimestamp;
+    const isExpired = cacheAge > expirationMs;
 
     console.log('🔍 [BASE_ADAPTER] 캐시 만료 검사:', {
-      entryAge,
-      expirationMs: entry.expirationMs,
+      cacheAge,
+      expirationMs,
       isExpired,
     });
 
@@ -116,19 +117,19 @@ function createSimpleCacheManager<T>() {
   };
 
   const getCachedData = (
-    cache: Record<string, SimpleCacheEntry<T>>,
+    cacheStorage: Record<string, SimpleCacheEntry<T>>,
     cacheKey: string
   ): T | null => {
     console.log('🔍 [BASE_ADAPTER] 캐시 데이터 조회:', cacheKey);
 
-    const hasEntryInCache = cacheKey in cache;
-    if (!hasEntryInCache) {
+    const hasEntryInStorage = cacheKey in cacheStorage;
+    if (!hasEntryInStorage) {
       console.log('🔍 [BASE_ADAPTER] 캐시에 엔트리 없음');
       return null;
     }
 
-    const cacheEntry = cache[cacheKey];
-    const isEntryExpired = isCacheEntryExpired(cacheEntry);
+    const cachedEntry = cacheStorage[cacheKey];
+    const isEntryExpired = isCacheEntryExpired(cachedEntry);
 
     if (isEntryExpired) {
       console.log('🔍 [BASE_ADAPTER] 캐시 엔트리 만료됨');
@@ -136,50 +137,51 @@ function createSimpleCacheManager<T>() {
     }
 
     console.log('✅ [BASE_ADAPTER] 유효한 캐시 데이터 반환');
-    return cacheEntry.data;
+    const { data: cachedData } = cachedEntry;
+    return cachedData;
   };
 
   const setCachedData = (
-    cache: Record<string, SimpleCacheEntry<T>>,
+    cacheStorage: Record<string, SimpleCacheEntry<T>>,
     cacheKey: string,
-    data: T,
-    expirationMs: number = 300000
+    dataToCache: T,
+    cacheExpirationMs: number = 300000
   ): Record<string, SimpleCacheEntry<T>> => {
     console.log('💾 [BASE_ADAPTER] 캐시 데이터 저장:', cacheKey);
 
-    const newCacheEntry = createCacheEntry(data, expirationMs);
-    const updatedCache = { ...cache };
-    updatedCache[cacheKey] = newCacheEntry;
+    const newCacheEntry = createCacheEntry(dataToCache, cacheExpirationMs);
+    const updatedCacheStorage = { ...cacheStorage };
+    updatedCacheStorage[cacheKey] = newCacheEntry;
 
-    return updatedCache;
+    return updatedCacheStorage;
   };
 
   const clearExpiredEntries = (
-    cache: Record<string, SimpleCacheEntry<T>>
+    cacheStorage: Record<string, SimpleCacheEntry<T>>
   ): Record<string, SimpleCacheEntry<T>> => {
     console.log('🧹 [BASE_ADAPTER] 만료된 캐시 엔트리 정리');
 
-    const cleanedCache: Record<string, SimpleCacheEntry<T>> = {};
-    let originalCount = 0;
-    let cleanedCount = 0;
+    const cleanedCacheStorage: Record<string, SimpleCacheEntry<T>> = {};
+    let originalEntryCount = 0;
+    let validEntryCount = 0;
 
-    for (const [entryKey, cacheEntry] of Object.entries(cache)) {
-      originalCount++;
+    for (const [storageKey, cacheEntry] of Object.entries(cacheStorage)) {
+      originalEntryCount++;
       const isEntryExpired = isCacheEntryExpired(cacheEntry);
 
       if (!isEntryExpired) {
-        cleanedCache[entryKey] = cacheEntry;
-        cleanedCount++;
+        cleanedCacheStorage[storageKey] = cacheEntry;
+        validEntryCount++;
       }
     }
 
     console.log('🧹 [BASE_ADAPTER] 캐시 정리 완료:', {
-      originalCount,
-      cleanedCount,
-      removedCount: originalCount - cleanedCount,
+      originalEntryCount,
+      validEntryCount,
+      removedEntryCount: originalEntryCount - validEntryCount,
     });
 
-    return cleanedCache;
+    return cleanedCacheStorage;
   };
 
   return {
@@ -191,28 +193,29 @@ function createSimpleCacheManager<T>() {
 
 function createValidationCacheManager() {
   const createValidationEntry = (
-    result: ValidationResult,
-    expirationMs: number = 60000
+    validationResult: ValidationResult,
+    cacheExpirationMs: number = 60000
   ): SimpleValidationCacheEntry => {
     console.log('📋 [BASE_ADAPTER] 검증 캐시 엔트리 생성');
 
     return {
-      result,
+      result: validationResult,
       timestamp: Date.now(),
-      expirationMs,
+      expirationMs: cacheExpirationMs,
     };
   };
 
   const isValidationEntryExpired = (
-    entry: SimpleValidationCacheEntry
+    validationEntry: SimpleValidationCacheEntry
   ): boolean => {
-    const currentTime = Date.now();
-    const entryAge = currentTime - entry.timestamp;
-    const isExpired = entryAge > entry.expirationMs;
+    const currentTimestamp = Date.now();
+    const { timestamp: entryTimestamp, expirationMs } = validationEntry;
+    const entryAge = currentTimestamp - entryTimestamp;
+    const isExpired = entryAge > expirationMs;
 
     console.log('🔍 [BASE_ADAPTER] 검증 캐시 만료 검사:', {
       entryAge,
-      expirationMs: entry.expirationMs,
+      expirationMs,
       isExpired,
     });
 
@@ -220,18 +223,18 @@ function createValidationCacheManager() {
   };
 
   const getCachedValidation = (
-    cache: Record<string, SimpleValidationCacheEntry>,
-    cacheKey: string
+    validationCacheStorage: Record<string, SimpleValidationCacheEntry>,
+    validationCacheKey: string
   ): ValidationResult | null => {
-    console.log('🔍 [BASE_ADAPTER] 검증 캐시 조회:', cacheKey);
+    console.log('🔍 [BASE_ADAPTER] 검증 캐시 조회:', validationCacheKey);
 
-    const hasEntryInCache = cacheKey in cache;
-    if (!hasEntryInCache) {
+    const hasValidationInStorage = validationCacheKey in validationCacheStorage;
+    if (!hasValidationInStorage) {
       console.log('🔍 [BASE_ADAPTER] 검증 캐시에 엔트리 없음');
       return null;
     }
 
-    const validationEntry = cache[cacheKey];
+    const validationEntry = validationCacheStorage[validationCacheKey];
     const isEntryExpired = isValidationEntryExpired(validationEntry);
 
     if (isEntryExpired) {
@@ -240,22 +243,26 @@ function createValidationCacheManager() {
     }
 
     console.log('✅ [BASE_ADAPTER] 유효한 검증 캐시 반환');
-    return validationEntry.result;
+    const { result: validationResult } = validationEntry;
+    return validationResult;
   };
 
   const setCachedValidation = (
-    cache: Record<string, SimpleValidationCacheEntry>,
-    cacheKey: string,
-    result: ValidationResult,
-    expirationMs: number = 60000
+    validationCacheStorage: Record<string, SimpleValidationCacheEntry>,
+    validationCacheKey: string,
+    validationResult: ValidationResult,
+    cacheExpirationMs: number = 60000
   ): Record<string, SimpleValidationCacheEntry> => {
-    console.log('📋 [BASE_ADAPTER] 검증 캐시 저장:', cacheKey);
+    console.log('📋 [BASE_ADAPTER] 검증 캐시 저장:', validationCacheKey);
 
-    const newValidationEntry = createValidationEntry(result, expirationMs);
-    const updatedCache = { ...cache };
-    updatedCache[cacheKey] = newValidationEntry;
+    const newValidationEntry = createValidationEntry(
+      validationResult,
+      cacheExpirationMs
+    );
+    const updatedValidationStorage = { ...validationCacheStorage };
+    updatedValidationStorage[validationCacheKey] = newValidationEntry;
 
-    return updatedCache;
+    return updatedValidationStorage;
   };
 
   return {
@@ -266,52 +273,55 @@ function createValidationCacheManager() {
 
 function createAdapterMetricsUpdater() {
   const updateOperationMetrics = (
-    currentMetrics: AdapterPerformanceMetrics,
-    operationSuccess: boolean,
+    currentMetricsState: AdapterPerformanceMetrics,
+    wasOperationSuccessful: boolean,
     operationDurationMs: number
   ): AdapterPerformanceMetrics => {
     console.log('📊 [BASE_ADAPTER] 성능 메트릭 업데이트:', {
-      operationSuccess,
+      wasOperationSuccessful,
       operationDurationMs,
     });
 
-    const incrementedTotalOperations = currentMetrics.totalOperations + 1;
-    const incrementedSuccessfulOperations = operationSuccess
-      ? currentMetrics.successfulOperations + 1
-      : currentMetrics.successfulOperations;
-    const incrementedFailedOperations = operationSuccess
-      ? currentMetrics.failedOperations
-      : currentMetrics.failedOperations + 1;
-
     const {
       totalOperations: previousTotalOperations,
+      successfulOperations: previousSuccessfulOperations,
+      failedOperations: previousFailedOperations,
       averageResponseTimeMs: previousAverageResponseTime,
-    } = currentMetrics;
+    } = currentMetricsState;
+
+    const updatedTotalOperations = previousTotalOperations + 1;
+    const updatedSuccessfulOperations = wasOperationSuccessful
+      ? previousSuccessfulOperations + 1
+      : previousSuccessfulOperations;
+    const updatedFailedOperations = wasOperationSuccessful
+      ? previousFailedOperations
+      : previousFailedOperations + 1;
+
     const calculatedNewAverage =
       previousTotalOperations > 0
         ? (previousAverageResponseTime * previousTotalOperations +
             operationDurationMs) /
-          incrementedTotalOperations
+          updatedTotalOperations
         : operationDurationMs;
 
     return {
-      totalOperations: incrementedTotalOperations,
-      successfulOperations: incrementedSuccessfulOperations,
-      failedOperations: incrementedFailedOperations,
+      totalOperations: updatedTotalOperations,
+      successfulOperations: updatedSuccessfulOperations,
+      failedOperations: updatedFailedOperations,
       averageResponseTimeMs: calculatedNewAverage,
       lastOperationDuration: operationDurationMs,
     };
   };
 
   const getMetricsSummary = (
-    metrics: AdapterPerformanceMetrics
+    performanceMetrics: AdapterPerformanceMetrics
   ): Record<string, number> => {
     const {
       totalOperations,
       successfulOperations,
       failedOperations,
       averageResponseTimeMs,
-    } = metrics;
+    } = performanceMetrics;
 
     const successRate =
       totalOperations > 0 ? (successfulOperations / totalOperations) * 100 : 0;
@@ -341,61 +351,78 @@ function createAdapterMetricsUpdater() {
 
 function createConnectionStateManager() {
   const updateConnectionState = (
-    currentState: AdapterConnectionState,
-    connectionSuccess: boolean
+    currentConnectionState: AdapterConnectionState,
+    wasConnectionSuccessful: boolean
   ): AdapterConnectionState => {
-    console.log('🔗 [BASE_ADAPTER] 연결 상태 업데이트:', connectionSuccess);
+    console.log(
+      '🔗 [BASE_ADAPTER] 연결 상태 업데이트:',
+      wasConnectionSuccessful
+    );
 
-    const incrementedConnectionAttempts = currentState.connectionAttempts + 1;
-    const updatedLastConnectionTime = connectionSuccess
+    const {
+      connectionAttempts: previousConnectionAttempts,
+      lastConnectionTime: previousLastConnectionTime,
+      lastHealthCheckTime: currentLastHealthCheckTime,
+      healthCheckStatus: currentHealthCheckStatus,
+    } = currentConnectionState;
+
+    const updatedConnectionAttempts = previousConnectionAttempts + 1;
+    const updatedLastConnectionTime = wasConnectionSuccessful
       ? Date.now()
-      : currentState.lastConnectionTime;
+      : previousLastConnectionTime;
 
     return {
-      isConnected: connectionSuccess,
+      isConnected: wasConnectionSuccessful,
       lastConnectionTime: updatedLastConnectionTime,
-      connectionAttempts: incrementedConnectionAttempts,
-      lastHealthCheckTime: currentState.lastHealthCheckTime,
-      healthCheckStatus: connectionSuccess
+      connectionAttempts: updatedConnectionAttempts,
+      lastHealthCheckTime: currentLastHealthCheckTime,
+      healthCheckStatus: wasConnectionSuccessful
         ? true
-        : currentState.healthCheckStatus,
+        : currentHealthCheckStatus,
     };
   };
 
   const updateHealthCheckState = (
-    currentState: AdapterConnectionState,
-    healthCheckSuccess: boolean
+    currentConnectionState: AdapterConnectionState,
+    wasHealthCheckSuccessful: boolean
   ): AdapterConnectionState => {
     console.log(
       '💓 [BASE_ADAPTER] 헬스체크 상태 업데이트:',
-      healthCheckSuccess
+      wasHealthCheckSuccessful
     );
 
+    const {
+      isConnected: currentIsConnected,
+      lastConnectionTime: currentLastConnectionTime,
+      connectionAttempts: currentConnectionAttempts,
+    } = currentConnectionState;
+
     return {
-      isConnected: currentState.isConnected,
-      lastConnectionTime: currentState.lastConnectionTime,
-      connectionAttempts: currentState.connectionAttempts,
+      isConnected: currentIsConnected,
+      lastConnectionTime: currentLastConnectionTime,
+      connectionAttempts: currentConnectionAttempts,
       lastHealthCheckTime: Date.now(),
-      healthCheckStatus: healthCheckSuccess,
+      healthCheckStatus: wasHealthCheckSuccessful,
     };
   };
 
   const shouldPerformHealthCheck = (
-    currentState: AdapterConnectionState,
+    currentConnectionState: AdapterConnectionState,
     healthCheckIntervalMs: number
   ): boolean => {
-    const { lastHealthCheckTime } = currentState;
-    const currentTime = Date.now();
-    const timeSinceLastCheck = currentTime - lastHealthCheckTime;
-    const shouldCheck = timeSinceLastCheck >= healthCheckIntervalMs;
+    const { lastHealthCheckTime } = currentConnectionState;
+    const currentTimestamp = Date.now();
+    const timeSinceLastHealthCheck = currentTimestamp - lastHealthCheckTime;
+    const shouldPerformCheck =
+      timeSinceLastHealthCheck >= healthCheckIntervalMs;
 
     console.log('💓 [BASE_ADAPTER] 헬스체크 필요 여부:', {
-      timeSinceLastCheck,
+      timeSinceLastHealthCheck,
       healthCheckIntervalMs,
-      shouldCheck,
+      shouldPerformCheck,
     });
 
-    return shouldCheck;
+    return shouldPerformCheck;
   };
 
   return {
@@ -407,40 +434,40 @@ function createConnectionStateManager() {
 
 function createSafeErrorContextConverter() {
   const convertToSafeErrorValue = (
-    value: unknown
+    sourceValue: unknown
   ): string | number | boolean | null => {
-    console.log('🔄 [BASE_ADAPTER] 안전한 에러 값 변환:', typeof value);
+    console.log('🔄 [BASE_ADAPTER] 안전한 에러 값 변환:', typeof sourceValue);
 
     // Early Return: null 처리
-    if (value === null) {
+    if (sourceValue === null) {
       return null;
     }
 
     // Early Return: undefined 처리
-    if (value === undefined) {
+    if (sourceValue === undefined) {
       return null;
     }
 
     // Early Return: string 처리
-    if (typeof value === 'string') {
-      return value;
+    if (typeof sourceValue === 'string') {
+      return sourceValue;
     }
 
     // Early Return: number 처리
-    if (typeof value === 'number' && !Number.isNaN(value)) {
-      return value;
+    if (typeof sourceValue === 'number' && !Number.isNaN(sourceValue)) {
+      return sourceValue;
     }
 
     // Early Return: boolean 처리
-    if (typeof value === 'boolean') {
-      return value;
+    if (typeof sourceValue === 'boolean') {
+      return sourceValue;
     }
 
     // 기타 모든 타입을 문자열로 변환
     try {
-      const convertedString = String(value);
+      const convertedStringValue = String(sourceValue);
       console.log('✅ [BASE_ADAPTER] 문자열로 변환 완료');
-      return convertedString;
+      return convertedStringValue;
     } catch (conversionError) {
       console.error('❌ [BASE_ADAPTER] 변환 실패:', conversionError);
       return 'Conversion failed';
@@ -449,11 +476,11 @@ function createSafeErrorContextConverter() {
 
   const createSafeErrorContext = (
     operationName: string,
-    additionalData?: Record<string, unknown>
+    additionalContextData?: Record<string, unknown>
   ): Record<string, string | number | boolean | null> => {
     console.log('📊 [BASE_ADAPTER] 안전한 에러 컨텍스트 생성:', operationName);
 
-    const baseContext: Record<string, string | number | boolean | null> = {
+    const baseErrorContext: Record<string, string | number | boolean | null> = {
       operationName,
       timestamp: Date.now(),
       userAgent: 'Unknown',
@@ -462,27 +489,31 @@ function createSafeErrorContextConverter() {
 
     // 브라우저 환경에서만 실행
     if (typeof globalThis !== 'undefined') {
-      const navigatorUserAgent = globalThis?.navigator?.userAgent;
-      baseContext.userAgent = navigatorUserAgent
+      const { navigator = null, location = null } = globalThis;
+
+      const navigatorUserAgent = navigator?.userAgent;
+      baseErrorContext.userAgent = navigatorUserAgent
         ? String(navigatorUserAgent)
         : 'Unknown';
 
-      const locationHref = globalThis?.location?.href;
-      baseContext.url = locationHref ? String(locationHref) : 'Unknown';
+      const locationHref = location?.href;
+      baseErrorContext.url = locationHref ? String(locationHref) : 'Unknown';
     }
 
     // 추가 데이터가 있는 경우 안전하게 변환
-    const hasAdditionalData =
-      additionalData && typeof additionalData === 'object';
-    if (hasAdditionalData) {
-      for (const [dataKey, dataValue] of Object.entries(additionalData)) {
-        const safeValue = convertToSafeErrorValue(dataValue);
-        baseContext[dataKey] = safeValue;
+    const hasAdditionalContextData =
+      additionalContextData && typeof additionalContextData === 'object';
+    if (hasAdditionalContextData) {
+      for (const [contextKey, contextValue] of Object.entries(
+        additionalContextData
+      )) {
+        const safeContextValue = convertToSafeErrorValue(contextValue);
+        baseErrorContext[contextKey] = safeContextValue;
       }
     }
 
     console.log('✅ [BASE_ADAPTER] 안전한 에러 컨텍스트 생성 완료');
-    return baseContext;
+    return baseErrorContext;
   };
 
   return {
@@ -491,39 +522,52 @@ function createSafeErrorContextConverter() {
   };
 }
 
-abstract class BaseAdapter<TData, TSnapshot> {
-  protected readonly adapterName: string;
-  protected readonly adapterVersion: string;
-  protected readonly adapterConfig: AdapterConnectionConfig;
-  protected adapterConnectionState: AdapterConnectionState;
-  protected adapterPerformanceMetrics: AdapterPerformanceMetrics;
-  protected dataCache: Record<string, SimpleCacheEntry<TData>>;
-  protected validationCache: Record<string, SimpleValidationCacheEntry>;
+abstract class BaseAdapter<TAdapterData, TAdapterSnapshot> {
+  protected readonly adapterIdentifier: string;
+  protected readonly adapterVersionString: string;
+  protected readonly adapterConfigurationSettings: AdapterConnectionConfig;
+  protected adapterCurrentConnectionState: AdapterConnectionState;
+  protected adapterCurrentPerformanceMetrics: AdapterPerformanceMetrics;
+  protected adapterDataCacheStorage: Record<
+    string,
+    SimpleCacheEntry<TAdapterData>
+  >;
+  protected adapterValidationCacheStorage: Record<
+    string,
+    SimpleValidationCacheEntry
+  >;
 
-  private readonly cacheManager = createSimpleCacheManager<TData>();
-  private readonly validationCacheManager = createValidationCacheManager();
-  private readonly metricsUpdater = createAdapterMetricsUpdater();
-  private readonly connectionStateManager = createConnectionStateManager();
-  private readonly errorContextConverter = createSafeErrorContextConverter();
+  private readonly cacheManagementModule =
+    createSimpleCacheManager<TAdapterData>();
+  private readonly validationCacheManagementModule =
+    createValidationCacheManager();
+  private readonly metricsUpdaterModule = createAdapterMetricsUpdater();
+  private readonly connectionStateManagementModule =
+    createConnectionStateManager();
+  private readonly errorContextConverterModule =
+    createSafeErrorContextConverter();
 
   constructor(
-    adapterName: string,
-    adapterVersion: string = '1.0.0',
-    customConfig: Partial<AdapterConnectionConfig> = {}
+    adapterIdentifier: string,
+    adapterVersionString: string = '1.0.0',
+    customConfigurationSettings: Partial<AdapterConnectionConfig> = {}
   ) {
-    console.log('🏗️ [BASE_ADAPTER] 어댑터 초기화:', adapterName);
+    console.log('🏗️ [BASE_ADAPTER] 어댑터 초기화:', adapterIdentifier);
 
-    this.adapterName = adapterName;
-    this.adapterVersion = adapterVersion;
-    this.adapterConfig = { ...createDefaultAdapterConfig(), ...customConfig };
-    this.adapterConnectionState = createInitialConnectionState();
-    this.adapterPerformanceMetrics = createInitialPerformanceMetrics();
-    this.dataCache = {};
-    this.validationCache = {};
+    this.adapterIdentifier = adapterIdentifier;
+    this.adapterVersionString = adapterVersionString;
+    this.adapterConfigurationSettings = {
+      ...createDefaultAdapterConfig(),
+      ...customConfigurationSettings,
+    };
+    this.adapterCurrentConnectionState = createInitialConnectionState();
+    this.adapterCurrentPerformanceMetrics = createInitialPerformanceMetrics();
+    this.adapterDataCacheStorage = {};
+    this.adapterValidationCacheStorage = {};
 
     console.log('✅ [BASE_ADAPTER] 어댑터 초기화 완료:', {
-      adapterName,
-      adapterVersion,
+      adapterIdentifier,
+      adapterVersionString,
     });
   }
 
@@ -531,40 +575,45 @@ abstract class BaseAdapter<TData, TSnapshot> {
   protected abstract performConnection(): Promise<boolean>;
   protected abstract performDisconnection(): Promise<void>;
   protected abstract performHealthCheck(): Promise<boolean>;
-  protected abstract extractDataFromSystem(): Promise<TData>;
-  protected abstract updateDataToSystem(dataPayload: TData): Promise<boolean>;
+  protected abstract extractDataFromSystem(): Promise<TAdapterData>;
+  protected abstract updateDataToSystem(
+    dataPayload: TAdapterData
+  ): Promise<boolean>;
   protected abstract validateExtractedData(
-    dataPayload: TData
+    dataPayload: TAdapterData
   ): ValidationResult;
-  protected abstract createDataSnapshot(dataPayload: TData): TSnapshot;
+  protected abstract createDataSnapshot(
+    dataPayload: TAdapterData
+  ): TAdapterSnapshot;
 
   // 🔧 공개 인터페이스 메서드들
   public async connect(): Promise<boolean> {
-    console.log('🔗 [BASE_ADAPTER] 연결 시작:', this.adapterName);
+    console.log('🔗 [BASE_ADAPTER] 연결 시작:', this.adapterIdentifier);
 
     const connectionOperation = async (): Promise<boolean> => {
-      const connectionSuccess = await this.performConnection();
+      const wasConnectionSuccessful = await this.performConnection();
 
-      this.adapterConnectionState =
-        this.connectionStateManager.updateConnectionState(
-          this.adapterConnectionState,
-          connectionSuccess
+      this.adapterCurrentConnectionState =
+        this.connectionStateManagementModule.updateConnectionState(
+          this.adapterCurrentConnectionState,
+          wasConnectionSuccessful
         );
 
-      return connectionSuccess;
+      return wasConnectionSuccessful;
     };
 
-    const { timeoutMs, maxRetryAttempts, retryDelayMs } = this.adapterConfig;
+    const { timeoutMs, maxRetryAttempts, retryDelayMs } =
+      this.adapterConfigurationSettings;
 
     const connectionResult = await safelyExecuteAsyncOperation(
       async () => {
-        const connectionWithTimeout = withTimeout(
+        const connectionWithTimeoutLimit = withTimeout(
           connectionOperation(),
           timeoutMs,
-          `${this.adapterName} 연결 타임아웃`
+          `${this.adapterIdentifier} 연결 타임아웃`
         );
 
-        return await withRetry(() => connectionWithTimeout, {
+        return await withRetry(() => connectionWithTimeoutLimit, {
           maxRetries: maxRetryAttempts,
           delayMs: retryDelayMs,
           backoffMultiplier: 1.5,
@@ -572,11 +621,11 @@ abstract class BaseAdapter<TData, TSnapshot> {
         });
       },
       false,
-      `${this.adapterName}_CONNECTION`
+      `${this.adapterIdentifier}_CONNECTION`
     );
 
     console.log('🔗 [BASE_ADAPTER] 연결 완료:', {
-      adapterName: this.adapterName,
+      adapterIdentifier: this.adapterIdentifier,
       connectionResult,
     });
 
@@ -584,13 +633,13 @@ abstract class BaseAdapter<TData, TSnapshot> {
   }
 
   public async disconnect(): Promise<void> {
-    console.log('🔌 [BASE_ADAPTER] 연결 해제 시작:', this.adapterName);
+    console.log('🔌 [BASE_ADAPTER] 연결 해제 시작:', this.adapterIdentifier);
 
     const disconnectionOperation = async (): Promise<void> => {
       await this.performDisconnection();
 
-      this.adapterConnectionState = {
-        ...this.adapterConnectionState,
+      this.adapterCurrentConnectionState = {
+        ...this.adapterCurrentConnectionState,
         isConnected: false,
         healthCheckStatus: false,
       };
@@ -599,144 +648,153 @@ abstract class BaseAdapter<TData, TSnapshot> {
     await safelyExecuteAsyncOperation(
       disconnectionOperation,
       undefined,
-      `${this.adapterName}_DISCONNECTION`
+      `${this.adapterIdentifier}_DISCONNECTION`
     );
 
-    console.log('🔌 [BASE_ADAPTER] 연결 해제 완료:', this.adapterName);
+    console.log('🔌 [BASE_ADAPTER] 연결 해제 완료:', this.adapterIdentifier);
   }
 
   public async healthCheck(): Promise<boolean> {
-    console.log('💓 [BASE_ADAPTER] 헬스체크 시작:', this.adapterName);
+    console.log('💓 [BASE_ADAPTER] 헬스체크 시작:', this.adapterIdentifier);
 
-    const { isConnected } = this.adapterConnectionState;
-    if (!isConnected) {
+    const { isConnected: currentIsConnected } =
+      this.adapterCurrentConnectionState;
+    if (!currentIsConnected) {
       console.log('💓 [BASE_ADAPTER] 연결되지 않은 상태, 헬스체크 건너뜀');
       return false;
     }
 
     const healthCheckOperation = async (): Promise<boolean> => {
-      const healthCheckSuccess = await this.performHealthCheck();
+      const wasHealthCheckSuccessful = await this.performHealthCheck();
 
-      this.adapterConnectionState =
-        this.connectionStateManager.updateHealthCheckState(
-          this.adapterConnectionState,
-          healthCheckSuccess
+      this.adapterCurrentConnectionState =
+        this.connectionStateManagementModule.updateHealthCheckState(
+          this.adapterCurrentConnectionState,
+          wasHealthCheckSuccessful
         );
 
-      return healthCheckSuccess;
+      return wasHealthCheckSuccessful;
     };
 
-    const { timeoutMs } = this.adapterConfig;
+    const { timeoutMs } = this.adapterConfigurationSettings;
 
     const healthCheckResult = await safelyExecuteAsyncOperation(
       async () => {
         return await withTimeout(
           healthCheckOperation(),
           timeoutMs,
-          `${this.adapterName} 헬스체크 타임아웃`
+          `${this.adapterIdentifier} 헬스체크 타임아웃`
         );
       },
       false,
-      `${this.adapterName}_HEALTH_CHECK`
+      `${this.adapterIdentifier}_HEALTH_CHECK`
     );
 
     console.log('💓 [BASE_ADAPTER] 헬스체크 완료:', {
-      adapterName: this.adapterName,
+      adapterIdentifier: this.adapterIdentifier,
       healthCheckResult,
     });
 
     return healthCheckResult;
   }
 
-  public async extractData(): Promise<TData | null> {
-    console.log('📤 [BASE_ADAPTER] 데이터 추출 시작:', this.adapterName);
+  public async extractData(): Promise<TAdapterData | null> {
+    console.log('📤 [BASE_ADAPTER] 데이터 추출 시작:', this.adapterIdentifier);
 
     const operationStartTime = performance.now();
 
-    const extractionOperation = async (): Promise<TData | null> => {
-      const { isConnected } = this.adapterConnectionState;
-      if (!isConnected) {
-        throw new Error(`${this.adapterName} 어댑터가 연결되지 않음`);
+    const extractionOperation = async (): Promise<TAdapterData | null> => {
+      const { isConnected: currentIsConnected } =
+        this.adapterCurrentConnectionState;
+      if (!currentIsConnected) {
+        throw new Error(`${this.adapterIdentifier} 어댑터가 연결되지 않음`);
       }
 
-      const extractedData = await this.extractDataFromSystem();
-      return extractedData;
+      const extractedDataResult = await this.extractDataFromSystem();
+      return extractedDataResult;
     };
 
     const extractionResult = await safelyExecuteAsyncOperation(
       extractionOperation,
       null,
-      `${this.adapterName}_DATA_EXTRACTION`
+      `${this.adapterIdentifier}_DATA_EXTRACTION`
     );
 
-    const operationDuration = performance.now() - operationStartTime;
-    const operationSuccess = extractionResult !== null;
+    const operationEndTime = performance.now();
+    const operationDurationMs = operationEndTime - operationStartTime;
+    const wasOperationSuccessful = extractionResult !== null;
 
-    this.adapterPerformanceMetrics = this.metricsUpdater.updateOperationMetrics(
-      this.adapterPerformanceMetrics,
-      operationSuccess,
-      operationDuration
-    );
+    this.adapterCurrentPerformanceMetrics =
+      this.metricsUpdaterModule.updateOperationMetrics(
+        this.adapterCurrentPerformanceMetrics,
+        wasOperationSuccessful,
+        operationDurationMs
+      );
 
     console.log('📤 [BASE_ADAPTER] 데이터 추출 완료:', {
-      adapterName: this.adapterName,
-      operationSuccess,
-      operationDuration: `${operationDuration.toFixed(2)}ms`,
+      adapterIdentifier: this.adapterIdentifier,
+      wasOperationSuccessful,
+      operationDurationMs: `${operationDurationMs.toFixed(2)}ms`,
     });
 
     return extractionResult;
   }
 
-  public async updateData(dataPayload: TData): Promise<boolean> {
-    console.log('📥 [BASE_ADAPTER] 데이터 업데이트 시작:', this.adapterName);
+  public async updateData(dataPayload: TAdapterData): Promise<boolean> {
+    console.log(
+      '📥 [BASE_ADAPTER] 데이터 업데이트 시작:',
+      this.adapterIdentifier
+    );
 
     const operationStartTime = performance.now();
 
     const updateOperation = async (): Promise<boolean> => {
-      const { isConnected } = this.adapterConnectionState;
-      if (!isConnected) {
-        throw new Error(`${this.adapterName} 어댑터가 연결되지 않음`);
+      const { isConnected: currentIsConnected } =
+        this.adapterCurrentConnectionState;
+      if (!currentIsConnected) {
+        throw new Error(`${this.adapterIdentifier} 어댑터가 연결되지 않음`);
       }
 
-      const updateSuccess = await this.updateDataToSystem(dataPayload);
-      return updateSuccess;
+      const wasUpdateSuccessful = await this.updateDataToSystem(dataPayload);
+      return wasUpdateSuccessful;
     };
 
     const updateResult = await safelyExecuteAsyncOperation(
       updateOperation,
       false,
-      `${this.adapterName}_DATA_UPDATE`
+      `${this.adapterIdentifier}_DATA_UPDATE`
     );
 
-    const operationDuration = performance.now() - operationStartTime;
+    const operationEndTime = performance.now();
+    const operationDurationMs = operationEndTime - operationStartTime;
 
-    this.adapterPerformanceMetrics = this.metricsUpdater.updateOperationMetrics(
-      this.adapterPerformanceMetrics,
-      updateResult,
-      operationDuration
-    );
+    this.adapterCurrentPerformanceMetrics =
+      this.metricsUpdaterModule.updateOperationMetrics(
+        this.adapterCurrentPerformanceMetrics,
+        updateResult,
+        operationDurationMs
+      );
 
     console.log('📥 [BASE_ADAPTER] 데이터 업데이트 완료:', {
-      adapterName: this.adapterName,
+      adapterIdentifier: this.adapterIdentifier,
       updateResult,
-      operationDuration: `${operationDuration.toFixed(2)}ms`,
+      operationDurationMs: `${operationDurationMs.toFixed(2)}ms`,
     });
 
     return updateResult;
   }
 
-  public validateData(dataPayload: TData): ValidationResult {
-    console.log('🔍 [BASE_ADAPTER] 데이터 검증 시작:', this.adapterName);
+  public validateData(dataPayload: TAdapterData): ValidationResult {
+    console.log('🔍 [BASE_ADAPTER] 데이터 검증 시작:', this.adapterIdentifier);
 
-    const dataString = JSON.stringify(dataPayload);
-    const validationCacheKey = `${this.adapterName}_${dataString.substring(
-      0,
-      100
-    )}`;
+    const dataStringRepresentation = JSON.stringify(dataPayload);
+    const validationCacheKey = `${
+      this.adapterIdentifier
+    }_${dataStringRepresentation.substring(0, 100)}`;
 
     const cachedValidationResult =
-      this.validationCacheManager.getCachedValidation(
-        this.validationCache,
+      this.validationCacheManagementModule.getCachedValidation(
+        this.adapterValidationCacheStorage,
         validationCacheKey
       );
 
@@ -745,125 +803,147 @@ abstract class BaseAdapter<TData, TSnapshot> {
       return cachedValidationResult;
     }
 
-    const validationResult = this.validateExtractedData(dataPayload);
+    const currentValidationResult = this.validateExtractedData(dataPayload);
 
-    this.validationCache = this.validationCacheManager.setCachedValidation(
-      this.validationCache,
-      validationCacheKey,
-      validationResult
-    );
+    this.adapterValidationCacheStorage =
+      this.validationCacheManagementModule.setCachedValidation(
+        this.adapterValidationCacheStorage,
+        validationCacheKey,
+        currentValidationResult
+      );
 
     console.log('🔍 [BASE_ADAPTER] 데이터 검증 완료:', {
-      adapterName: this.adapterName,
-      isValidForTransfer: validationResult.isValidForTransfer,
-      errorCount: validationResult.validationErrors.length,
+      adapterIdentifier: this.adapterIdentifier,
+      isValidForTransfer: currentValidationResult.isValidForTransfer,
+      errorCount: currentValidationResult.validationErrors.length,
     });
 
-    return validationResult;
+    return currentValidationResult;
   }
 
-  public createSnapshot(dataPayload: TData): TSnapshot {
-    console.log('📸 [BASE_ADAPTER] 스냅샷 생성 시작:', this.adapterName);
+  public createSnapshot(dataPayload: TAdapterData): TAdapterSnapshot {
+    console.log('📸 [BASE_ADAPTER] 스냅샷 생성 시작:', this.adapterIdentifier);
 
-    const snapshotResult = this.createDataSnapshot(dataPayload);
+    const snapshotCreationResult = this.createDataSnapshot(dataPayload);
 
-    console.log('📸 [BASE_ADAPTER] 스냅샷 생성 완료:', this.adapterName);
+    console.log('📸 [BASE_ADAPTER] 스냅샷 생성 완료:', this.adapterIdentifier);
 
-    return snapshotResult;
+    return snapshotCreationResult;
   }
 
   public handleError(errorSource: unknown): ErrorDetails {
-    console.log('❌ [BASE_ADAPTER] 에러 처리 시작:', this.adapterName);
+    console.log('❌ [BASE_ADAPTER] 에러 처리 시작:', this.adapterIdentifier);
 
-    const errorMessage = extractErrorMessage(errorSource);
-    const errorSeverity = getErrorSeverity(errorSource);
+    const extractedErrorMessage = extractErrorMessage(errorSource);
+    const determinedErrorSeverity = getErrorSeverity(errorSource);
     const isErrorRecoverable = isRecoverableError(errorSource);
 
-    const safeErrorContext = this.errorContextConverter.createSafeErrorContext(
-      `${this.adapterName}_ERROR`,
-      {
-        adapterVersion: this.adapterVersion,
-        connectionState: this.adapterConnectionState.isConnected,
-      }
-    );
+    console.log('🔍 [BASE_ADAPTER] 에러 복구 가능성 확인:', {
+      isErrorRecoverable,
+      errorType: typeof errorSource,
+    });
 
-    const convertedOriginalError =
-      this.errorContextConverter.convertToSafeErrorValue(errorSource);
+    const safeErrorContextData =
+      this.errorContextConverterModule.createSafeErrorContext(
+        `${this.adapterIdentifier}_ERROR`,
+        {
+          adapterVersionString: this.adapterVersionString,
+          connectionState: this.adapterCurrentConnectionState.isConnected,
+        }
+      );
+
+    const convertedOriginalErrorSource =
+      this.errorContextConverterModule.convertToSafeErrorValue(errorSource);
 
     const errorContextForBridge: BridgeErrorContext = {
-      context: `${this.adapterName}_ADAPTER_ERROR`,
-      originalError: convertedOriginalError,
-      timestamp: Date.now(),
-      additionalData: new Map(Object.entries(safeErrorContext)),
+      contextIdentifier: `${this.adapterIdentifier}_ADAPTER_ERROR`,
+      originalErrorSource: convertedOriginalErrorSource,
+      errorTimestamp: Date.now(),
+      contextualData: new Map(Object.entries(safeErrorContextData)),
       errorMetadata: new Map<string, unknown>([
-        ['adapterName', this.adapterName],
-        ['adapterVersion', this.adapterVersion],
-        ['isRecoverable', isErrorRecoverable],
+        ['adapterIdentifier', this.adapterIdentifier],
+        ['adapterVersionString', this.adapterVersionString],
+        ['isRecoverableError', isErrorRecoverable],
       ]),
+      errorSeverityLevel: determinedErrorSeverity,
+      isRecoverableError: isErrorRecoverable,
     };
 
-    const errorDetails: ErrorDetails = {
-      errorCode: `${this.adapterName.toUpperCase()}_ERROR`,
-      errorMessage,
+    const errorDetailsForBridge: ErrorDetails = {
+      errorCode: `${this.adapterIdentifier.toUpperCase()}_ERROR`,
+      errorMessage: extractedErrorMessage,
       errorTimestamp: new Date(),
       errorContext: errorContextForBridge,
       isRecoverable: isErrorRecoverable,
-      errorSeverity,
+      errorSeverity: determinedErrorSeverity,
+      recoveryAttempts: 0,
+      maxRecoveryAttempts: 3,
+      recoveryStrategies: new Set(['RETRY', 'FALLBACK', 'RESET']),
     };
 
     console.log('❌ [BASE_ADAPTER] 에러 처리 완료:', {
-      adapterName: this.adapterName,
-      errorSeverity,
+      adapterIdentifier: this.adapterIdentifier,
+      errorSeverity: determinedErrorSeverity,
       isRecoverable: isErrorRecoverable,
     });
 
-    return errorDetails;
+    return errorDetailsForBridge;
   }
 
   public getAdapterInfo(): Record<string, unknown> {
-    console.log('ℹ️ [BASE_ADAPTER] 어댑터 정보 조회:', this.adapterName);
+    console.log('ℹ️ [BASE_ADAPTER] 어댑터 정보 조회:', this.adapterIdentifier);
 
-    const { isConnected, lastConnectionTime, healthCheckStatus } =
-      this.adapterConnectionState;
-    const metricsSummary = this.metricsUpdater.getMetricsSummary(
-      this.adapterPerformanceMetrics
+    const {
+      isConnected: currentIsConnected,
+      lastConnectionTime: currentLastConnectionTime,
+      healthCheckStatus: currentHealthCheckStatus,
+    } = this.adapterCurrentConnectionState;
+
+    const currentMetricsSummary = this.metricsUpdaterModule.getMetricsSummary(
+      this.adapterCurrentPerformanceMetrics
     );
 
     return {
-      adapterName: this.adapterName,
-      adapterVersion: this.adapterVersion,
+      adapterIdentifier: this.adapterIdentifier,
+      adapterVersionString: this.adapterVersionString,
       connectionStatus: {
-        isConnected,
-        lastConnectionTime,
-        healthCheckStatus,
+        isConnected: currentIsConnected,
+        lastConnectionTime: currentLastConnectionTime,
+        healthCheckStatus: currentHealthCheckStatus,
       },
-      performanceMetrics: metricsSummary,
-      configuration: this.adapterConfig,
+      performanceMetrics: currentMetricsSummary,
+      configuration: this.adapterConfigurationSettings,
     };
   }
 
   public getConnectionState(): AdapterConnectionState {
-    console.log('🔗 [BASE_ADAPTER] 연결 상태 조회:', this.adapterName);
-    return { ...this.adapterConnectionState };
+    console.log('🔗 [BASE_ADAPTER] 연결 상태 조회:', this.adapterIdentifier);
+    return { ...this.adapterCurrentConnectionState };
   }
 
   public getPerformanceMetrics(): AdapterPerformanceMetrics {
-    console.log('📊 [BASE_ADAPTER] 성능 메트릭 조회:', this.adapterName);
-    return { ...this.adapterPerformanceMetrics };
+    console.log('📊 [BASE_ADAPTER] 성능 메트릭 조회:', this.adapterIdentifier);
+    return { ...this.adapterCurrentPerformanceMetrics };
   }
 
   protected clearDataCache(): void {
-    console.log('🧹 [BASE_ADAPTER] 데이터 캐시 정리:', this.adapterName);
-    this.dataCache = this.cacheManager.clearExpiredEntries(this.dataCache);
+    console.log('🧹 [BASE_ADAPTER] 데이터 캐시 정리:', this.adapterIdentifier);
+    this.adapterDataCacheStorage =
+      this.cacheManagementModule.clearExpiredEntries(
+        this.adapterDataCacheStorage
+      );
   }
 
-  protected getCachedData(cacheKey: string): TData | null {
-    return this.cacheManager.getCachedData(this.dataCache, cacheKey);
+  protected getCachedData(cacheKey: string): TAdapterData | null {
+    return this.cacheManagementModule.getCachedData(
+      this.adapterDataCacheStorage,
+      cacheKey
+    );
   }
 
-  protected setCachedData(cacheKey: string, dataValue: TData): void {
-    this.dataCache = this.cacheManager.setCachedData(
-      this.dataCache,
+  protected setCachedData(cacheKey: string, dataValue: TAdapterData): void {
+    this.adapterDataCacheStorage = this.cacheManagementModule.setCachedData(
+      this.adapterDataCacheStorage,
       cacheKey,
       dataValue
     );

@@ -6,7 +6,9 @@ import type {
   MultiStepFormSnapshotForBridge,
   EditorToMultiStepDataTransformationResult,
   MultiStepToEditorDataTransformationResult,
-} from '../editorMultiStepBridge/bridgeDataTypes';
+  TransformationStrategyType,
+} from '../editorMultiStepBridge/modernBridgeTypes';
+import type { ParagraphBlock } from '../../store/shared/commonTypes';
 
 // 🔧 동기화 전략 인터페이스 - 플러그인 방식으로 교체 가능
 interface SyncStrategy {
@@ -103,31 +105,67 @@ function createSyncEngineTypeGuards() {
     value: unknown
   ): value is EditorStateSnapshotForBridge => {
     if (!isValidObject(value)) {
+      console.log('🔍 [DEBUG] isValidEditorSnapshot - not valid object');
       return false;
     }
 
+    const {
+      editorContainers,
+      editorParagraphs,
+      editorCompletedContent,
+      extractedTimestamp,
+    } = value;
+
     const requiredProperties = [
-      'editorContainers',
-      'editorParagraphs',
-      'editorCompletedContent',
-      'extractedTimestamp',
+      editorContainers !== undefined,
+      editorParagraphs !== undefined,
+      editorCompletedContent !== undefined,
+      extractedTimestamp !== undefined,
     ];
-    return requiredProperties.every((prop) => prop in value);
+
+    const allPropertiesPresent = requiredProperties.every(
+      (propertyPresent) => propertyPresent
+    );
+
+    console.log('🔍 [DEBUG] isValidEditorSnapshot 검증:', {
+      hasContainers: editorContainers !== undefined,
+      hasParagraphs: editorParagraphs !== undefined,
+      hasContent: editorCompletedContent !== undefined,
+      hasTimestamp: extractedTimestamp !== undefined,
+      allPresent: allPropertiesPresent,
+    });
+
+    return allPropertiesPresent;
   };
 
   const isValidMultiStepSnapshot = (
     value: unknown
   ): value is MultiStepFormSnapshotForBridge => {
     if (!isValidObject(value)) {
+      console.log('🔍 [DEBUG] isValidMultiStepSnapshot - not valid object');
       return false;
     }
 
+    const { formValues, formCurrentStep, snapshotTimestamp } = value;
+
     const requiredProperties = [
-      'formValues',
-      'formCurrentStep',
-      'snapshotTimestamp',
+      formValues !== undefined,
+      formCurrentStep !== undefined,
+      snapshotTimestamp !== undefined,
     ];
-    return requiredProperties.every((prop) => prop in value);
+
+    const allPropertiesPresent = requiredProperties.every(
+      (propertyPresent) => propertyPresent
+    );
+
+    console.log('🔍 [DEBUG] isValidMultiStepSnapshot 검증:', {
+      hasFormValues: formValues !== undefined,
+      hasCurrentStep: formCurrentStep !== undefined,
+      hasTimestamp: snapshotTimestamp !== undefined,
+      allPresent: allPropertiesPresent,
+    });
+
+    return allPropertiesPresent;
   };
 
   return {
@@ -171,7 +209,10 @@ function createSyncEngineErrorHandler() {
     operationName: string
   ): Promise<T> => {
     try {
-      return await operation();
+      console.log(`🔄 [SYNC_ENGINE] ${operationName} 실행 시작`);
+      const result = await operation();
+      console.log(`✅ [SYNC_ENGINE] ${operationName} 실행 성공`);
+      return result;
     } catch (operationError) {
       console.error(
         `❌ [SYNC_ENGINE] ${operationName} 실행 실패:`,
@@ -203,12 +244,17 @@ function createSyncEngineErrorHandler() {
 
     for (let attemptIndex = 1; attemptIndex <= maxRetries; attemptIndex++) {
       try {
-        return await operation();
+        const result = await operation();
+        console.log(`✅ [SYNC_ENGINE] 재시도 성공: 시도 ${attemptIndex}`);
+        return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
         // Early Return: 마지막 시도인 경우
         if (attemptIndex === maxRetries) {
+          console.error(
+            `❌ [SYNC_ENGINE] 모든 재시도 실패: ${maxRetries}회 시도`
+          );
           break;
         }
 
@@ -301,6 +347,34 @@ function createSyncStrategyFactory() {
           const transformedContent = editorCompletedContent;
           const transformedIsCompleted = editorIsCompleted;
 
+          // 📊 타입 안전한 문단 필터링
+          const validParagraphs = Array.isArray(editorParagraphs)
+            ? editorParagraphs.filter(
+                (paragraphItem: unknown): paragraphItem is ParagraphBlock => {
+                  return (
+                    paragraphItem !== null &&
+                    typeof paragraphItem === 'object' &&
+                    'id' in paragraphItem &&
+                    'containerId' in paragraphItem
+                  );
+                }
+              )
+            : [];
+
+          const assignedParagraphs = validParagraphs.filter(
+            (paragraph: ParagraphBlock) => paragraph.containerId !== null
+          );
+
+          const unassignedParagraphs = validParagraphs.filter(
+            (paragraph: ParagraphBlock) => paragraph.containerId === null
+          );
+
+          console.log('🔍 [DEBUG] 문단 분석:', {
+            totalParagraphs: validParagraphs.length,
+            assignedParagraphs: assignedParagraphs.length,
+            unassignedParagraphs: unassignedParagraphs.length,
+          });
+
           // 메타데이터 생성
           const resultMetadata = new Map<string, unknown>();
           resultMetadata.set(
@@ -308,7 +382,15 @@ function createSyncStrategyFactory() {
             'EDITOR_TO_MULTISTEP_DEFAULT'
           );
           resultMetadata.set('containerCount', editorContainers.length);
-          resultMetadata.set('paragraphCount', editorParagraphs.length);
+          resultMetadata.set('paragraphCount', validParagraphs.length);
+          resultMetadata.set(
+            'assignedParagraphCount',
+            assignedParagraphs.length
+          );
+          resultMetadata.set(
+            'unassignedParagraphCount',
+            unassignedParagraphs.length
+          );
           resultMetadata.set('contentLength', transformedContent.length);
           resultMetadata.set('timestamp', Date.now());
 
@@ -319,21 +401,28 @@ function createSyncStrategyFactory() {
               transformedIsCompleted,
               transformedMetadata: {
                 containerCount: editorContainers.length,
-                paragraphCount: editorParagraphs.length,
-                assignedParagraphCount: editorParagraphs.filter(
-                  (p) => p.containerId !== null
-                ).length,
-                unassignedParagraphCount: editorParagraphs.filter(
-                  (p) => p.containerId === null
-                ).length,
+                paragraphCount: validParagraphs.length,
+                assignedParagraphCount: assignedParagraphs.length,
+                unassignedParagraphCount: unassignedParagraphs.length,
                 totalContentLength: transformedContent.length,
-                lastModified: new Date(),
+                lastModifiedDate: new Date(),
                 processingTimeMs: 0,
                 validationWarnings: new Set<string>(),
+                performanceMetrics: new Map<string, number>(),
+                transformationStrategy:
+                  'EXISTING_CONTENT' as TransformationStrategyType,
               },
               transformationSuccess: true,
               transformationErrors: [],
-              transformationStrategy: 'EXISTING_CONTENT',
+              transformationStrategy:
+                'EXISTING_CONTENT' as TransformationStrategyType,
+              transformationTimestamp: Date.now(),
+              qualityMetrics: new Map<string, number>([
+                ['contentLength', transformedContent.length],
+                ['containerCount', editorContainers.length],
+                ['paragraphCount', validParagraphs.length],
+              ]),
+              contentIntegrityHash: generateSimpleHash(transformedContent),
             };
 
           console.log('✅ [SYNC_STRATEGY] Editor → MultiStep 전략 실행 완료');
@@ -429,6 +518,9 @@ function createSyncStrategyFactory() {
               transformationErrors: [],
               transformedTimestamp: Date.now(),
               contentMetadata: resultMetadata,
+              reverseTransformationStrategy:
+                'EXISTING_CONTENT' as TransformationStrategyType,
+              dataIntegrityValidation: true,
             };
 
           console.log('✅ [SYNC_STRATEGY] MultiStep → Editor 전략 실행 완료');
@@ -448,6 +540,22 @@ function createSyncStrategyFactory() {
       );
     },
   });
+
+  // 🔧 간단한 해시 생성 함수
+  const generateSimpleHash = (content: string): string => {
+    try {
+      const hash = content
+        .split('')
+        .reduce(
+          (acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff,
+          0
+        );
+      return Math.abs(hash).toString(36);
+    } catch (hashError) {
+      console.warn('⚠️ [SYNC_STRATEGY] 해시 생성 실패:', hashError);
+      return Date.now().toString(36);
+    }
+  };
 
   return {
     createEditorToMultiStepStrategy,
@@ -851,10 +959,12 @@ export function createSyncEngine(
       const bidirectionalResult: BidirectionalSyncResult = {
         editorToMultiStepSuccess,
         multiStepToEditorSuccess,
-        overallSuccess,
+        overallSyncSuccess: overallSuccess,
         syncErrors,
         syncDuration,
         syncMetadata,
+        conflictResolutionLog: [],
+        syncStrategy: 'MERGE',
       };
 
       console.log('✅ [SYNC_ENGINE] 양방향 동기화 완료:', {
@@ -881,10 +991,12 @@ export function createSyncEngine(
       return {
         editorToMultiStepSuccess: false,
         multiStepToEditorSuccess: false,
-        overallSuccess: false,
+        overallSyncSuccess: false,
         syncErrors,
         syncDuration: Date.now() - syncStartTime,
         syncMetadata: failureMetadata,
+        conflictResolutionLog: [errorMessage],
+        syncStrategy: 'CONFLICT_RESOLUTION',
       };
     }
   };

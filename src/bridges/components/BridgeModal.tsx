@@ -12,7 +12,6 @@ import {
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
 import { MarkdownStatusCard } from './BridgeStatus';
-import type { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 import {
   createStandardizationUtils,
   type StandardModalProps,
@@ -97,9 +96,11 @@ export function BridgeModal({
     logComponentAction('BRIDGE_MODAL', '모달 닫기 요청');
 
     const isOnCloseFunction = typeof onClose === 'function';
-    isOnCloseFunction
-      ? onClose()
-      : console.warn('⚠️ [BRIDGE_MODAL] onClose가 함수가 아님');
+    if (isOnCloseFunction) {
+      onClose();
+    } else {
+      console.warn('⚠️ [BRIDGE_MODAL] onClose가 함수가 아님');
+    }
   };
 
   const handleRefreshButtonClick = (): void => {

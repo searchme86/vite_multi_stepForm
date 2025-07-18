@@ -2,12 +2,13 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useBridge } from './useBridge';
-import { createEditorStateExtractor } from '../editorMultiStepBridge/editorDataExtractor';
+import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateCapture'; // 🔧 경로 수정: editorDataExtractor → editorStateCapture, 함수명 수정
 import {
   createStandardizationUtils,
   type StandardSize,
   type StandardVariant,
 } from '../common/componentStandardization';
+import type { ParagraphBlock } from '../../store/shared/commonTypes'; // 🔧 타입 import 추가
 
 // 🔧 표준화된 UI 상태 색상 타입 (StandardVariant와 매핑)
 type UIStatusColor = StandardVariant;
@@ -234,7 +235,7 @@ const createStandardizedEditorExtractor = () => {
     logComponentAction('BRIDGE_UI', '표준화된 에디터 통계 추출 시작');
 
     try {
-      const editorExtractor = createEditorStateExtractor();
+      const editorExtractor = createEditorStateExtractor(); // 🔧 함수명 수정
       const editorSnapshot = editorExtractor.getEditorStateWithValidation();
 
       // Early Return: 스냅샷이 없는 경우
@@ -261,18 +262,20 @@ const createStandardizedEditorExtractor = () => {
       const containerCount = convertToSafeNumber(editorContainers.length, 0);
       const paragraphCount = convertToSafeNumber(editorParagraphs.length, 0);
 
-      // 할당된 문단 계산
+      // 할당된 문단 계산 - 🔧 타입 안전성 개선
       let assignedParagraphCount = 0;
       try {
-        assignedParagraphCount = editorParagraphs.filter((paragraph) => {
-          return (
-            paragraph !== null &&
-            typeof paragraph === 'object' &&
-            'containerId' in paragraph &&
-            paragraph.containerId !== null &&
-            paragraph.containerId !== undefined
-          );
-        }).length;
+        assignedParagraphCount = editorParagraphs.filter(
+          (paragraph: ParagraphBlock) => {
+            return (
+              paragraph !== null &&
+              typeof paragraph === 'object' &&
+              'containerId' in paragraph &&
+              paragraph.containerId !== null &&
+              paragraph.containerId !== undefined
+            );
+          }
+        ).length;
       } catch (filterError) {
         logComponentAction('BRIDGE_UI', '할당된 문단 계산 실패', {
           error: filterError,
@@ -974,6 +977,10 @@ export function useBridgeUI(
         debugMode: false,
         maxRetryAttempts: 3,
         timeoutMs: 5000,
+        performanceLogging: false,
+        strictTypeChecking: true,
+        customValidationRules: new Map<string, (data: unknown) => boolean>(),
+        featureFlags: new Set<string>(),
       };
     }
   }, [bridgeHook.getConfiguration]);

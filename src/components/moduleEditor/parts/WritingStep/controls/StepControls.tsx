@@ -3,8 +3,8 @@
 import React from 'react';
 import { Button, Badge } from '@heroui/react';
 import { Icon } from '@iconify/react';
-import { useBridgeUIComponents } from '../../../../../bridges/hooks/useBridgeUIComponents';
-import { BridgeSystemConfiguration } from '../../../../../bridges/editorMultiStepBridge/bridgeDataTypes';
+import { useBridgeUI } from '../../../../../bridges/hooks/useBridgeUI';
+import type { BridgeSystemConfiguration } from '../../../../../bridges/editorMultiStepBridge/modernBridgeTypes';
 
 interface Container {
   readonly id: string;
@@ -35,31 +35,35 @@ function StepControls({
     timestamp: new Date().toISOString(),
   });
 
-  const {
-    canTransfer: isBridgeReady,
-    isTransferring: isBridgeTransferring,
-    validationStatus: bridgeValidationStatus,
-    transferErrors: bridgeTransferErrors,
-    transferWarnings: bridgeTransferWarnings,
-    refreshValidationStatus: refreshBridgeStatus,
-  } = useBridgeUIComponents(bridgeConfig);
+  // 🔧 수정된 Bridge UI 훅 사용
+  const bridgeUIHook = useBridgeUI(bridgeConfig);
 
   const {
-    validationErrors = [],
-    validationWarnings = [],
-    isReadyForTransfer = false,
+    editorStatistics,
+    validationState,
+    isLoading: isBridgeTransferring,
+    canExecuteAction: isBridgeReady,
+    hasError: hasBridgeErrors,
+    hasWarning: hasBridgeWarnings,
+  } = bridgeUIHook;
+
+  // 🔧 통계 정보 추출 (구조분해할당 사용)
+  const {
     containerCount = 0,
     paragraphCount = 0,
     assignedParagraphCount = 0,
     unassignedParagraphCount = 0,
-  } = bridgeValidationStatus || {};
+  } = editorStatistics || {};
 
-  const totalErrorCount = validationErrors.length + bridgeTransferErrors.length;
-  const totalWarningCount =
-    validationWarnings.length + bridgeTransferWarnings.length;
-  const hasAnyErrors = totalErrorCount > 0;
-  const hasAnyWarnings = totalWarningCount > 0;
+  // 🔧 검증 상태 정보 추출 (구조분해할당 사용)
+  const { errorCount = 0, warningCount = 0 } = validationState || {};
+
+  const totalErrorCount = errorCount;
+  const totalWarningCount = warningCount;
+  const hasAnyErrors = totalErrorCount > 0 || hasBridgeErrors;
+  const hasAnyWarnings = totalWarningCount > 0 || hasBridgeWarnings;
   const hasAnyIssues = hasAnyErrors || hasAnyWarnings;
+  const isReadyForTransfer = isBridgeReady && !hasAnyErrors;
 
   console.log('📊 [STEP_CONTROLS] 브리지 상태 분석:', {
     isBridgeReady,
@@ -77,7 +81,6 @@ function StepControls({
   const handleGoToStructure = (): void => {
     console.log('🔙 [STEP_CONTROLS] 구조 수정 버튼 클릭');
     try {
-      refreshBridgeStatus();
       goToStructureStep();
       console.log('✅ [STEP_CONTROLS] 구조 수정 성공');
     } catch (error) {
@@ -88,7 +91,7 @@ function StepControls({
   const handleRefreshStatus = (): void => {
     console.log('🔄 [STEP_CONTROLS] 브리지 상태 새로고침 요청');
     try {
-      refreshBridgeStatus();
+      // Bridge UI 훅은 자동으로 상태를 관리하므로 별도 새로고침 불필요
       console.log('✅ [STEP_CONTROLS] 브리지 상태 새로고침 성공');
     } catch (error) {
       console.error('❌ [STEP_CONTROLS] 브리지 상태 새로고침 실패:', error);
@@ -99,7 +102,6 @@ function StepControls({
     console.log('💾 [STEP_CONTROLS] 저장 버튼 클릭');
     try {
       saveAllToContext();
-      refreshBridgeStatus();
       console.log('✅ [STEP_CONTROLS] 저장 성공');
     } catch (error) {
       console.error('❌ [STEP_CONTROLS] 저장 실패:', error);
@@ -114,7 +116,9 @@ function StepControls({
       canComplete: !hasAnyErrors && isBridgeReady && isReadyForTransfer,
     });
 
-    if (hasAnyErrors || !isBridgeReady || !isReadyForTransfer) {
+    const cannotComplete =
+      hasAnyErrors || !isBridgeReady || !isReadyForTransfer;
+    if (cannotComplete) {
       console.warn('⚠️ [STEP_CONTROLS] 브리지 상태로 인해 완성 불가:', {
         hasAnyErrors,
         isBridgeReady,
@@ -123,7 +127,6 @@ function StepControls({
         totalWarningCount,
       });
 
-      refreshBridgeStatus();
       return;
     }
 
@@ -136,23 +139,29 @@ function StepControls({
   };
 
   const getStatusText = (): string => {
-    if (isBridgeTransferring) {
+    const isCurrentlyTransferring = isBridgeTransferring;
+    if (isCurrentlyTransferring) {
       return '전송 중...';
     }
 
-    if (totalErrorCount > 0 && totalWarningCount > 0) {
+    const hasBothErrorsAndWarnings =
+      totalErrorCount > 0 && totalWarningCount > 0;
+    if (hasBothErrorsAndWarnings) {
       return `오류 ${totalErrorCount}개, 경고 ${totalWarningCount}개`;
     }
 
-    if (totalErrorCount > 0) {
+    const hasOnlyErrors = totalErrorCount > 0;
+    if (hasOnlyErrors) {
       return `오류 ${totalErrorCount}개`;
     }
 
-    if (totalWarningCount > 0) {
+    const hasOnlyWarnings = totalWarningCount > 0;
+    if (hasOnlyWarnings) {
       return `경고 ${totalWarningCount}개`;
     }
 
-    if (isReadyForTransfer && isBridgeReady) {
+    const isCompletelyReady = isReadyForTransfer && isBridgeReady;
+    if (isCompletelyReady) {
       return '완성 준비됨';
     }
 
@@ -160,10 +169,18 @@ function StepControls({
   };
 
   const getStatusColor = (): 'danger' | 'warning' | 'success' | 'default' => {
-    if (isBridgeTransferring) return 'default';
-    if (totalErrorCount > 0) return 'danger';
-    if (totalWarningCount > 0) return 'warning';
-    if (isReadyForTransfer && isBridgeReady) return 'success';
+    const isCurrentlyTransferring = isBridgeTransferring;
+    if (isCurrentlyTransferring) return 'default';
+
+    const hasErrors = totalErrorCount > 0;
+    if (hasErrors) return 'danger';
+
+    const hasWarnings = totalWarningCount > 0;
+    if (hasWarnings) return 'warning';
+
+    const isCompletelyReady = isReadyForTransfer && isBridgeReady;
+    if (isCompletelyReady) return 'success';
+
     return 'default';
   };
 
@@ -174,15 +191,21 @@ function StepControls({
     isBridgeTransferring;
 
   const getCompleteButtonText = (): string => {
-    if (isBridgeTransferring) {
+    const isCurrentlyTransferring = isBridgeTransferring;
+    if (isCurrentlyTransferring) {
       return '전송 중...';
     }
-    if (hasAnyErrors) {
+
+    const hasErrors = hasAnyErrors;
+    if (hasErrors) {
       return '완성 (오류 해결 필요)';
     }
-    if (!isReadyForTransfer) {
+
+    const isNotReady = !isReadyForTransfer;
+    if (isNotReady) {
       return '완성 (준비 중...)';
     }
+
     return '완성';
   };
 
@@ -226,13 +249,13 @@ function StepControls({
                   key={container.id}
                   className="flex items-center flex-shrink-0 gap-2"
                 >
-                  {index > 0 && (
+                  {index > 0 ? (
                     <Icon
                       icon="lucide:arrow-right"
                       className="w-4 h-4 text-gray-400"
                       aria-hidden="true"
                     />
-                  )}
+                  ) : null}
                   <Badge
                     color="primary"
                     variant="flat"
@@ -291,7 +314,9 @@ function StepControls({
             onPress={handleComplete}
             isDisabled={isCompleteDisabled}
             isLoading={isBridgeTransferring}
-            endContent={!isBridgeTransferring && <Icon icon="lucide:check" />}
+            endContent={
+              !isBridgeTransferring ? <Icon icon="lucide:check" /> : null
+            }
             aria-label={`글 작성 완료${
               hasAnyErrors ? ' - 오류 해결 후 다시 시도하세요' : ''
             }`}
@@ -306,7 +331,7 @@ function StepControls({
         </div>
       </div>
 
-      {hasAnyIssues && (
+      {hasAnyIssues ? (
         <div
           className={`p-3 mt-3 border rounded-lg ${
             hasAnyErrors
@@ -342,18 +367,20 @@ function StepControls({
                 <span>컨테이너 {containerCount}개</span>
                 <span>문단 {paragraphCount}개</span>
                 <span>할당됨 {assignedParagraphCount}개</span>
-                {unassignedParagraphCount > 0 && (
+                {unassignedParagraphCount > 0 ? (
                   <span>미할당 {unassignedParagraphCount}개</span>
-                )}
-                {totalErrorCount > 0 && <span>오류 {totalErrorCount}개</span>}
-                {totalWarningCount > 0 && (
+                ) : null}
+                {totalErrorCount > 0 ? (
+                  <span>오류 {totalErrorCount}개</span>
+                ) : null}
+                {totalWarningCount > 0 ? (
                   <span>경고 {totalWarningCount}개</span>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
