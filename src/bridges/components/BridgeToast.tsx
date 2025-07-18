@@ -1,7 +1,7 @@
-// bridges/parts/MarkdownResultToast.tsx
+// bridges/components/BridgeToast.tsx
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { ReactElement, ReactNode, KeyboardEvent } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useBridgeUI } from '../hooks/useBridgeUI';
 import {
   createStandardizationUtils,
@@ -10,7 +10,7 @@ import {
   type StandardVariant,
 } from '../common/componentStandardization';
 
-// 🔧 토스트 메시지 인터페이스 (표준화됨)
+// 🔧 토스트 메시지 인터페이스
 interface ToastMessage {
   readonly id: string;
   readonly type: StandardVariant;
@@ -20,19 +20,19 @@ interface ToastMessage {
   readonly timestamp: number;
 }
 
-// 🔧 마크다운 결과 토스트 전용 Props 인터페이스 (표준화됨)
-interface MarkdownResultToastProps extends Omit<StandardToastProps, 'title'> {
+// 🔧 브릿지 토스트 전용 Props 인터페이스
+interface BridgeToastProps extends Omit<StandardToastProps, 'title'> {
   readonly maxToasts?: number;
   readonly spacing?: number;
+  readonly disableAnimation?: boolean;
   readonly onToastClick?: (toast: ToastMessage) => void;
   readonly onToastClose?: (toast: ToastMessage) => void;
   readonly autoDetectResults?: boolean;
   readonly showClearAllButton?: boolean;
   readonly clearAllThreshold?: number;
-  readonly disableAnimation?: boolean;
 }
 
-export function MarkdownResultToast({
+export function BridgeToast({
   size = 'md',
   variant = 'default',
   position = 'top-right',
@@ -42,13 +42,13 @@ export function MarkdownResultToast({
   maxToasts = 5,
   spacing = 12,
   showCloseButton = true,
+  disableAnimation = false,
   onToastClick,
   onToastClose,
   autoDetectResults = true,
   showClearAllButton = true,
   clearAllThreshold = 3,
-  disableAnimation = false,
-}: MarkdownResultToastProps): ReactElement {
+}: BridgeToastProps): ReactElement {
   // 🔧 표준화 유틸리티 사용
   const {
     validateSize,
@@ -73,62 +73,31 @@ export function MarkdownResultToast({
       'bottom-center',
       'bottom-right',
     ];
-
-    const foundPosition = validPositions.find(
-      (validPos) => validPos === position
-    );
-    return foundPosition !== undefined ? foundPosition : 'top-right';
+    return validPositions.includes(position as StandardPosition)
+      ? (position as StandardPosition)
+      : 'top-right';
   })();
   const safeShowCloseButton = validateBoolean(showCloseButton, true);
+  const safeDisableAnimation = validateBoolean(disableAnimation, false);
   const safeAutoDetectResults = validateBoolean(autoDetectResults, true);
   const safeShowClearAllButton = validateBoolean(showClearAllButton, true);
-  const safeDisableAnimation = validateBoolean(disableAnimation, false);
 
-  // 🔧 최신 Bridge UI Hook 사용
-  const bridgeUIHook = useBridgeUI(bridgeConfig);
-
-  console.log('🔧 [MARKDOWN_RESULT_TOAST] 컴포넌트 렌더링', {
-    size: safeSize,
-    variant: safeVariant,
-    position: safePosition,
-    autoDetectResults: safeAutoDetectResults,
-    maxToasts,
-  });
-
-  logComponentRender('MARKDOWN_RESULT_TOAST', {
-    size: safeSize,
-    variant: safeVariant,
-    position: safePosition,
-    autoDetectResults: safeAutoDetectResults,
-    maxToasts,
-  });
+  // 🔧 Bridge UI 훅 사용 (자동 감지를 위해)
+  const { hasError, hasWarning, statusMessage, executionMetrics } =
+    useBridgeUI(bridgeConfig);
 
   // 🔧 상태 관리
   const [activeToasts, setActiveToasts] = useState<ToastMessage[]>([]);
-
-  const lastProcessedExecutionTime = useRef<Date | null>(null);
-  const isInitialized = useRef<boolean>(false);
-
-  // 🔧 브라우저 환경용 타이머 타입 - NodeJS.Timeout 대신 number 사용
   const toastTimers = useRef<Map<string, number>>(new Map());
-
-  // 🔧 Bridge UI 상태 정보 추출
-  const {
-    executionMetrics,
-    validationState,
-    statusMessage,
-    hasWarning,
-    isLoading,
-  } = bridgeUIHook;
-
-  // 🔧 초기화 체크
-  useEffect(() => {
-    if (!isInitialized.current) {
-      isInitialized.current = true;
-      console.log('🔧 [MARKDOWN_RESULT_TOAST] 토스트 시스템 초기화 완료');
-      logComponentAction('MARKDOWN_RESULT_TOAST', '토스트 시스템 초기화 완료');
-    }
-  }, []);
+  const lastProcessedMetrics = useRef<{
+    totalOperations: number;
+    successfulOperations: number;
+    failedOperations: number;
+  }>({
+    totalOperations: 0,
+    successfulOperations: 0,
+    failedOperations: 0,
+  });
 
   // 🔧 고유 토스트 ID 생성
   const generateUniqueToastId = useCallback((): string => {
@@ -142,11 +111,7 @@ export function MarkdownResultToast({
   // 🔧 새 토스트 추가
   const addNewToast = useCallback(
     (newToast: Omit<ToastMessage, 'id' | 'timestamp'>): void => {
-      console.log('🔧 [MARKDOWN_RESULT_TOAST] 새 토스트 추가', {
-        type: newToast.type,
-        title: newToast.title,
-      });
-      logComponentAction('MARKDOWN_RESULT_TOAST', '새 토스트 추가', {
+      logComponentAction('BRIDGE_TOAST', '새 토스트 추가', {
         type: newToast.type,
         title: newToast.title,
       });
@@ -166,11 +131,7 @@ export function MarkdownResultToast({
 
         // Early Return: 중복 토스트인 경우
         if (isDuplicateToast) {
-          console.log('🔧 [MARKDOWN_RESULT_TOAST] 중복 토스트 감지, 추가 생략');
-          logComponentAction(
-            'MARKDOWN_RESULT_TOAST',
-            '중복 토스트 감지, 추가 생략'
-          );
+          logComponentAction('BRIDGE_TOAST', '중복 토스트 감지, 추가 생략');
           return previousToasts;
         }
 
@@ -183,14 +144,8 @@ export function MarkdownResultToast({
 
           if (shouldCleanupTimer) {
             const toastToRemove = removedToast!;
-            console.log(
-              '🔧 [MARKDOWN_RESULT_TOAST] 최대 개수 초과로 오래된 토스트 제거',
-              {
-                toastId: toastToRemove.id,
-              }
-            );
             logComponentAction(
-              'MARKDOWN_RESULT_TOAST',
+              'BRIDGE_TOAST',
               '최대 개수 초과로 오래된 토스트 제거',
               {
                 toastId: toastToRemove.id,
@@ -216,10 +171,7 @@ export function MarkdownResultToast({
 
       if (shouldSetAutoCloseTimer) {
         const timerId = window.setTimeout(() => {
-          console.log('🔧 [MARKDOWN_RESULT_TOAST] 자동 닫기 타이머 실행', {
-            toastId: completeToast.id,
-          });
-          logComponentAction('MARKDOWN_RESULT_TOAST', '자동 닫기 타이머 실행', {
+          logComponentAction('BRIDGE_TOAST', '자동 닫기 타이머 실행', {
             toastId: completeToast.id,
           });
           removeToastById(completeToast.id);
@@ -234,10 +186,7 @@ export function MarkdownResultToast({
   // 🔧 토스트 제거
   const removeToastById = useCallback(
     (toastIdToRemove: string): void => {
-      console.log('🔧 [MARKDOWN_RESULT_TOAST] 토스트 제거', {
-        toastId: toastIdToRemove,
-      });
-      logComponentAction('MARKDOWN_RESULT_TOAST', '토스트 제거', {
+      logComponentAction('BRIDGE_TOAST', '토스트 제거', {
         toastId: toastIdToRemove,
       });
 
@@ -271,87 +220,84 @@ export function MarkdownResultToast({
 
   // 🔧 모든 토스트 제거
   const clearAllToasts = useCallback((): void => {
-    console.log('🔧 [MARKDOWN_RESULT_TOAST] 모든 토스트 제거');
-    logComponentAction('MARKDOWN_RESULT_TOAST', '모든 토스트 제거');
+    logComponentAction('BRIDGE_TOAST', '모든 토스트 제거');
 
     toastTimers.current.forEach((timer) => window.clearTimeout(timer));
     toastTimers.current.clear();
     setActiveToasts([]);
   }, []);
 
-  // 🔧 실행 결과 감지 및 토스트 생성
+  // 🔧 실행 결과 자동 감지 Effect
   useEffect(() => {
-    const shouldAutoDetect = safeAutoDetectResults && isInitialized.current;
+    const shouldAutoDetect = safeAutoDetectResults;
 
     // Early Return: 자동 감지가 비활성화된 경우
     if (!shouldAutoDetect) {
       return;
     }
 
-    const { lastExecutionTime, successfulOperations, failedOperations } =
-      executionMetrics || {};
+    const currentMetrics = executionMetrics;
+    const previousMetrics = lastProcessedMetrics.current;
 
-    const hasNewExecution =
-      lastExecutionTime !== null &&
-      lastExecutionTime !== lastProcessedExecutionTime.current;
+    const hasNewOperation =
+      currentMetrics.totalOperations > previousMetrics.totalOperations;
+    const hasNewSuccess =
+      currentMetrics.successfulOperations >
+      previousMetrics.successfulOperations;
+    const hasNewFailure =
+      currentMetrics.failedOperations > previousMetrics.failedOperations;
 
-    const isNotCurrentlyLoading = !isLoading;
+    // 성공 토스트 추가
+    if (hasNewSuccess) {
+      const successCount =
+        currentMetrics.successfulOperations -
+        previousMetrics.successfulOperations;
+      logComponentAction('BRIDGE_TOAST', '새로운 성공 감지', { successCount });
 
-    const shouldProcessResult = hasNewExecution && isNotCurrentlyLoading;
-
-    if (shouldProcessResult) {
-      console.log('🔧 [MARKDOWN_RESULT_TOAST] 실행 결과 감지', {
-        lastExecutionTime: lastExecutionTime!.toISOString(),
-        successfulOperations: successfulOperations || 0,
-        failedOperations: failedOperations || 0,
+      addNewToast({
+        type: 'success',
+        title: '브릿지 실행 성공',
+        description: `${successCount}개의 작업이 성공적으로 완료되었습니다`,
+        duration,
       });
-      logComponentAction('MARKDOWN_RESULT_TOAST', '실행 결과 감지', {
-        lastExecutionTime: lastExecutionTime!.toISOString(),
-        successfulOperations: successfulOperations || 0,
-        failedOperations: failedOperations || 0,
-      });
-
-      const isSuccessful = (successfulOperations || 0) > 0;
-      if (isSuccessful) {
-        addNewToast({
-          type: 'success',
-          title: '브릿지 작업 성공',
-          description: `${
-            successfulOperations || 0
-          }개의 작업이 성공적으로 완료되었습니다. ${statusMessage || ''}`,
-          duration,
-        });
-      } else if ((failedOperations || 0) > 0) {
-        addNewToast({
-          type: 'error',
-          title: '브릿지 작업 실패',
-          description: `${failedOperations || 0}개의 작업이 실패했습니다. ${
-            statusMessage || ''
-          }`,
-          duration: duration * 1.5,
-        });
-      }
-
-      // 경고 메시지 추가
-      const { warningCount = 0, warnings = [] } = validationState || {};
-      if (hasWarning && warningCount > 0) {
-        const warningMessage = warnings[0] || '경고가 발생했습니다';
-        addNewToast({
-          type: 'warning',
-          title: '주의사항 확인',
-          description: warningMessage,
-          duration,
-        });
-      }
-
-      lastProcessedExecutionTime.current = lastExecutionTime;
     }
+
+    // 실패 토스트 추가
+    if (hasNewFailure) {
+      const failureCount =
+        currentMetrics.failedOperations - previousMetrics.failedOperations;
+      logComponentAction('BRIDGE_TOAST', '새로운 실패 감지', { failureCount });
+
+      addNewToast({
+        type: 'error',
+        title: '브릿지 실행 실패',
+        description: `${failureCount}개의 작업이 실패했습니다. ${statusMessage}`,
+        duration: duration * 1.5,
+      });
+    }
+
+    // 경고 토스트 추가
+    if (hasWarning && hasNewOperation) {
+      logComponentAction('BRIDGE_TOAST', '경고 상태 감지');
+
+      addNewToast({
+        type: 'warning',
+        title: '주의사항 확인',
+        description: statusMessage,
+        duration,
+      });
+    }
+
+    // 메트릭스 업데이트
+    lastProcessedMetrics.current = {
+      totalOperations: currentMetrics.totalOperations,
+      successfulOperations: currentMetrics.successfulOperations,
+      failedOperations: currentMetrics.failedOperations,
+    };
   }, [
     safeAutoDetectResults,
     executionMetrics,
-    isLoading,
     hasWarning,
-    validationState,
     statusMessage,
     addNewToast,
     duration,
@@ -360,19 +306,13 @@ export function MarkdownResultToast({
   // 🔧 컴포넌트 정리 시 타이머 정리
   useEffect(() => {
     return () => {
-      console.log(
-        '🔧 [MARKDOWN_RESULT_TOAST] 컴포넌트 정리 - 모든 타이머 취소'
-      );
-      logComponentAction(
-        'MARKDOWN_RESULT_TOAST',
-        '컴포넌트 정리 - 모든 타이머 취소'
-      );
+      logComponentAction('BRIDGE_TOAST', '컴포넌트 정리 - 모든 타이머 취소');
       toastTimers.current.forEach((timer) => window.clearTimeout(timer));
       toastTimers.current.clear();
     };
   }, []);
 
-  // 🔧 위치 클래스 계산 (표준화됨)
+  // 🔧 위치 클래스 계산
   const getPositionClasses = useCallback(
     (toastPosition: StandardPosition): string => {
       const positionClassMap = new Map([
@@ -394,7 +334,7 @@ export function MarkdownResultToast({
     []
   );
 
-  // 🔧 토스트 타입별 스타일 계산 (표준화됨)
+  // 🔧 토스트 타입별 스타일 계산
   const getToastTypeClasses = useCallback(
     (
       toastType: StandardVariant
@@ -557,35 +497,9 @@ export function MarkdownResultToast({
   // 🔧 토스트 클릭 핸들러
   const handleToastClick = useCallback(
     (toast: ToastMessage): void => {
-      console.log('🔧 [MARKDOWN_RESULT_TOAST] 토스트 클릭', {
-        toastId: toast.id,
-      });
-      logComponentAction('MARKDOWN_RESULT_TOAST', '토스트 클릭', {
-        toastId: toast.id,
-      });
+      logComponentAction('BRIDGE_TOAST', '토스트 클릭', { toastId: toast.id });
       const shouldExecuteClickCallback = onToastClick !== undefined;
-      if (shouldExecuteClickCallback) {
-        onToastClick(toast);
-      }
-    },
-    [onToastClick]
-  );
-
-  // 🔧 토스트 키보드 이벤트 핸들러
-  const handleToastKeyDown = useCallback(
-    (
-      keyboardEvent: KeyboardEvent<HTMLDivElement>,
-      toast: ToastMessage
-    ): void => {
-      const { key } = keyboardEvent;
-      const isEnterOrSpace = key === 'Enter' || key === ' ';
-      const shouldExecuteClickCallback =
-        onToastClick !== undefined && isEnterOrSpace;
-
-      if (shouldExecuteClickCallback) {
-        keyboardEvent.preventDefault();
-        onToastClick!(toast);
-      }
+      shouldExecuteClickCallback ? onToastClick(toast) : null;
     },
     [onToastClick]
   );
@@ -610,24 +524,17 @@ export function MarkdownResultToast({
 
   const positionClasses = getPositionClasses(safePosition);
   const ariaAttributes = generateStandardAriaAttributes('toast', {
-    label: '마크다운 생성 결과 알림',
+    label: '브릿지 실행 결과 알림',
     description: `현재 ${activeToasts.length}개의 알림이 있습니다`,
     disabled: false,
     loading: false,
   });
 
-  console.log('🔧 [MARKDOWN_RESULT_TOAST] 최종 렌더링', {
-    count: activeToasts.length,
-    position: safePosition,
-    disableAnimation: safeDisableAnimation,
-    clearAllThreshold,
-  });
-
-  logComponentRender('MARKDOWN_RESULT_TOAST', {
-    count: activeToasts.length,
-    position: safePosition,
-    disableAnimation: safeDisableAnimation,
-    clearAllThreshold,
+  logComponentRender('BRIDGE_TOAST', {
+    size: safeSize,
+    variant: safeVariant,
+    toastCount: activeToasts.length,
+    autoDetect: safeAutoDetectResults,
   });
 
   return (
@@ -673,9 +580,6 @@ export function MarkdownResultToast({
               role="alert"
               aria-atomic="true"
               tabIndex={shouldShowClickCursor ? 0 : -1}
-              onKeyDown={(keyboardEvent) =>
-                handleToastKeyDown(keyboardEvent, toast)
-              }
             >
               <div className="flex items-start space-x-3">
                 <div className={`flex-shrink-0 ${iconClass}`}>{icon}</div>
@@ -738,24 +642,35 @@ export function MarkdownResultToast({
 }
 
 // 🔧 표준화된 토스트 훅
-export const useMarkdownToast = (
-  defaultConfig?: Partial<MarkdownResultToastProps>
-) => {
+export const useBridgeToast = (defaultConfig?: Partial<BridgeToastProps>) => {
   const { logComponentAction } = createStandardizationUtils();
-
-  console.log('🔧 [MARKDOWN_TOAST_HOOK] 마크다운 토스트 훅 초기화');
-  logComponentAction('MARKDOWN_TOAST_HOOK', '마크다운 토스트 훅 초기화');
+  logComponentAction('BRIDGE_TOAST_HOOK', '브릿지 토스트 훅 초기화');
 
   const renderToast = useCallback(
-    (customConfig?: Partial<MarkdownResultToastProps>) => {
+    (customConfig?: Partial<BridgeToastProps>) => {
       const finalConfig = { ...defaultConfig, ...customConfig };
-      return <MarkdownResultToast {...finalConfig} />;
+      return <BridgeToast {...finalConfig} />;
     },
     [defaultConfig]
   );
 
+  // 수동 토스트 추가 함수
+  const addToast = useCallback(
+    (toast: Omit<ToastMessage, 'id' | 'timestamp'>) => {
+      logComponentAction('BRIDGE_TOAST_HOOK', '수동 토스트 추가', {
+        type: toast.type,
+        title: toast.title,
+      });
+      // 이 부분은 실제로는 글로벌 상태나 이벤트를 통해 구현해야 하지만
+      // 데모를 위해 간단히 처리
+      console.log('수동 토스트 추가:', toast);
+    },
+    []
+  );
+
   return {
     ToastComponent: renderToast,
-    MarkdownToast: MarkdownResultToast,
+    BridgeToast: BridgeToast,
+    addToast,
   };
 };

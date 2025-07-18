@@ -1,4 +1,4 @@
-// bridges/parts/MarkdownStatusCard.tsx
+// bridges/components/BridgeStatus.tsx
 
 import { useMemo } from 'react';
 import type { ReactElement } from 'react';
@@ -8,8 +8,8 @@ import {
   type StandardCardProps,
 } from '../common/componentStandardization';
 
-// 🔧 마크다운 상태 카드 전용 Props 인터페이스 (표준화됨)
-interface MarkdownStatusCardProps extends StandardCardProps {
+// 🔧 브릿지 상태 카드 전용 Props 인터페이스
+interface BridgeStatusProps extends StandardCardProps {
   readonly hideTransferStatus?: boolean;
   readonly hideValidationDetails?: boolean;
   readonly hideStatistics?: boolean;
@@ -31,7 +31,7 @@ interface StatusInfo {
   readonly icon: string;
 }
 
-export function MarkdownStatusCard({
+export function BridgeStatus({
   size = 'md',
   variant = 'default',
   className = '',
@@ -44,11 +44,9 @@ export function MarkdownStatusCard({
   hideErrorsWarnings = false,
   hideLastResult = false,
   showProgressBar = true,
-  maxErrorDisplay = 5,
-  maxWarningDisplay = 3,
   bridgeConfig,
   onClick,
-}: MarkdownStatusCardProps): ReactElement {
+}: BridgeStatusProps): ReactElement {
   // 🔧 표준화 유틸리티 사용
   const {
     getCardSizeClasses,
@@ -75,82 +73,51 @@ export function MarkdownStatusCard({
     false
   );
   const safeHideStatistics = validateBoolean(hideStatistics, false);
-  const safeHideErrorsWarnings = validateBoolean(hideErrorsWarnings, false);
-  const safeHideLastResult = validateBoolean(hideLastResult, false);
   const safeShowProgressBar = validateBoolean(showProgressBar, true);
 
-  // 🔧 최신 Bridge UI 훅 사용
-  const bridgeUIHook = useBridgeUI(bridgeConfig);
-
-  console.log('🔧 [MARKDOWN_STATUS_CARD] 컴포넌트 렌더링', {
-    size: safeSize,
-    variant: safeVariant,
-    clickable: safeClickable,
-    hideTransferStatus: safeHideTransferStatus,
-  });
-
-  logComponentRender('MARKDOWN_STATUS_CARD', {
-    size: safeSize,
-    variant: safeVariant,
-    clickable: safeClickable,
-    hideTransferStatus: safeHideTransferStatus,
-  });
-
-  // 🔧 Bridge UI 상태 정보 추출
+  // 🔧 Bridge UI 훅 사용
   const {
+    isLoading,
+    hasError,
+    hasWarning,
+    statusMessage,
+    canExecuteAction,
+    progressData,
     editorStatistics,
     bridgeConfiguration,
     executionMetrics,
-    validationState,
-    isLoading: isCurrentlyTransferring,
-    canExecuteAction: isTransferPossible,
-    statusMessage,
-    hasError,
-    hasWarning,
-  } = bridgeUIHook;
+  } = useBridgeUI(bridgeConfig);
 
-  // 🔧 검증 통계 계산
-  const validationStatistics = useMemo(() => {
-    const { paragraphCount = 0, assignedParagraphCount = 0 } =
-      editorStatistics || {};
-
-    const progressPercentage =
-      paragraphCount > 0
-        ? Math.round((assignedParagraphCount / paragraphCount) * 100)
-        : 0;
-
-    console.log('🔧 [MARKDOWN_STATUS_CARD] 검증 통계 계산', {
-      paragraphCount,
-      assignedParagraphCount,
-      progressPercentage,
-      hasError,
-      hasWarning,
-    });
-
-    return {
-      hasErrors: hasError,
-      hasWarnings: hasWarning,
-      errorCount: validationState?.errorCount || 0,
-      warningCount: validationState?.warningCount || 0,
-      progressPercentage,
-    };
-  }, [editorStatistics, hasError, hasWarning, validationState]);
-
+  // 🔧 에디터 통계 구조분해할당
   const {
-    hasErrors,
-    hasWarnings,
-    errorCount,
-    warningCount,
-    progressPercentage,
-  } = validationStatistics;
+    containerCount = 0,
+    paragraphCount = 0,
+    assignedParagraphCount = 0,
+    unassignedParagraphCount = 0,
+    totalContentLength = 0,
+  } = editorStatistics;
+
+  // 🔧 브릿지 설정 구조분해할당
+  const {
+    enableValidation = false,
+    enableErrorRecovery = false,
+    debugMode = false,
+  } = bridgeConfiguration;
+
+  // 🔧 실행 메트릭스 구조분해할당
+  const {
+    totalOperations = 0,
+    successfulOperations = 0,
+    lastDuration = 0,
+  } = executionMetrics;
 
   // 🔧 전반적인 전송 상태 계산
   const overallTransferStatus = useMemo((): StatusInfo => {
-    // Early Return: 전송 중인 경우
-    if (isCurrentlyTransferring) {
+    // Early Return: 로딩 중인 경우
+    if (isLoading) {
       return {
-        status: 'transferring',
-        label: '전송 중',
+        status: 'loading',
+        label: '처리 중',
         color: 'blue',
         bgColor: 'bg-blue-50',
         textColor: 'text-blue-700',
@@ -160,7 +127,7 @@ export function MarkdownStatusCard({
     }
 
     // Early Return: 에러가 있는 경우
-    if (hasErrors) {
+    if (hasError) {
       return {
         status: 'error',
         label: '오류 있음',
@@ -172,8 +139,8 @@ export function MarkdownStatusCard({
       };
     }
 
-    // Early Return: 준비되지 않은 경우
-    if (!isTransferPossible) {
+    // Early Return: 실행 불가능한 경우
+    if (!canExecuteAction) {
       return {
         status: 'waiting',
         label: '대기 중',
@@ -185,22 +152,8 @@ export function MarkdownStatusCard({
       };
     }
 
-    // Early Return: 성공한 전송이 있는 경우
-    const { successfulOperations = 0 } = executionMetrics || {};
-    if (successfulOperations > 0) {
-      return {
-        status: 'success',
-        label: '전송 성공',
-        color: 'green',
-        bgColor: 'bg-green-50',
-        textColor: 'text-green-700',
-        borderColor: 'border-green-200',
-        icon: 'success',
-      };
-    }
-
     // Early Return: 경고가 있는 경우
-    if (hasWarnings) {
+    if (hasWarning) {
       return {
         status: 'warning',
         label: '주의 필요',
@@ -212,27 +165,22 @@ export function MarkdownStatusCard({
       };
     }
 
+    // 성공적인 상태
     return {
       status: 'ready',
-      label: '전송 준비',
+      label: '준비 완료',
       color: 'green',
       bgColor: 'bg-green-50',
       textColor: 'text-green-700',
       borderColor: 'border-green-200',
       icon: 'ready',
     };
-  }, [
-    isCurrentlyTransferring,
-    hasErrors,
-    isTransferPossible,
-    executionMetrics,
-    hasWarnings,
-  ]);
+  }, [isLoading, hasError, canExecuteAction, hasWarning]);
 
-  // 🔧 CSS 클래스 계산 (표준화됨)
+  // 🔧 CSS 클래스 계산
   const cardSizeClasses = getCardSizeClasses(safeSize);
   const cardVariantClasses = getCardVariantClasses(safeVariant);
-  const elevationClasses = useMemo(() => {
+  const elevationClasses = (() => {
     const elevationMap = new Map([
       ['none', ''],
       ['sm', 'shadow-sm'],
@@ -242,7 +190,7 @@ export function MarkdownStatusCard({
     ]);
     const selectedElevation = elevationMap.get(elevation);
     return selectedElevation !== undefined ? selectedElevation : 'shadow-sm';
-  }, [elevation]);
+  })();
 
   const borderClasses = safeBorder ? 'border' : '';
   const clickableClasses =
@@ -253,40 +201,25 @@ export function MarkdownStatusCard({
     `${baseClasses} ${cardSizeClasses} ${cardVariantClasses} ${elevationClasses} ${borderClasses} ${clickableClasses} ${safeClassName}`.trim();
 
   // 🔧 이벤트 핸들러
-  const handleCardClick = (event: React.MouseEvent<HTMLDivElement>): void => {
+  const handleCardClick = (): void => {
     const shouldExecuteClick = onClick !== undefined && safeClickable;
     if (shouldExecuteClick) {
-      console.log('🔧 [MARKDOWN_STATUS_CARD] 카드 클릭됨');
-      logComponentAction('MARKDOWN_STATUS_CARD', '카드 클릭됨');
-      onClick(event);
+      logComponentAction('BRIDGE_STATUS', '카드 클릭됨');
+      onClick!({} as any);
     }
   };
 
-  // 🔧 키보드 이벤트 핸들러 (표준화됨)
+  // 🔧 키보드 이벤트 핸들러
   const keyboardHandler = generateKeyboardHandler(
-    safeClickable
-      ? (): void => {
-          const activeElement = document.activeElement;
-          const isDivElement = activeElement instanceof HTMLDivElement;
-
-          if (isDivElement) {
-            const divElement = activeElement;
-
-            // 실제 클릭 이벤트 발생시키기
-            divElement.click();
-          }
-        }
-      : undefined
+    safeClickable ? handleCardClick : undefined
   );
 
-  // 🔧 접근성 속성 생성 (표준화됨)
+  // 🔧 접근성 속성 생성
   const cardAriaAttributes = generateStandardAriaAttributes('card', {
     label: '마크다운 브릿지 상태 정보',
-    description: `현재 상태: ${overallTransferStatus.label}. 컨테이너 ${
-      editorStatistics?.containerCount || 0
-    }개, 문단 ${editorStatistics?.paragraphCount || 0}개`,
+    description: `현재 상태: ${overallTransferStatus.label}. ${statusMessage}`,
     disabled: false,
-    loading: isCurrentlyTransferring,
+    loading: isLoading,
   });
 
   // 🔧 아이콘 컴포넌트
@@ -358,23 +291,6 @@ export function MarkdownStatusCard({
         </svg>,
       ],
       [
-        'success',
-        <svg
-          key="success"
-          className={iconClasses}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>,
-      ],
-      [
         'ready',
         <svg
           key="ready"
@@ -387,7 +303,7 @@ export function MarkdownStatusCard({
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M13 10V3L4 14h7v7l9-11h-7z"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>,
       ],
@@ -508,8 +424,6 @@ export function MarkdownStatusCard({
       return null;
     }
 
-    const { totalOperations = 0 } = executionMetrics || {};
-
     return (
       <div
         className={`flex items-center justify-between p-3 rounded-lg ${overallTransferStatus.bgColor} ${overallTransferStatus.borderColor} border`}
@@ -527,7 +441,7 @@ export function MarkdownStatusCard({
               <p
                 className={`text-sm ${overallTransferStatus.textColor} opacity-75`}
               >
-                {statusMessage || '상태 정보 없음'}
+                {statusMessage}
               </p>
             ) : null}
           </div>
@@ -535,7 +449,7 @@ export function MarkdownStatusCard({
 
         {safeSize === 'xl' && totalOperations > 0 ? (
           <div className={`text-right ${overallTransferStatus.textColor}`}>
-            <div className="text-sm font-medium">시도 횟수</div>
+            <div className="text-sm font-medium">실행 횟수</div>
             <div className="text-lg font-bold">{totalOperations}</div>
           </div>
         ) : null}
@@ -551,14 +465,6 @@ export function MarkdownStatusCard({
     if (!shouldShowStatistics) {
       return null;
     }
-
-    const {
-      containerCount = 0,
-      paragraphCount = 0,
-      assignedParagraphCount = 0,
-      unassignedParagraphCount = 0,
-      totalContentLength = 0,
-    } = editorStatistics || {};
 
     return (
       <div className="space-y-3">
@@ -578,7 +484,7 @@ export function MarkdownStatusCard({
             description="작성된 문단 수"
           />
           <StatisticsBadge
-            label="할당됨"
+            label="할당"
             value={assignedParagraphCount}
             color="purple"
             description="컨테이너에 배정된 문단"
@@ -620,12 +526,6 @@ export function MarkdownStatusCard({
       return null;
     }
 
-    const {
-      enableValidation = false,
-      enableErrorRecovery = false,
-      debugMode = false,
-    } = bridgeConfiguration || {};
-
     return (
       <div className="space-y-3">
         <h4 className="text-sm font-medium text-gray-700">검증 상태</h4>
@@ -635,10 +535,10 @@ export function MarkdownStatusCard({
             <div className="flex items-center space-x-2">
               <div
                 className={`w-3 h-3 rounded-full ${
-                  isTransferPossible ? 'bg-green-500' : 'bg-red-500'
+                  canExecuteAction ? 'bg-green-500' : 'bg-red-500'
                 }`}
               />
-              <span className="text-sm font-medium">전송 준비</span>
+              <span className="text-sm font-medium">실행 준비</span>
             </div>
             <div className="flex items-center space-x-2">
               <div
@@ -673,136 +573,39 @@ export function MarkdownStatusCard({
     );
   };
 
-  // 🔧 에러 및 경고 섹션
-  const ErrorsWarningsSection = (): ReactElement | null => {
-    const shouldShowErrorsWarnings =
-      !safeHideErrorsWarnings && (hasErrors || hasWarnings);
+  // 🔧 실행 메트릭스 섹션
+  const ExecutionMetricsSection = (): ReactElement | null => {
+    const shouldShowMetrics =
+      !hideLastResult && safeSize === 'xl' && totalOperations > 0;
 
-    // Early Return: 에러/경고를 숨기는 경우
-    if (!shouldShowErrorsWarnings) {
-      return null;
-    }
-
-    const { errors = [], warnings = [] } = validationState || {};
-
-    return (
-      <div className="space-y-3">
-        {hasErrors ? (
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <svg
-                className="w-4 h-4 text-red-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <h4 className="text-sm font-medium text-red-700">
-                검증 오류 ({errorCount}개)
-              </h4>
-            </div>
-            <ul className="space-y-1">
-              {errors
-                .slice(0, maxErrorDisplay)
-                .map((error: string, index: number) => (
-                  <li
-                    key={index}
-                    className="flex items-start space-x-2 text-sm text-red-600"
-                  >
-                    <span className="text-red-400">•</span>
-                    <span>{error}</span>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {hasWarnings ? (
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <svg
-                className="w-4 h-4 text-yellow-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-              <h4 className="text-sm font-medium text-yellow-700">
-                검증 경고 ({warningCount}개)
-              </h4>
-            </div>
-            <ul className="space-y-1">
-              {warnings
-                .slice(0, maxWarningDisplay)
-                .map((warning: string, index: number) => (
-                  <li
-                    key={index}
-                    className="flex items-start space-x-2 text-sm text-yellow-600"
-                  >
-                    <span className="text-yellow-400">•</span>
-                    <span>{warning}</span>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    );
-  };
-
-  // 🔧 마지막 전송 결과 섹션
-  const LastTransferResultSection = (): ReactElement | null => {
-    const {
-      lastExecutionTime,
-      lastDuration = 0,
-      successRate = 0,
-      successfulOperations = 0,
-    } = executionMetrics || {};
-
-    const shouldShowLastResult =
-      !safeHideLastResult && safeSize === 'xl' && lastExecutionTime;
-
-    // Early Return: 마지막 결과를 숨기는 경우
-    if (!shouldShowLastResult) {
+    // Early Return: 메트릭스를 숨기는 경우
+    if (!shouldShowMetrics) {
       return null;
     }
 
     return (
       <div className="pt-3 space-y-2 border-t border-gray-200">
-        <h4 className="text-sm font-medium text-gray-700">마지막 전송 결과</h4>
+        <h4 className="text-sm font-medium text-gray-700">실행 통계</h4>
         <div className="p-3 space-y-2 rounded-lg bg-gray-50">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">상태</span>
-            <span
-              className={`text-sm font-medium ${
-                successfulOperations > 0 ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              {successfulOperations > 0 ? '성공' : '실패'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">소요 시간</span>
+            <span className="text-sm text-gray-600">총 실행 횟수</span>
             <span className="text-sm font-medium text-gray-900">
-              {lastDuration.toFixed(1)}ms
+              {totalOperations}회
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600">성공률</span>
+            <span className="text-sm font-medium text-green-600">
+              {totalOperations > 0
+                ? Math.round((successfulOperations / totalOperations) * 100)
+                : 0}
+              %
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">마지막 소요 시간</span>
             <span className="text-sm font-medium text-gray-900">
-              {successRate}%
+              {lastDuration.toFixed(1)}ms
             </span>
           </div>
         </div>
@@ -810,22 +613,12 @@ export function MarkdownStatusCard({
     );
   };
 
-  console.log('🔧 [MARKDOWN_STATUS_CARD] 최종 렌더링', {
-    overallStatus: overallTransferStatus.status,
-    containerCount: editorStatistics?.containerCount || 0,
-    paragraphCount: editorStatistics?.paragraphCount || 0,
-    progressPercentage,
-    isTransferPossible,
-    finalCardClasses,
-  });
-
-  logComponentRender('MARKDOWN_STATUS_CARD', {
-    overallStatus: overallTransferStatus.status,
-    containerCount: editorStatistics?.containerCount || 0,
-    paragraphCount: editorStatistics?.paragraphCount || 0,
-    progressPercentage,
-    isTransferPossible,
-    finalCardClasses,
+  logComponentRender('BRIDGE_STATUS', {
+    size: safeSize,
+    variant: safeVariant,
+    containerCount,
+    paragraphCount,
+    canExecuteAction,
   });
 
   return (
@@ -843,9 +636,7 @@ export function MarkdownStatusCard({
 
       <ValidationDetailsSection />
 
-      <ErrorsWarningsSection />
-
-      <LastTransferResultSection />
+      <ExecutionMetricsSection />
     </div>
   );
 }

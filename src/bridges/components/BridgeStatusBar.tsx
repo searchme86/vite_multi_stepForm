@@ -1,4 +1,4 @@
-// bridges/parts/QuickStatusBar.tsx
+// bridges/components/BridgeStatusBar.tsx
 
 import React, { useState, useCallback, useMemo } from 'react';
 import type { ReactElement } from 'react';
@@ -7,13 +7,11 @@ import {
   createStandardizationUtils,
   type StandardStatusBarProps,
   type StandardSize,
+  type StandardVariant,
 } from '../common/componentStandardization';
 
-// 🔧 빠른 상태바 위치 타입 (표준화됨)
-type QuickStatusBarPosition = 'top' | 'bottom';
-
-// 🔧 빠른 상태바 전용 Props 인터페이스 (표준화됨)
-interface QuickStatusBarProps extends StandardStatusBarProps {
+// 🔧 브릿지 상태바 전용 Props 인터페이스
+interface BridgeStatusBarProps extends StandardStatusBarProps {
   readonly heightSize?: StandardSize;
   readonly showProgressBar?: boolean;
   readonly showStatistics?: boolean;
@@ -25,7 +23,7 @@ interface QuickStatusBarProps extends StandardStatusBarProps {
   readonly executionType?: 'forward' | 'reverse' | 'bidirectional';
 }
 
-// 🔧 상태 요약 정보 인터페이스 (표준화됨)
+// 🔧 상태 요약 정보 인터페이스
 interface StatusSummary {
   readonly status: string;
   readonly color: string;
@@ -36,26 +34,28 @@ interface StatusSummary {
   readonly description: string;
 }
 
-export function QuickStatusBar({
+export function BridgeStatusBar({
   size = 'md',
   variant = 'default',
   position = 'top',
   className = '',
   heightSize = 'md',
   fixed = true,
+  collapsible = false,
+  autoHide = false,
+  autoHideDelay = 5000,
   showActions = true,
   showProgressBar = true,
   showStatistics = true,
   showQuickActions = true,
   enableAutoHide = false,
   enableCollapse = false,
-  autoHideDelay = 5000,
   bridgeConfig,
   onClick,
   onQuickTransfer,
   onShowDetails,
   executionType = 'forward',
-}: QuickStatusBarProps): ReactElement {
+}: BridgeStatusBarProps): ReactElement {
   // 🔧 표준화 유틸리티 사용
   const {
     validateSize,
@@ -82,95 +82,38 @@ export function QuickStatusBar({
   const safeEnableAutoHide = validateBoolean(enableAutoHide, false);
   const safeEnableCollapse = validateBoolean(enableCollapse, false);
 
-  // 🔧 최신 Bridge UI 훅 사용
-  const bridgeUIHook = useBridgeUI(bridgeConfig);
-
-  console.log('🔧 [QUICK_STATUS_BAR] 컴포넌트 렌더링', {
-    size: safeSize,
-    variant: safeVariant,
-    position,
-    heightSize: safeHeightSize,
-    executionType,
-  });
-
-  logComponentRender('QUICK_STATUS_BAR', {
-    size: safeSize,
-    variant: safeVariant,
-    position,
-    heightSize: safeHeightSize,
-    executionType,
-  });
+  // 🔧 Bridge UI 훅 사용
+  const {
+    isLoading,
+    hasError,
+    hasWarning,
+    statusMessage,
+    canExecuteAction,
+    progressData,
+    editorStatistics,
+    handleForwardTransfer,
+    handleReverseTransfer,
+    handleBidirectionalSync,
+  } = useBridgeUI(bridgeConfig);
 
   // 🔧 로컬 상태 관리
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [isAutoHidden, setIsAutoHidden] = useState<boolean>(false);
 
-  // 🔧 Bridge UI 상태 정보 추출
+  // 🔧 에디터 통계 구조분해할당
   const {
-    editorStatistics,
-    isLoading: isCurrentlyTransferring,
-    canExecuteAction: isTransferPossible,
-    hasError,
-    hasWarning,
-    validationState,
-    handleForwardTransfer,
-    handleReverseTransfer,
-    handleBidirectionalSync,
-  } = bridgeUIHook;
+    containerCount = 0,
+    paragraphCount = 0,
+    assignedParagraphCount = 0,
+  } = editorStatistics;
 
-  // 🔧 검증 통계 계산
-  const validationStatistics = useMemo(() => {
-    const {
-      containerCount = 0,
-      paragraphCount = 0,
-      assignedParagraphCount = 0,
-    } = editorStatistics || {};
+  // 🔧 진행률 데이터 구조분해할당
+  const { percentage: progressPercentage = 0 } = progressData;
 
-    const errorCount = validationState?.errorCount || 0;
-    const warningCount = validationState?.warningCount || 0;
-    const progressPercentage =
-      paragraphCount > 0
-        ? Math.round((assignedParagraphCount / paragraphCount) * 100)
-        : 0;
-
-    console.log('🔧 [QUICK_STATUS_BAR] 검증 통계 계산', {
-      containerCount,
-      paragraphCount,
-      assignedParagraphCount,
-      errorCount,
-      warningCount,
-      progressPercentage,
-      hasError,
-      hasWarning,
-    });
-
-    return {
-      hasErrors: hasError,
-      hasWarnings: hasWarning,
-      errorCount,
-      warningCount,
-      progressPercentage,
-      containerCount,
-      paragraphCount,
-      assignedParagraphCount,
-    };
-  }, [editorStatistics, hasError, hasWarning, validationState]);
-
-  const {
-    hasErrors,
-    hasWarnings,
-    errorCount,
-    warningCount,
-    progressPercentage,
-    containerCount,
-    paragraphCount,
-    assignedParagraphCount,
-  } = validationStatistics;
-
-  // 🔧 상태 요약 정보 계산 (표준화됨)
+  // 🔧 상태 요약 정보 계산
   const statusSummary = useMemo((): StatusSummary => {
     // Early Return: 에러가 있는 경우
-    if (hasErrors) {
+    if (hasError) {
       return {
         status: 'error',
         color: 'red',
@@ -178,25 +121,25 @@ export function QuickStatusBar({
         icon: 'error',
         bgColor: 'bg-red-500',
         textColor: 'text-red-600',
-        description: `${errorCount}개 오류`,
+        description: statusMessage,
       };
     }
 
-    // Early Return: 전송 중인 경우
-    if (isCurrentlyTransferring) {
+    // Early Return: 로딩 중인 경우
+    if (isLoading) {
       return {
-        status: 'transferring',
+        status: 'loading',
         color: 'blue',
-        label: '전송중',
+        label: '처리중',
         icon: 'loading',
         bgColor: 'bg-blue-500',
         textColor: 'text-blue-600',
-        description: '데이터 전송 진행중',
+        description: '데이터 처리 진행중',
       };
     }
 
-    // Early Return: 전송 준비 완료인 경우
-    if (isTransferPossible) {
+    // Early Return: 실행 준비 완료인 경우
+    if (canExecuteAction) {
       return {
         status: 'ready',
         color: 'green',
@@ -204,12 +147,12 @@ export function QuickStatusBar({
         icon: 'ready',
         bgColor: 'bg-green-500',
         textColor: 'text-green-600',
-        description: '전송 준비 완료',
+        description: '실행 준비 완료',
       };
     }
 
     // Early Return: 경고가 있는 경우
-    if (hasWarnings) {
+    if (hasWarning) {
       return {
         status: 'warning',
         color: 'yellow',
@@ -217,7 +160,7 @@ export function QuickStatusBar({
         icon: 'warning',
         bgColor: 'bg-yellow-500',
         textColor: 'text-yellow-600',
-        description: `${warningCount}개 경고`,
+        description: statusMessage,
       };
     }
 
@@ -230,14 +173,43 @@ export function QuickStatusBar({
       textColor: 'text-gray-600',
       description: '작업 진행 필요',
     };
-  }, [
-    hasErrors,
-    errorCount,
-    isCurrentlyTransferring,
-    isTransferPossible,
-    hasWarnings,
-    warningCount,
-  ]);
+  }, [hasError, isLoading, canExecuteAction, hasWarning, statusMessage]);
+
+  // 🔧 높이 클래스 계산
+  const getHeightClasses = useCallback((heightType: StandardSize): string => {
+    const heightClassMap = new Map([
+      ['xs', 'h-6'],
+      ['sm', 'h-8'],
+      ['md', 'h-12'],
+      ['lg', 'h-16'],
+      ['xl', 'h-20'],
+    ]);
+
+    const selectedHeightClass = heightClassMap.get(heightType);
+    const fallbackHeightClass = heightClassMap.get('md');
+
+    return selectedHeightClass !== undefined
+      ? selectedHeightClass
+      : fallbackHeightClass!;
+  }, []);
+
+  // 🔧 위치 클래스 계산
+  const getPositionClasses = useCallback(
+    (barPosition: 'top' | 'bottom'): string => {
+      const positionClassMap = new Map([
+        ['top', 'top-0 left-0 right-0'],
+        ['bottom', 'bottom-0 left-0 right-0'],
+      ]);
+
+      const selectedPositionClass = positionClassMap.get(barPosition);
+      const fallbackPositionClass = positionClassMap.get('top');
+
+      return selectedPositionClass !== undefined
+        ? selectedPositionClass
+        : fallbackPositionClass!;
+    },
+    []
+  );
 
   // 🔧 실행 함수 선택
   const getExecutionFunction = useCallback(() => {
@@ -258,57 +230,17 @@ export function QuickStatusBar({
     handleBidirectionalSync,
   ]);
 
-  // 🔧 높이 클래스 계산 (표준화됨)
-  const getHeightClasses = useCallback((heightType: StandardSize): string => {
-    const heightClassMap = new Map([
-      ['xs', 'h-6'],
-      ['sm', 'h-8'],
-      ['md', 'h-12'],
-      ['lg', 'h-16'],
-      ['xl', 'h-20'],
-    ]);
-
-    const selectedHeightClass = heightClassMap.get(heightType);
-    const fallbackHeightClass = heightClassMap.get('md');
-
-    return selectedHeightClass !== undefined
-      ? selectedHeightClass
-      : fallbackHeightClass!;
-  }, []);
-
-  // 🔧 위치 클래스 계산 (표준화됨)
-  const getPositionClasses = useCallback(
-    (barPosition: QuickStatusBarPosition): string => {
-      const positionClassMap = new Map([
-        ['top', 'top-0 left-0 right-0'],
-        ['bottom', 'bottom-0 left-0 right-0'],
-      ]);
-
-      const selectedPositionClass = positionClassMap.get(barPosition);
-      const fallbackPositionClass = positionClassMap.get('top');
-
-      return selectedPositionClass !== undefined
-        ? selectedPositionClass
-        : fallbackPositionClass!;
-    },
-    []
-  );
-
   // 🔧 빠른 전송 핸들러
   const handleQuickTransfer = useCallback(async (): Promise<void> => {
-    console.log('🔧 [QUICK_STATUS_BAR] 빠른 전송 실행', {
-      executionType,
-    });
-    logComponentAction('QUICK_STATUS_BAR', '빠른 전송 실행', {
+    logComponentAction('BRIDGE_STATUS_BAR', '빠른 전송 실행', {
       executionType,
     });
 
-    const cannotTransfer = !isTransferPossible || isCurrentlyTransferring;
+    const cannotTransfer = !canExecuteAction || isLoading;
 
     // Early Return: 전송할 수 없는 상태
     if (cannotTransfer) {
-      console.log('🔧 [QUICK_STATUS_BAR] 전송 불가능한 상태');
-      logComponentAction('QUICK_STATUS_BAR', '전송 불가능한 상태');
+      logComponentAction('BRIDGE_STATUS_BAR', '전송 불가능한 상태');
       return;
     }
 
@@ -321,18 +253,14 @@ export function QuickStatusBar({
         await executionFunction();
       }
     } catch (transferError) {
-      console.log('🔧 [QUICK_STATUS_BAR] 빠른 전송 실행 중 오류', {
-        error: transferError,
-        executionType,
-      });
-      logComponentAction('QUICK_STATUS_BAR', '빠른 전송 실행 중 오류', {
+      logComponentAction('BRIDGE_STATUS_BAR', '빠른 전송 실행 중 오류', {
         error: transferError,
         executionType,
       });
     }
   }, [
-    isTransferPossible,
-    isCurrentlyTransferring,
+    canExecuteAction,
+    isLoading,
     onQuickTransfer,
     getExecutionFunction,
     executionType,
@@ -340,37 +268,29 @@ export function QuickStatusBar({
 
   // 🔧 상세 정보 보기 핸들러
   const handleShowDetails = useCallback((): void => {
-    console.log('🔧 [QUICK_STATUS_BAR] 상세 정보 보기');
-    logComponentAction('QUICK_STATUS_BAR', '상세 정보 보기');
+    logComponentAction('BRIDGE_STATUS_BAR', '상세 정보 보기');
     const shouldExecuteShowDetails = onShowDetails !== undefined;
-    if (shouldExecuteShowDetails) {
-      onShowDetails();
-    }
+    shouldExecuteShowDetails ? onShowDetails() : null;
   }, [onShowDetails]);
 
   // 🔧 토글 접기 핸들러
   const handleToggleCollapse = useCallback((): void => {
-    console.log('🔧 [QUICK_STATUS_BAR] 상태바 토글');
-    logComponentAction('QUICK_STATUS_BAR', '상태바 토글');
+    logComponentAction('BRIDGE_STATUS_BAR', '상태바 토글');
     setIsCollapsed((previousState) => !previousState);
   }, []);
 
   // 🔧 상태바 클릭 핸들러
-  const handleStatusBarClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>): void => {
-      console.log('🔧 [QUICK_STATUS_BAR] 상태바 클릭');
-      logComponentAction('QUICK_STATUS_BAR', '상태바 클릭');
-      const shouldExecuteOnClick = onClick !== undefined;
-      const shouldExecuteShowDetails = onShowDetails !== undefined;
+  const handleStatusBarClick = useCallback((): void => {
+    logComponentAction('BRIDGE_STATUS_BAR', '상태바 클릭');
+    const shouldExecuteOnClick = onClick !== undefined;
+    const shouldExecuteShowDetails = onShowDetails !== undefined;
 
-      if (shouldExecuteOnClick) {
-        onClick(event);
-      } else if (shouldExecuteShowDetails) {
-        handleShowDetails();
-      }
-    },
-    [onClick, onShowDetails, handleShowDetails]
-  );
+    if (shouldExecuteOnClick) {
+      onClick!({} as any);
+    } else if (shouldExecuteShowDetails) {
+      handleShowDetails();
+    }
+  }, [onClick, onShowDetails, handleShowDetails]);
 
   // 🔧 확장 클릭 핸들러
   const handleExpandClick = useCallback((): void => {
@@ -378,19 +298,8 @@ export function QuickStatusBar({
     setIsCollapsed(false);
   }, []);
 
-  // 🔧 키보드 이벤트 핸들러 (표준화됨)
-  const keyboardHandler = generateKeyboardHandler((): void => {
-    const activeElement = document.activeElement;
-    const isDivElement = activeElement instanceof HTMLDivElement;
-
-    if (isDivElement) {
-      const divElement = activeElement;
-
-      // 실제 클릭 이벤트 발생시키기
-      divElement.click();
-    }
-  });
-
+  // 🔧 키보드 이벤트 핸들러
+  const keyboardHandler = generateKeyboardHandler(handleStatusBarClick);
   const expandKeyHandler = generateKeyboardHandler(handleExpandClick);
 
   // 🔧 자동 숨김 Effect
@@ -406,7 +315,7 @@ export function QuickStatusBar({
     }
   }, [safeEnableAutoHide, autoHideDelay]);
 
-  // 🔧 아이콘 컴포넌트 (표준화됨)
+  // 🔧 아이콘 컴포넌트
   const StatusIcon = ({
     iconType,
     className: iconClassName = '',
@@ -514,7 +423,7 @@ export function QuickStatusBar({
     return selectedIcon !== undefined ? selectedIcon : null;
   };
 
-  // 🔧 CSS 클래스 계산 (표준화됨)
+  // 🔧 CSS 클래스 계산
   const fixedClasses = safeFixed ? 'fixed' : 'relative';
   const positionClasses = getPositionClasses(position);
   const heightClasses = getHeightClasses(safeHeightSize);
@@ -527,12 +436,12 @@ export function QuickStatusBar({
   const finalClasses =
     `${baseClasses} ${fixedClasses} ${positionClasses} ${heightClasses} ${variantClasses} ${clickableClasses} ${safeClassName}`.trim();
 
-  // 🔧 접근성 속성 생성 (표준화됨)
+  // 🔧 접근성 속성 생성
   const statusBarAriaAttributes = generateStandardAriaAttributes('statusbar', {
     label: '마크다운 브릿지 빠른 상태',
     description: `현재 상태: ${statusSummary.label}. ${statusSummary.description}`,
     disabled: false,
-    loading: isCurrentlyTransferring,
+    loading: isLoading,
     expanded: !isCollapsed,
   });
 
@@ -560,20 +469,14 @@ export function QuickStatusBar({
     );
   }
 
-  console.log('🔧 [QUICK_STATUS_BAR] 최종 렌더링', {
-    status: statusSummary.status,
+  logComponentRender('BRIDGE_STATUS_BAR', {
+    size: safeSize,
+    variant: safeVariant,
+    heightSize: safeHeightSize,
+    executionType,
+    statusLabel: statusSummary.label,
     progressPercentage,
-    isTransferPossible,
-    canTransfer: isTransferPossible,
-    isCollapsed,
-    isAutoHidden,
-  });
-
-  logComponentRender('QUICK_STATUS_BAR', {
-    status: statusSummary.status,
-    progressPercentage,
-    isTransferPossible,
-    canTransfer: isTransferPossible,
+    canExecuteAction,
     isCollapsed,
     isAutoHidden,
   });
@@ -658,12 +561,12 @@ export function QuickStatusBar({
             {safeShowQuickActions ? (
               <button
                 type="button"
-                disabled={!isTransferPossible || isCurrentlyTransferring}
+                disabled={!canExecuteAction || isLoading}
                 className={`
                   px-3 py-1 text-xs font-medium rounded
                   transition-all duration-200
                   ${
-                    isTransferPossible && !isCurrentlyTransferring
+                    canExecuteAction && !isLoading
                       ? 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }
@@ -673,12 +576,10 @@ export function QuickStatusBar({
                   handleQuickTransfer();
                 }}
                 aria-label={
-                  isCurrentlyTransferring
-                    ? '전송 진행 중'
-                    : `빠른 ${executionType} 실행`
+                  isLoading ? '처리 진행 중' : `빠른 ${executionType} 실행`
                 }
               >
-                {isCurrentlyTransferring ? '전송중...' : '실행'}
+                {isLoading ? '처리중...' : '실행'}
               </button>
             ) : null}
 
@@ -715,16 +616,14 @@ export function QuickStatusBar({
 }
 
 // 🔧 표준화된 상태바 훅
-export const useQuickStatusBar = (
-  defaultConfig?: Partial<QuickStatusBarProps>
+export const useBridgeStatusBar = (
+  defaultConfig?: Partial<BridgeStatusBarProps>
 ) => {
   const { logComponentAction } = createStandardizationUtils();
-
-  console.log('🔧 [QUICK_STATUS_BAR_HOOK] 빠른 상태바 훅 초기화');
-  logComponentAction('QUICK_STATUS_BAR_HOOK', '빠른 상태바 훅 초기화');
+  logComponentAction('BRIDGE_STATUS_BAR_HOOK', '브릿지 상태바 훅 초기화');
 
   const [isVisible, setIsVisible] = React.useState<boolean>(true);
-  const [config, setConfig] = React.useState<Partial<QuickStatusBarProps>>(
+  const [config, setConfig] = React.useState<Partial<BridgeStatusBarProps>>(
     defaultConfig !== undefined ? defaultConfig : {}
   );
 
@@ -733,14 +632,14 @@ export const useQuickStatusBar = (
   }, []);
 
   const updateConfig = React.useCallback(
-    (newConfig: Partial<QuickStatusBarProps>) => {
+    (newConfig: Partial<BridgeStatusBarProps>) => {
       setConfig((previousConfig) => ({ ...previousConfig, ...newConfig }));
     },
     []
   );
 
   const renderStatusBar = React.useCallback(
-    (customConfig?: Partial<QuickStatusBarProps>) => {
+    (customConfig?: Partial<BridgeStatusBarProps>) => {
       const hasNoVisibility = !isVisible;
 
       // Early Return: 숨겨진 상태
@@ -749,7 +648,7 @@ export const useQuickStatusBar = (
       }
 
       const finalConfig = { ...config, ...customConfig };
-      return <QuickStatusBar {...finalConfig} />;
+      return <BridgeStatusBar {...finalConfig} />;
     },
     [isVisible, config]
   );
@@ -762,6 +661,6 @@ export const useQuickStatusBar = (
     show: () => setIsVisible(true),
     hide: () => setIsVisible(false),
     StatusBarComponent: renderStatusBar,
-    QuickStatusBar: QuickStatusBar,
+    BridgeStatusBar: BridgeStatusBar,
   };
 };

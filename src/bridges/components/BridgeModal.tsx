@@ -1,4 +1,4 @@
-// bridges/parts/ErrorStatusModal.tsx
+// bridges/components/BridgeModal.tsx
 
 import React from 'react';
 import type { ReactElement } from 'react';
@@ -11,7 +11,8 @@ import {
   Button,
 } from '@heroui/react';
 import { Icon } from '@iconify/react';
-import { MarkdownStatusCard } from './MarkdownStatusCard';
+import { MarkdownStatusCard } from './BridgeStatus';
+import type { BridgeSystemConfiguration } from '../editorMultiStepBridge/bridgeDataTypes';
 import {
   createStandardizationUtils,
   type StandardModalProps,
@@ -19,8 +20,8 @@ import {
   type StandardVariant,
 } from '../common/componentStandardization';
 
-// 🔧 에러 상태 모달 전용 Props 인터페이스 (표준화됨)
-interface ErrorStatusModalProps extends StandardModalProps {
+// 🔧 에러 상태 모달 전용 Props 인터페이스
+interface BridgeModalProps extends StandardModalProps {
   readonly statusCardSize?: StandardSize;
   readonly statusCardVariant?: StandardVariant;
   readonly showRefreshButton?: boolean;
@@ -30,12 +31,10 @@ interface ErrorStatusModalProps extends StandardModalProps {
     hideValidationDetails?: boolean;
     hideStatistics?: boolean;
     hideErrorsWarnings?: boolean;
-    hideLastResult?: boolean;
-    showProgressBar?: boolean;
   };
 }
 
-export function ErrorStatusModal({
+export function BridgeModal({
   isOpen,
   onClose,
   size = 'lg',
@@ -52,7 +51,7 @@ export function ErrorStatusModal({
   showRefreshButton = true,
   showStatusDetails = true,
   statusCardProps = {},
-}: ErrorStatusModalProps): ReactElement {
+}: BridgeModalProps): ReactElement {
   // 🔧 표준화 유틸리티 사용
   const {
     getModalSizeClasses,
@@ -74,21 +73,18 @@ export function ErrorStatusModal({
   const safeShowCloseButton = validateBoolean(showCloseButton, true);
   const safeShowRefreshButton = validateBoolean(showRefreshButton, true);
   const safeShowStatusDetails = validateBoolean(showStatusDetails, true);
-  const safeStatusCardSize = validateSize(statusCardSize);
-  const safeStatusCardVariant = validateVariant(statusCardVariant);
 
-  logComponentRender('ERROR_STATUS_MODAL', {
+  logComponentRender('BRIDGE_MODAL', {
     size: safeSize,
     variant: safeVariant,
     isOpen: safeIsOpen,
     showCloseButton: safeShowCloseButton,
-    showRefreshButton: safeShowRefreshButton,
   });
 
-  // 🔧 모달 크기 클래스 계산 (표준화됨)
+  // 🔧 모달 크기 클래스 계산
   const modalSizeClasses = getModalSizeClasses(safeSize);
 
-  // 🔧 접근성 속성 생성 (표준화됨)
+  // 🔧 접근성 속성 생성
   const ariaAttributes = generateStandardAriaAttributes('modal', {
     label: title,
     description,
@@ -98,38 +94,34 @@ export function ErrorStatusModal({
 
   // 🔧 이벤트 핸들러들
   const handleModalClose = (): void => {
-    logComponentAction('ERROR_STATUS_MODAL', '모달 닫기 요청');
+    logComponentAction('BRIDGE_MODAL', '모달 닫기 요청');
 
     const isOnCloseFunction = typeof onClose === 'function';
-    if (isOnCloseFunction) {
-      onClose();
-    } else {
-      console.warn('⚠️ [ERROR_STATUS_MODAL] onClose가 함수가 아님');
-    }
+    isOnCloseFunction
+      ? onClose()
+      : console.warn('⚠️ [BRIDGE_MODAL] onClose가 함수가 아님');
   };
 
   const handleRefreshButtonClick = (): void => {
-    logComponentAction('ERROR_STATUS_MODAL', '새로고침 버튼 클릭');
+    logComponentAction('BRIDGE_MODAL', '새로고침 버튼 클릭');
     window.location.reload();
   };
 
   const handleStatusCardClick = (): void => {
-    logComponentAction('ERROR_STATUS_MODAL', '상태 카드 클릭');
+    logComponentAction('BRIDGE_MODAL', '상태 카드 클릭');
   };
 
-  // 🔧 키보드 이벤트 핸들러 생성 (표준화됨)
+  // 🔧 키보드 이벤트 핸들러 생성
   const modalKeyHandler = generateKeyboardHandler();
 
-  // 🔧 상태 카드 Props 구성 (표준화됨)
+  // 🔧 상태 카드 Props 구성
   const finalStatusCardProps = {
-    size: safeStatusCardSize,
-    variant: safeStatusCardVariant,
+    size: statusCardSize,
+    variant: statusCardVariant,
     hideTransferStatus: false,
     hideValidationDetails: false,
     hideStatistics: false,
     hideErrorsWarnings: false,
-    hideLastResult: false,
-    showProgressBar: true,
     ...statusCardProps,
   };
 
@@ -160,21 +152,10 @@ export function ErrorStatusModal({
 
   const CloseIcon = (): ReactElement => <Icon icon="lucide:x" />;
 
-  // 🔧 버튼 핸들러들
-  const handleRefreshButtonPress = (): void => {
-    handleRefreshButtonClick();
-  };
-
-  const handleCloseButtonPress = (): void => {
-    handleModalClose();
-  };
-
-  logComponentRender('ERROR_STATUS_MODAL', {
+  logComponentRender('BRIDGE_MODAL', {
     isOpen: safeIsOpen,
     finalStatusCardProps,
     modalSizeClass: modalSizeClasses,
-    title,
-    description,
   });
 
   return (
@@ -249,7 +230,7 @@ export function ErrorStatusModal({
                   variant="flat"
                   size="sm"
                   startContent={<RefreshIcon />}
-                  onPress={handleRefreshButtonPress}
+                  onPress={handleRefreshButtonClick}
                   aria-label="페이지 새로고침"
                 >
                   새로고침
@@ -261,7 +242,7 @@ export function ErrorStatusModal({
                 color="primary"
                 variant="solid"
                 size="sm"
-                onPress={handleCloseButtonPress}
+                onPress={handleModalClose}
                 endContent={<CloseIcon />}
                 aria-label="모달 닫기"
               >
@@ -276,21 +257,21 @@ export function ErrorStatusModal({
 }
 
 // 🔧 표준화된 모달 훅
-export function useErrorStatusModal() {
+export function useBridgeModal() {
   const [isOpen, setIsOpen] = React.useState<boolean>(false);
 
   const openModal = React.useCallback((): void => {
-    console.log('🚨 [USE_ERROR_STATUS_MODAL] 모달 열기');
+    console.log('🎨 [USE_BRIDGE_MODAL] 모달 열기');
     setIsOpen(true);
   }, []);
 
   const closeModal = React.useCallback((): void => {
-    console.log('🚨 [USE_ERROR_STATUS_MODAL] 모달 닫기');
+    console.log('🎨 [USE_BRIDGE_MODAL] 모달 닫기');
     setIsOpen(false);
   }, []);
 
   const toggleModal = React.useCallback((): void => {
-    console.log('🚨 [USE_ERROR_STATUS_MODAL] 모달 토글:', {
+    console.log('🎨 [USE_BRIDGE_MODAL] 모달 토글:', {
       currentState: isOpen,
     });
     setIsOpen((previousState) => !previousState);
