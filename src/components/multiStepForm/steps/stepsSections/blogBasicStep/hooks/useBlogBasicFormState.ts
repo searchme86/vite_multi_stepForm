@@ -1,6 +1,6 @@
 // blogBasicStep/hooks/useBlogBasicFormState.ts
 
-import React, { useRef, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useMultiStepFormStore } from '../../../../store/multiStepForm/multiStepFormStore';
 
@@ -10,14 +10,16 @@ interface UseBlogBasicFormStateReturn {
   readonly isInitialized: boolean;
 }
 
-interface PreviousValues {
+interface SafeFormValues {
   title: string;
   description: string;
 }
 
-interface SafeFormValues {
-  title: string;
-  description: string;
+interface FormChangeInfo {
+  fieldName: string;
+  newValue: unknown;
+  changeType: string;
+  timestamp: string;
 }
 
 interface MultiStepFormStoreState {
@@ -145,18 +147,38 @@ function sanitizeStringValue(value: unknown): string {
   return '';
 }
 
+// 🔄 폼 변경 로깅 함수
+function logFormFieldChange(changeInfo: FormChangeInfo): void {
+  console.log('🔄 [FORM_CHANGE_DEBUG] 폼 필드 변경 감지:', changeInfo);
+}
+
 export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
   console.group('🎣 [FORM_STATE_DEBUG] useBlogBasicFormState 시작');
 
   const formContext = useFormContext();
   const multiStepFormStore = useMultiStepFormStore();
 
+  // ✅ 1단계: 즉시 초기화 (FormContext 연결 시)
+  const [isInitialized, setIsInitialized] = React.useState<boolean>(false);
+
   // 🔍 디버깅: FormContext 확인
   console.log('📋 [FORM_STATE_DEBUG] FormContext 상태:', {
     hasFormContext: formContext !== null,
     hasWatch: formContext && 'watch' in formContext,
     hasSetValue: formContext && 'setValue' in formContext,
+    isInitialized,
   });
+
+  // 🚫 Early Return: FormContext가 없으면 기본값 반환
+  if (!formContext) {
+    console.warn('❌ [FORM_STATE_DEBUG] FormContext가 없음');
+    console.groupEnd();
+    return {
+      titleValue: '',
+      descriptionValue: '',
+      isInitialized: false,
+    };
+  }
 
   const { watch, setValue } = formContext;
 
@@ -172,6 +194,8 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
     watchedDescriptionRaw,
     watchedTitle,
     watchedDescription,
+    titleLength: watchedTitle.length,
+    descriptionLength: watchedDescription.length,
   });
 
   // 🛡️ 안전한 store 값 추출
@@ -181,19 +205,11 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
   console.log('🏪 [FORM_STATE_DEBUG] store에서 추출된 안전한 값들:', {
     storeTitle,
     storeDescription,
+    storeTitleLength: storeTitle.length,
+    storeDescriptionLength: storeDescription.length,
   });
 
-  // 🔄 이전 값 추적용 ref (무한 루프 방지)
-  const previousValuesRef = useRef<PreviousValues>({
-    title: '',
-    description: '',
-  });
-
-  // 🚩 초기화 상태 ref (useState 대신 ref 사용으로 무한 루프 방지)
-  const isInitializedRef = useRef<boolean>(false);
-  const [isInitialized, setIsInitialized] = React.useState<boolean>(false);
-
-  // 🛡️ 안전한 store 업데이트 함수 (메모이제이션으로 참조 안정화)
+  // 🛡️ 안전한 store 업데이트 함수
   const safeUpdateFormValue = useCallback(
     (field: string, value: string) => {
       if (!isValidMultiStepFormStore(multiStepFormStore)) {
@@ -205,114 +221,179 @@ export function useBlogBasicFormState(): UseBlogBasicFormStateReturn {
         multiStepFormStore.updateFormValue(field, value);
         console.log('✅ [STORE_DEBUG] updateFormValue 성공:', { field, value });
         return true;
-      } catch (error) {
-        console.error('❌ [STORE_DEBUG] updateFormValue 실패:', error);
+      } catch (updateError) {
+        console.error('❌ [STORE_DEBUG] updateFormValue 실패:', updateError);
         return false;
       }
     },
-    [multiStepFormStore.updateFormValue]
-  ); // updateFormValue 함수만 의존성으로
+    [multiStepFormStore?.updateFormValue]
+  );
 
-  // 🔄 watch 값 변경 감지 및 store 업데이트 (조건부 실행으로 무한 루프 방지)
+  // ✅ 1단계: FormContext 연결 시 즉시 초기화
   React.useEffect(() => {
-    console.log('🔄 [FORM_STATE_DEBUG] watch 값 변경 감지 effect 실행');
+    console.log('🚀 [INIT_DEBUG] 즉시 초기화 effect 실행');
 
-    const { current: previousValues } = previousValuesRef;
-    const titleChanged = previousValues.title !== watchedTitle;
-    const descriptionChanged =
-      previousValues.description !== watchedDescription;
-
-    console.log('📊 [FORM_STATE_DEBUG] 변경 감지 결과:', {
-      titleChanged,
-      descriptionChanged,
-      previousTitle: previousValues.title,
-      currentTitle: watchedTitle,
-      previousDescription: previousValues.description,
-      currentDescription: watchedDescription,
-    });
-
-    // 🚫 실제 변경이 있을 때만 업데이트 (무한 루프 방지)
-    if (titleChanged && watchedTitle !== '') {
-      console.log('📝 [FORM_STATE_DEBUG] 제목 업데이트 시도:', watchedTitle);
-      const success = safeUpdateFormValue('title', watchedTitle);
-
-      if (success) {
-        previousValuesRef.current.title = watchedTitle;
-      }
-    }
-
-    if (descriptionChanged && watchedDescription !== '') {
-      console.log(
-        '📝 [FORM_STATE_DEBUG] 설명 업데이트 시도:',
-        watchedDescription
-      );
-      const success = safeUpdateFormValue('description', watchedDescription);
-
-      if (success) {
-        previousValuesRef.current.description = watchedDescription;
-      }
-    }
-
-    // 🚩 초기화 상태 업데이트 (한 번만 실행)
-    if (
-      !isInitializedRef.current &&
-      (titleChanged || descriptionChanged || watchedTitle || watchedDescription)
-    ) {
-      console.log('✅ [FORM_STATE_DEBUG] 초기화 완료 설정');
-      isInitializedRef.current = true;
+    if (formContext && !isInitialized) {
+      console.log('✅ [INIT_DEBUG] FormContext 연결 확인, 즉시 초기화 실행');
       setIsInitialized(true);
     }
-  }, [watchedTitle, watchedDescription, safeUpdateFormValue]); // 안정한 의존성만
+  }, [formContext, isInitialized]);
 
-  // 🔄 store 값으로 form 동기화 (초기화 시에만 실행)
+  // ✅ 2단계: 안전장치 - 2초 후 강제 초기화
   React.useEffect(() => {
-    console.log('🔄 [FORM_STATE_DEBUG] store → form 동기화 effect 실행');
+    console.log('⏰ [INIT_DEBUG] 강제 초기화 타이머 설정');
 
-    // 🚫 이미 초기화되었으면 실행하지 않음 (무한 루프 방지)
-    if (isInitializedRef.current) {
-      console.log('⏭️ [FORM_STATE_DEBUG] 이미 초기화됨, 동기화 스킵');
+    const forcedInitializationTimer = setTimeout(() => {
+      if (!isInitialized) {
+        console.log('🔧 [INIT_DEBUG] 2초 후 강제 초기화 실행');
+        setIsInitialized(true);
+      }
+    }, 2000);
+
+    return () => {
+      console.log('🔄 [INIT_DEBUG] 강제 초기화 타이머 정리');
+      clearTimeout(forcedInitializationTimer);
+    };
+  }, [isInitialized]);
+
+  // ✅ 3단계: Form → Store 동기화 (값 변경 감지)
+  React.useEffect(() => {
+    console.log('🔄 [SYNC_DEBUG] Form → Store 동기화 effect 실행');
+
+    if (!isInitialized) {
+      console.log('⏭️ [SYNC_DEBUG] 초기화 전이므로 동기화 스킵');
       return;
     }
 
-    let hasUpdate = false;
+    let hasStoreUpdate = false;
 
-    if (storeTitle && storeTitle !== watchedTitle) {
-      console.log('📝 [FORM_STATE_DEBUG] store 제목으로 form 업데이트:', {
-        from: watchedTitle,
-        to: storeTitle,
+    // title 동기화 확인
+    const titleNeedsSync = watchedTitle !== storeTitle && watchedTitle !== '';
+    if (titleNeedsSync) {
+      console.log('📝 [SYNC_DEBUG] title을 Store로 동기화:', {
+        from: storeTitle,
+        to: watchedTitle,
       });
 
-      if (typeof setValue === 'function') {
-        setValue('title', storeTitle);
-        hasUpdate = true;
+      const titleUpdateSuccess = safeUpdateFormValue('title', watchedTitle);
+      if (titleUpdateSuccess) {
+        hasStoreUpdate = true;
+
+        const titleChangeInfo: FormChangeInfo = {
+          fieldName: 'title',
+          newValue: watchedTitle,
+          changeType: 'form_to_store_sync',
+          timestamp: new Date().toISOString(),
+        };
+        logFormFieldChange(titleChangeInfo);
       }
     }
 
-    if (storeDescription && storeDescription !== watchedDescription) {
-      console.log('📝 [FORM_STATE_DEBUG] store 설명으로 form 업데이트:', {
-        from: watchedDescription,
-        to: storeDescription,
+    // description 동기화 확인
+    const descriptionNeedsSync =
+      watchedDescription !== storeDescription && watchedDescription !== '';
+    if (descriptionNeedsSync) {
+      console.log('📝 [SYNC_DEBUG] description을 Store로 동기화:', {
+        from: storeDescription,
+        to: watchedDescription,
       });
 
-      if (typeof setValue === 'function') {
-        setValue('description', storeDescription);
-        hasUpdate = true;
+      const descriptionUpdateSuccess = safeUpdateFormValue(
+        'description',
+        watchedDescription
+      );
+      if (descriptionUpdateSuccess) {
+        hasStoreUpdate = true;
+
+        const descriptionChangeInfo: FormChangeInfo = {
+          fieldName: 'description',
+          newValue: watchedDescription,
+          changeType: 'form_to_store_sync',
+          timestamp: new Date().toISOString(),
+        };
+        logFormFieldChange(descriptionChangeInfo);
       }
     }
 
-    if (hasUpdate) {
-      console.log('🔄 [FORM_STATE_DEBUG] form 값 업데이트 완료');
+    if (hasStoreUpdate) {
+      console.log('🔄 [SYNC_DEBUG] Store 업데이트 완료');
     }
-  }, [storeTitle, storeDescription]); // setValue는 제외 (React Hook Form에서 안정한 참조 보장)
+  }, [
+    watchedTitle,
+    watchedDescription,
+    storeTitle,
+    storeDescription,
+    isInitialized,
+    safeUpdateFormValue,
+  ]);
 
-  const result = {
+  // ✅ 4단계: Store → Form 초기값 동기화 (최초 1회만)
+  React.useEffect(() => {
+    console.log('🔄 [INIT_SYNC_DEBUG] Store → Form 초기값 동기화 effect 실행');
+
+    if (!isInitialized) {
+      console.log('⏭️ [INIT_SYNC_DEBUG] 초기화 전이므로 스킵');
+      return;
+    }
+
+    let hasFormUpdate = false;
+
+    // Store에 값이 있고 Form이 비어있으면 Store 값으로 초기화
+    const shouldInitializeTitle = storeTitle !== '' && watchedTitle === '';
+    if (shouldInitializeTitle && typeof setValue === 'function') {
+      console.log('📝 [INIT_SYNC_DEBUG] Store title로 Form 초기화:', {
+        storeValue: storeTitle,
+        formValue: watchedTitle,
+      });
+
+      setValue('title', storeTitle);
+      hasFormUpdate = true;
+    }
+
+    const shouldInitializeDescription =
+      storeDescription !== '' && watchedDescription === '';
+    if (shouldInitializeDescription && typeof setValue === 'function') {
+      console.log('📝 [INIT_SYNC_DEBUG] Store description으로 Form 초기화:', {
+        storeValue: storeDescription,
+        formValue: watchedDescription,
+      });
+
+      setValue('description', storeDescription);
+      hasFormUpdate = true;
+    }
+
+    if (hasFormUpdate) {
+      console.log('🔄 [INIT_SYNC_DEBUG] Form 초기값 설정 완료');
+    }
+  }, [
+    storeTitle,
+    storeDescription,
+    watchedTitle,
+    watchedDescription,
+    isInitialized,
+    setValue,
+  ]);
+
+  // 🔍 디버깅: 최종 상태 로깅
+  React.useEffect(() => {
+    console.log('📊 [FINAL_DEBUG] 최종 상태 변경 감지:', {
+      titleValue: watchedTitle,
+      titleLength: watchedTitle.length,
+      descriptionValue: watchedDescription,
+      descriptionLength: watchedDescription.length,
+      isInitialized,
+      timestamp: new Date().toISOString(),
+    });
+  }, [watchedTitle, watchedDescription, isInitialized]);
+
+  const finalResult = {
     titleValue: watchedTitle,
     descriptionValue: watchedDescription,
     isInitialized,
   };
 
-  console.log('📊 [FORM_STATE_DEBUG] 최종 반환값:', result);
+  console.log('📊 [FORM_STATE_DEBUG] 최종 반환값:', finalResult);
   console.groupEnd();
 
-  return result;
+  return finalResult;
 }
