@@ -54,6 +54,7 @@ interface EditorCoreSetters {
   removeSectionInput: (index: number) => void;
   resetSectionInputs: () => void;
   addContainer: (container: Container) => void;
+  addMultipleContainers: (containers: Container[]) => void; // 🆕 일괄 추가
   deleteContainer: (containerId: string) => void;
   updateContainer: (containerId: string, updates: Partial<Container>) => void;
   reorderContainers: (containers: Container[]) => void;
@@ -628,7 +629,112 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         });
       },
 
-      // 기존 함수들 계속...
+      // 🆕 일괄 컨테이너 추가 함수 (에러 방지용)
+      addMultipleContainers: (containersToAdd: Container[]) => {
+        const validContainersToAdd = Array.isArray(containersToAdd)
+          ? containersToAdd
+          : [];
+
+        console.log('📦 [STORE] 일괄 컨테이너 추가 시작:', {
+          count: validContainersToAdd.length,
+          containers: validContainersToAdd.map((c) => ({
+            id: c.id,
+            name: c.name,
+          })),
+        });
+
+        set((currentState) => {
+          const { containers, paragraphs } = currentState;
+          const validCurrentContainers = Array.isArray(containers)
+            ? containers
+            : [];
+          const validCurrentParagraphs = Array.isArray(paragraphs)
+            ? paragraphs
+            : [];
+
+          const successfulContainers: Container[] = [];
+          const failedContainers: Array<{
+            container: Container;
+            error: string;
+          }> = [];
+
+          // 각 컨테이너 검증 및 추가
+          validContainersToAdd.forEach((containerToAdd) => {
+            try {
+              const hasValidContainer =
+                containerToAdd && typeof containerToAdd.id === 'string';
+
+              if (!hasValidContainer) {
+                throw new Error('Invalid container provided');
+              }
+
+              const containerAlreadyExists = [
+                ...validCurrentContainers,
+                ...successfulContainers,
+              ].some((existingContainer) => {
+                const hasValidExistingContainer =
+                  existingContainer && typeof existingContainer.id === 'string';
+                const isDuplicateId =
+                  hasValidExistingContainer &&
+                  existingContainer.id === containerToAdd.id;
+                return isDuplicateId;
+              });
+
+              if (containerAlreadyExists) {
+                throw new Error(
+                  `Container with id ${containerToAdd.id} already exists`
+                );
+              }
+
+              successfulContainers.push(containerToAdd);
+
+              console.log('✅ [STORE] 컨테이너 추가 성공:', {
+                id: containerToAdd.id,
+                name: containerToAdd.name,
+              });
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : 'Unknown error';
+              failedContainers.push({
+                container: containerToAdd,
+                error: errorMessage,
+              });
+
+              console.error('❌ [STORE] 컨테이너 추가 실패:', {
+                id: containerToAdd.id,
+                name: containerToAdd.name,
+                error: errorMessage,
+              });
+            }
+          });
+
+          // 성공한 컨테이너들만 추가
+          const expandedContainerArray = [
+            ...validCurrentContainers,
+            ...successfulContainers,
+          ];
+
+          const generatedCompletedContent = generateCompletedContent(
+            expandedContainerArray,
+            validCurrentParagraphs
+          );
+
+          console.log('📊 [STORE] 일괄 추가 결과:', {
+            totalRequested: validContainersToAdd.length,
+            successful: successfulContainers.length,
+            failed: failedContainers.length,
+            finalContainerCount: expandedContainerArray.length,
+          });
+
+          return {
+            ...currentState,
+            containers: expandedContainerArray,
+            completedContent: generatedCompletedContent,
+          };
+        });
+      },
+
+      // 기존 addContainer 함수는 그대로 유지
       addContainer: (newContainer: Container) => {
         const hasValidContainer =
           newContainer && typeof newContainer.id === 'string';
@@ -1164,17 +1270,46 @@ export const useEditorCoreStore = create<EditorCoreStore>()(
         });
       },
 
+      // ✅ 수정된 resetEditorState - 에러의 핵심 해결
       resetEditorState: () => {
+        console.log(
+          '🔄 [STORE] 에디터 상태 초기화 시작 - 빈 상태로 완전 초기화'
+        );
+
         set((currentStoreState) => {
           const { sectionInputs } = currentStoreState;
           const preservedSectionInputs = Array.isArray(sectionInputs)
             ? sectionInputs
             : ['', '', '', ''];
 
-          return {
-            ...initialEditorCoreState,
-            sectionInputs: preservedSectionInputs,
+          console.log('📊 [STORE] 초기화 세부 정보:', {
+            preservedInputs: preservedSectionInputs,
+            beforeContainerCount: Array.isArray(currentStoreState.containers)
+              ? currentStoreState.containers.length
+              : 0,
+            beforeParagraphCount: Array.isArray(currentStoreState.paragraphs)
+              ? currentStoreState.paragraphs.length
+              : 0,
+          });
+
+          // ✅ 템플릿 데이터 없이 완전히 빈 상태로 초기화
+          const cleanResetState = {
+            containers: [], // 🎯 빈 배열로 완전 초기화
+            paragraphs: [], // 🎯 빈 배열로 완전 초기화
+            completedContent: '', // 🎯 빈 문자열로 초기화
+            isCompleted: false, // 🎯 false로 초기화
+            containerMoveHistory: [], // 🎯 빈 배열로 초기화
+            sectionInputs: preservedSectionInputs, // ✅ 입력만 보존
           };
+
+          console.log('✅ [STORE] 에디터 상태 초기화 완료:', {
+            containerCount: cleanResetState.containers.length,
+            paragraphCount: cleanResetState.paragraphs.length,
+            sectionInputCount: cleanResetState.sectionInputs.length,
+            isTemplateDataRemoved: true,
+          });
+
+          return cleanResetState;
         });
       },
 

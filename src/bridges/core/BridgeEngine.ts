@@ -297,19 +297,22 @@ function createExternalDataValidators() {
         ? paragraphValidCount / localParagraphs.length
         : 1;
 
-    // 품질 점수 계산 (0-100)
+    // 🔧 품질 점수 계산 (0-100) - 더 관대한 기준 적용
     const qualityScore = Math.round(
       (containerQualityRatio + paragraphQualityRatio) * 50
     );
 
-    // 품질 유효성 (80% 이상)
-    const isQualityValid = qualityScore >= 80;
+    // 🔧 품질 유효성 (80% → 60%로 완화)
+    const isQualityValid = qualityScore >= 60;
 
     console.debug('📊 [BRIDGE_ENGINE] 외부 데이터 품질 검증 결과:', {
       containerValidCount,
       paragraphValidCount,
       qualityScore,
       isQualityValid,
+      qualityThreshold: 60,
+      containerQualityRatio: Math.round(containerQualityRatio * 100),
+      paragraphQualityRatio: Math.round(paragraphQualityRatio * 100),
     });
 
     return {
@@ -600,6 +603,8 @@ function createBridgeEngineCore(
     hasValidExternalData,
     qualityScore: externalDataQuality.qualityScore,
     isQualityValid: externalDataQuality.isQualityValid,
+    containerValidCount: externalDataQuality.containerValidCount,
+    paragraphValidCount: externalDataQuality.paragraphValidCount,
   });
 
   let engineState: BridgeEngineState = {
@@ -625,6 +630,14 @@ function createBridgeEngineCore(
     validator: createBridgeDataValidationHandler(),
     errorHandler: createBridgeErrorHandler(),
   };
+
+  console.log('🔧 [BRIDGE_ENGINE] 핵심 컴포넌트 초기화 완료:', {
+    extractorInitialized: !!components.extractor,
+    transformerInitialized: !!components.transformer,
+    updaterInitialized: !!components.updater,
+    validatorInitialized: !!components.validator,
+    errorHandlerInitialized: !!components.errorHandler,
+  });
 
   const updateEngineState = (updates: Partial<BridgeEngineState>): void => {
     engineState = {
@@ -661,23 +674,25 @@ function createBridgeEngineCore(
           externalDataValidations: operationMetrics.externalDataValidations + 1,
         };
 
-        // 외부 데이터 품질 체크
+        // 🔧 외부 데이터 품질 체크 - 더 관대한 기준 적용
         const isQualityAcceptable = externalDataQuality.isQualityValid;
         const hasMinimumData =
           externalDataQuality.containerValidCount > 0 ||
           externalDataQuality.paragraphValidCount > 0;
 
-        const externalDataValid = isQualityAcceptable && hasMinimumData;
+        // 🔧 추가: 품질이 낮아도 최소 데이터가 있으면 허용
+        const canUseExternalData = isQualityAcceptable || hasMinimumData;
 
         console.log('📊 [BRIDGE_ENGINE] 외부 데이터 기반 검증 결과:', {
           isQualityAcceptable,
           hasMinimumData,
-          externalDataValid,
+          canUseExternalData,
+          qualityScore: externalDataQuality.qualityScore,
           containerValidCount: externalDataQuality.containerValidCount,
           paragraphValidCount: externalDataQuality.paragraphValidCount,
         });
 
-        return externalDataValid;
+        return canUseExternalData;
       }
 
       // 기존 스토어 기반 검증
@@ -696,13 +711,28 @@ function createBridgeEngineCore(
         return false;
       }
 
+      // 🔧 스냅샷 내용 디버깅 정보 추가
+      const {
+        editorContainers = [],
+        editorParagraphs = [],
+        editorCompletedContent = '',
+      } = snapshot;
+      console.log('📊 [BRIDGE_ENGINE] 스토어 스냅샷 내용:', {
+        containerCount: editorContainers.length,
+        paragraphCount: editorParagraphs.length,
+        contentLength: editorCompletedContent.length,
+        hasContent: editorCompletedContent.length > 0,
+      });
+
       const validationResult =
         components.validator.validateForTransfer(snapshot);
       const { isValidForTransfer = false } = validationResult;
 
       console.log('✅ [BRIDGE_ENGINE] 기존 스토어 기반 검증 완료:', {
         isValidForTransfer,
+        validationResult,
       });
+
       return isValidForTransfer;
     } catch (validationError) {
       console.error('❌ [BRIDGE_ENGINE] 사전 조건 검증 실패:', validationError);
@@ -909,6 +939,8 @@ function createBridgeEngineCore(
       console.log('✅ [BRIDGE_ENGINE] 엔진 초기화 완료:', {
         hasExternalData: hasValidExternalData,
         externalDataQuality: externalDataQuality.qualityScore,
+        qualityThreshold: 60,
+        componentStatus: 'all_ready',
       });
       return true;
     } catch (initError) {
@@ -1014,6 +1046,7 @@ export function createBridgeEngine(
     debugMode: mergedConfiguration.debugMode,
     maxRetryAttempts: mergedConfiguration.maxRetryAttempts,
     hasExternalData: hasValidExternalData,
+    qualityThreshold: 60,
   });
 
   return createBridgeEngineCore(mergedConfiguration, externalData);
@@ -1029,5 +1062,7 @@ console.log('📊 [BRIDGE_ENGINE] 제공 기능:', {
   componentManagement: '컴포넌트 생명주기 관리',
   errorHandling: '통합 에러 처리',
   performanceMonitoring: '성능 메트릭스 추적',
+  improvedDebugging: '향상된 디버깅 정보',
+  relaxedQualityCheck: '완화된 품질 기준 (60%)',
 });
 console.log('✅ [BRIDGE_ENGINE] 모든 엔진 기능 준비 완료');

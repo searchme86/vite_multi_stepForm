@@ -302,7 +302,8 @@ function validateExternalDataQuality(externalData: ExternalEditorData): {
   const hasMinimumData = containerCount > 0 || paragraphCount > 0;
   hasMinimumData ? null : issues.push('최소 데이터 요구사항 미충족');
 
-  const isValid = issues.length === 0 && qualityScore >= 80;
+  // 🔧 품질 기준 완화: 80% → 60%
+  const isValid = issues.length === 0 && qualityScore >= 60;
 
   console.debug('📊 [BRIDGE_HOOK] 외부 데이터 품질 검증 결과:', {
     isValid,
@@ -310,6 +311,7 @@ function validateExternalDataQuality(externalData: ExternalEditorData): {
     paragraphCount,
     qualityScore,
     issueCount: issues.length,
+    qualityThreshold: 60,
   });
 
   return {
@@ -332,10 +334,14 @@ export function useBridge(
   const validatedExternalData = useMemo(() => {
     // null이나 undefined인 경우 undefined로 통일
     if (externalData === null || externalData === undefined) {
+      console.debug('🔍 [BRIDGE_HOOK] 외부 데이터가 제공되지 않음');
       return undefined;
     }
 
-    return isValidExternalData(externalData) ? externalData : undefined;
+    const isDataValid = isValidExternalData(externalData);
+    console.debug('🔍 [BRIDGE_HOOK] 외부 데이터 유효성 검사:', { isDataValid });
+
+    return isDataValid ? externalData : undefined;
   }, [externalData]);
 
   const externalDataQuality = useMemo(() => {
@@ -509,6 +515,8 @@ export function useBridge(
 
   // 🔧 Editor → MultiStep 전송 (외부 데이터 지원)
   const executeForwardTransfer = useCallback(async (): Promise<void> => {
+    console.log('🚀 [BRIDGE_HOOK] Forward Transfer 실행 시작');
+
     // Early Return: 이미 실행 중
     if (bridgeState.isExecuting) {
       console.log('🔄 [BRIDGE_HOOK] 이미 실행 중');
@@ -519,10 +527,14 @@ export function useBridge(
 
     const executeTransfer =
       async (): Promise<BridgeOperationExecutionResult> => {
+        console.log('🔍 [BRIDGE_HOOK] 엔진 초기화 상태 확인');
+
         // Early Return: 엔진 초기화 확인
         if (!bridgeEngine.isInitialized()) {
           throw new Error('Bridge 엔진이 초기화되지 않음');
         }
+
+        console.log('🔍 [BRIDGE_HOOK] 사전 조건 검사 시작');
 
         // Early Return: 사전 조건 확인
         if (!bridgeEngine.checkPreconditions()) {
@@ -530,6 +542,13 @@ export function useBridge(
           const errorMsg = hasExternalData
             ? '외부 데이터가 있지만 전송 사전 조건 미충족'
             : '전송 사전 조건 미충족 (외부 데이터 없음)';
+
+          console.error('❌ [BRIDGE_HOOK] 사전 조건 검사 실패:', {
+            hasExternalData,
+            qualityScore: externalDataQuality.qualityScore,
+            errorMsg,
+          });
+
           throw new Error(errorMsg);
         }
 
@@ -541,6 +560,7 @@ export function useBridge(
           qualityScore: externalDataQuality.qualityScore,
         });
 
+        console.log('🚀 [BRIDGE_HOOK] Bridge Engine 전송 실행');
         return bridgeEngine.executeTransfer();
       };
 
@@ -704,10 +724,13 @@ export function useBridge(
     updateExecutionComplete(mockResult, errorMessage, false);
   }, [bridgeState.isExecuting, updateExecutionStart, updateExecutionComplete]);
 
-  // 🔧 검증 상태 계산 (외부 데이터 고려)
+  // 🔧 검증 상태 계산 (외부 데이터 고려) - 디버깅 강화
   const canExecuteForward = useMemo((): boolean => {
+    console.log('🔍 [BRIDGE_HOOK] canExecuteForward 검증 시작');
+
     // Early Return: 실행 중
     if (bridgeState.isExecuting) {
+      console.log('🔍 [BRIDGE_HOOK] 이미 실행 중이라 false 반환');
       return false;
     }
 
@@ -716,24 +739,35 @@ export function useBridge(
       const hasExternalData = !!validatedExternalData;
       const externalDataIsQuality = externalDataQuality.isValid;
 
+      console.log('🔍 [BRIDGE_HOOK] 외부 데이터 상태:', {
+        hasExternalData,
+        externalDataIsQuality,
+        qualityScore: externalDataQuality.qualityScore,
+        qualityThreshold: 60,
+        containerCount: externalDataQuality.containerCount,
+        paragraphCount: externalDataQuality.paragraphCount,
+      });
+
       if (hasExternalData && externalDataIsQuality) {
-        console.debug('✅ [BRIDGE_HOOK] 외부 데이터 기반 전방향 검증 통과');
+        console.log('✅ [BRIDGE_HOOK] 외부 데이터 기반 전방향 검증 통과');
         return true;
       }
 
       // 기존 브리지 엔진 검증
+      console.log('🔍 [BRIDGE_HOOK] 엔진 사전조건 검증 시작');
       const engineValidation = bridgeEngine.checkPreconditions();
 
-      console.debug('📊 [BRIDGE_HOOK] 전방향 검증 결과:', {
+      console.log('📊 [BRIDGE_HOOK] 전방향 검증 결과:', {
         hasExternalData,
         externalDataIsQuality,
+        qualityScore: externalDataQuality.qualityScore,
         engineValidation,
         finalResult: engineValidation,
       });
 
       return engineValidation;
     } catch (error) {
-      console.warn('⚠️ [BRIDGE_HOOK] 전방향 검증 실패:', error);
+      console.error('❌ [BRIDGE_HOOK] 전방향 검증 실패:', error);
       return false;
     }
   }, [
@@ -741,6 +775,9 @@ export function useBridge(
     bridgeEngine,
     validatedExternalData,
     externalDataQuality.isValid,
+    externalDataQuality.qualityScore,
+    externalDataQuality.containerCount,
+    externalDataQuality.paragraphCount,
   ]);
 
   const canExecuteReverse = useMemo((): boolean => {

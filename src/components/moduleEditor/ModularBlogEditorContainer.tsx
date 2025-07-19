@@ -1,4 +1,4 @@
-// src/components/moduleEditor/ModularBlogEditorContainer.tsx
+// 📁 src/components/moduleEditor/ModularBlogEditorContainer.tsx
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -82,10 +82,13 @@ const extractContainerNames = (containers: unknown[]): string[] => {
 function ModularBlogEditorContainer(): React.ReactNode {
   const isInitializedRef = useRef<boolean>(false);
   const lastTransferAttemptRef = useRef<number>(0);
+  const structureCompleteCountRef = useRef<number>(0); // 🆕 구조 완료 횟수 추적
 
   useEffect(() => {
     if (!isInitializedRef.current) {
-      console.log('🔄 [EDITOR_CONTAINER] 에디터 스토어 초기화');
+      console.log(
+        '🔄 [EDITOR_CONTAINER] 에디터 스토어 초기화 - 에러 수정 버전'
+      );
 
       try {
         resetEditorStoreCompletely();
@@ -104,17 +107,22 @@ function ModularBlogEditorContainer(): React.ReactNode {
 
   const editorState = useEditorState();
 
-  console.log('🏗️ [EDITOR_CONTAINER] useEditorState 훅 결과:', {
-    hasContainers:
-      Array.isArray(editorState.localContainers) &&
-      editorState.localContainers.length > 0,
-    hasParagraphs:
-      Array.isArray(editorState.localParagraphs) &&
-      editorState.localParagraphs.length > 0,
-    hasInternalState: !!editorState.internalState,
-    hasMoveToContainer: typeof editorState.moveToContainer === 'function',
-    timestamp: new Date().toISOString(),
-  });
+  console.log(
+    '🏗️ [EDITOR_CONTAINER] useEditorState 훅 결과 - 에러 수정 버전:',
+    {
+      hasContainers:
+        Array.isArray(editorState.localContainers) &&
+        editorState.localContainers.length > 0,
+      hasParagraphs:
+        Array.isArray(editorState.localParagraphs) &&
+        editorState.localParagraphs.length > 0,
+      hasInternalState: !!editorState.internalState,
+      hasMoveToContainer: typeof editorState.moveToContainer === 'function',
+      hasFixedStructureHandler:
+        typeof editorState.handleStructureComplete === 'function',
+      timestamp: new Date().toISOString(),
+    }
+  );
 
   // 🔧 에디터 상태 구조분해할당 및 fallback 처리
   const {
@@ -127,7 +135,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     toggleParagraphSelection: toggleParagraphSelect,
     addToLocalContainer: addParagraphsToContainer,
     moveLocalParagraphInContainer: changeParagraphOrder,
-    handleStructureComplete: handleStructureCompleteInternal,
+    handleStructureComplete: handleStructureCompleteInternal, // ✅ 수정된 함수
     goToStructureStep: navigateToStructureStepInternal,
     saveAllToContext: saveCurrentProgress,
     completeEditor: finishEditing,
@@ -140,11 +148,12 @@ function ModularBlogEditorContainer(): React.ReactNode {
     moveToContainer: moveToContainerFunction,
   } = editorState;
 
-  console.log('🏗️ [EDITOR_CONTAINER] 컴포넌트 렌더링:', {
+  console.log('🏗️ [EDITOR_CONTAINER] 컴포넌트 렌더링 - 에러 수정 버전:', {
     containers: Array.isArray(currentContainers) ? currentContainers.length : 0,
     paragraphs: Array.isArray(currentParagraphs) ? currentParagraphs.length : 0,
     currentStep: editorInternalState?.currentSubStep || 'unknown',
     hasMoveFunction: typeof moveToContainerFunction === 'function',
+    hasFixedHandler: typeof handleStructureCompleteInternal === 'function',
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -297,13 +306,20 @@ function ModularBlogEditorContainer(): React.ReactNode {
     [moveToContainerFunction, calculateEditorStateInfo]
   );
 
+  // ✅ 수정된 구조 설정 완료 처리 - 에러 방지 및 디버깅 강화
   const completeStructureSetup = useCallback(
     async (inputs: string[]) => {
-      console.log('🏗️ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 시작:', {
-        inputs,
-        inputCount: Array.isArray(inputs) ? inputs.length : 0,
-        timestamp: new Date().toISOString(),
-      });
+      const attemptNumber = ++structureCompleteCountRef.current;
+
+      console.log(
+        '🏗️ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 시작 - 에러 수정 버전:',
+        {
+          inputs,
+          inputCount: Array.isArray(inputs) ? inputs.length : 0,
+          attemptNumber,
+          timestamp: new Date().toISOString(),
+        }
+      );
 
       try {
         // Early return: 입력값 검증
@@ -324,6 +340,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
             provided: validInputs.length,
             required: 2,
             validInputs,
+            attemptNumber,
           });
           return;
         }
@@ -336,15 +353,25 @@ function ModularBlogEditorContainer(): React.ReactNode {
           return;
         }
 
-        console.log('📞 [EDITOR_CONTAINER] 구조 완료 핸들러 실행');
+        console.log('📞 [EDITOR_CONTAINER] 수정된 구조 완료 핸들러 실행:', {
+          validInputs,
+          attemptNumber,
+          handlerType: typeof handleStructureCompleteInternal,
+        });
+
+        // ✅ 수정된 핸들러 호출
         handleStructureCompleteInternal(validInputs);
 
-        console.log('✅ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 성공');
+        console.log('✅ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 성공:', {
+          attemptNumber,
+          inputCount: validInputs.length,
+        });
       } catch (error) {
-        console.error(
-          '❌ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 에러:',
-          error
-        );
+        console.error('❌ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 에러:', {
+          error,
+          attemptNumber,
+          inputs,
+        });
       }
     },
     [handleStructureCompleteInternal]
@@ -474,7 +501,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
   useEffect(() => {
     const containerNames = extractContainerNames(safeContainers);
 
-    console.log('📊 [EDITOR_CONTAINER] 상태 변화 감지:', {
+    console.log('📊 [EDITOR_CONTAINER] 상태 변화 감지 - 에러 수정 버전:', {
       currentStep: currentEditorStep,
       isInStructureStep: currentEditorStep === 'structure',
       isInWritingStep: currentEditorStep === 'writing',
@@ -487,6 +514,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
       containerNames,
       containerCount: containerNames.length,
       hasMoveFunction: typeof handleMoveToContainer === 'function',
+      structureCompleteAttempts: structureCompleteCountRef.current,
       timestamp: new Date().toISOString(),
     });
   }, [
@@ -509,22 +537,26 @@ function ModularBlogEditorContainer(): React.ReactNode {
       try {
         const statistics = bridgeIntegration.getStatistics();
 
-        console.log('📈 [EDITOR_CONTAINER] Bridge 통계 리포트:', {
-          timestamp: new Date().toLocaleTimeString(),
-          editorState: {
-            currentStep: currentEditorStep,
-            ...editorStateInfo,
-          },
-          bridgeStats: statistics.bridgeStats,
-          uiStats: {
-            isLoading: statistics.uiStats.isLoading,
-            canExecute: statistics.uiStats.canExecute,
-            hasEditorStats: !!statistics.uiStats.editorStatistics,
-            hasValidationState: !!statistics.uiStats.validationState,
-            statusMessage: statistics.uiStats.statusMessage || '없음',
-          },
-          connectionState: statistics.connectionState,
-        });
+        console.log(
+          '📈 [EDITOR_CONTAINER] Bridge 통계 리포트 - 에러 수정 버전:',
+          {
+            timestamp: new Date().toLocaleTimeString(),
+            editorState: {
+              currentStep: currentEditorStep,
+              ...editorStateInfo,
+            },
+            bridgeStats: statistics.bridgeStats,
+            uiStats: {
+              isLoading: statistics.uiStats.isLoading,
+              canExecute: statistics.uiStats.canExecute,
+              hasEditorStats: !!statistics.uiStats.editorStatistics,
+              hasValidationState: !!statistics.uiStats.validationState,
+              statusMessage: statistics.uiStats.statusMessage || '없음',
+            },
+            connectionState: statistics.connectionState,
+            structureCompleteAttempts: structureCompleteCountRef.current,
+          }
+        );
       } catch (error) {
         console.error(
           '❌ [EDITOR_CONTAINER] Bridge 통계 리포트 생성 실패:',
@@ -551,7 +583,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
       {bridgeConfig.debugMode ? (
         <div className="p-3 text-sm border border-blue-200 rounded-lg bg-blue-50">
           <div className="mb-2 font-semibold text-blue-800">
-            🌉 Bridge 연결 상태 (디버그 모드)
+            🌉 Bridge 연결 상태 (디버그 모드) - 에러 수정 버전
           </div>
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
@@ -568,7 +600,8 @@ function ModularBlogEditorContainer(): React.ReactNode {
                 컨테이너: {editorStateInfo.containerCount}개 | 문단:{' '}
                 {editorStateInfo.paragraphCount}개 | 미할당:{' '}
                 {editorStateInfo.unassignedParagraphCount}개 | 전송준비:{' '}
-                {editorStateInfo.isReadyForTransfer ? '✅' : '❌'}
+                {editorStateInfo.isReadyForTransfer ? '✅' : '❌'} |
+                구조완료시도: {structureCompleteCountRef.current}회
               </div>
             </div>
           </div>

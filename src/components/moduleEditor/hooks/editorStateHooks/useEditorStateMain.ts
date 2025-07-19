@@ -18,12 +18,142 @@ export function useEditorState() {
   return useEditorStateImpl();
 }
 
+// 🔧 타입 안전성을 위한 헬퍼 함수들
+const validateAndConvertToParagraph = (
+  rawParagraph: unknown
+): LocalParagraph | null => {
+  if (!rawParagraph || typeof rawParagraph !== 'object') {
+    return null;
+  }
+
+  const paragraphId = Reflect.get(rawParagraph, 'id');
+  const paragraphContent = Reflect.get(rawParagraph, 'content');
+  const paragraphContainerId = Reflect.get(rawParagraph, 'containerId');
+  const paragraphOrder = Reflect.get(rawParagraph, 'order');
+  const paragraphCreatedAt = Reflect.get(rawParagraph, 'createdAt');
+  const paragraphUpdatedAt = Reflect.get(rawParagraph, 'updatedAt');
+
+  if (typeof paragraphId !== 'string') {
+    return null;
+  }
+
+  const validatedParagraph: LocalParagraph = {
+    id: paragraphId,
+    content: typeof paragraphContent === 'string' ? paragraphContent : '',
+    containerId:
+      typeof paragraphContainerId === 'string' ? paragraphContainerId : null,
+    order: typeof paragraphOrder === 'number' ? paragraphOrder : 0,
+    createdAt:
+      paragraphCreatedAt instanceof Date ? paragraphCreatedAt : new Date(),
+    updatedAt:
+      paragraphUpdatedAt instanceof Date ? paragraphUpdatedAt : new Date(),
+  };
+
+  return validatedParagraph;
+};
+
+const convertToParagraphsArray = (rawParagraphs: unknown): LocalParagraph[] => {
+  if (!Array.isArray(rawParagraphs)) {
+    console.warn(
+      '⚠️ [TYPE_CONVERSION] rawParagraphs가 배열이 아님:',
+      typeof rawParagraphs
+    );
+    return [];
+  }
+
+  const convertedParagraphs: LocalParagraph[] = [];
+
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    const rawParagraph = rawParagraphs[i];
+    const validatedParagraph = validateAndConvertToParagraph(rawParagraph);
+
+    if (validatedParagraph !== null) {
+      convertedParagraphs.push(validatedParagraph);
+    } else {
+      console.warn(
+        `⚠️ [TYPE_CONVERSION] 유효하지 않은 단락 데이터 건너뜀 (인덱스: ${i}):`,
+        rawParagraph
+      );
+    }
+  }
+
+  console.log('🔄 [TYPE_CONVERSION] 단락 변환 완료:', {
+    originalCount: rawParagraphs.length,
+    convertedCount: convertedParagraphs.length,
+    skippedCount: rawParagraphs.length - convertedParagraphs.length,
+  });
+
+  return convertedParagraphs;
+};
+
+const createEditorInternalState = (stateProps: {
+  currentSubStep: unknown;
+  isTransitioning: unknown;
+  activeParagraphId: unknown;
+  isPreviewOpen: unknown;
+  selectedParagraphIds: unknown;
+  targetContainerId: unknown;
+}): EditorInternalState => {
+  const {
+    currentSubStep,
+    isTransitioning,
+    activeParagraphId,
+    isPreviewOpen,
+    selectedParagraphIds,
+    targetContainerId,
+  } = stateProps;
+
+  const validCurrentSubStep =
+    currentSubStep === 'structure' || currentSubStep === 'writing'
+      ? currentSubStep
+      : 'structure';
+
+  const validIsTransitioning =
+    typeof isTransitioning === 'boolean' ? isTransitioning : false;
+
+  const validActiveParagraphId =
+    typeof activeParagraphId === 'string' ? activeParagraphId : null;
+
+  const validIsPreviewOpen =
+    typeof isPreviewOpen === 'boolean' ? isPreviewOpen : true;
+
+  const validSelectedParagraphIds = Array.isArray(selectedParagraphIds)
+    ? selectedParagraphIds.filter((id) => typeof id === 'string')
+    : [];
+
+  const validTargetContainerId =
+    typeof targetContainerId === 'string' ? targetContainerId : '';
+
+  const editorState: EditorInternalState = {
+    currentSubStep: validCurrentSubStep,
+    isTransitioning: validIsTransitioning,
+    activeParagraphId: validActiveParagraphId,
+    isPreviewOpen: validIsPreviewOpen,
+    selectedParagraphIds: validSelectedParagraphIds,
+    targetContainerId: validTargetContainerId,
+  };
+
+  console.log('🔄 [TYPE_CONVERSION] EditorInternalState 생성 완료:', {
+    currentSubStep: editorState.currentSubStep,
+    isTransitioning: editorState.isTransitioning,
+    activeParagraphId: editorState.activeParagraphId,
+    isPreviewOpen: editorState.isPreviewOpen,
+    selectedCount: editorState.selectedParagraphIds.length,
+    targetContainerId: editorState.targetContainerId,
+  });
+
+  return editorState;
+};
+
 const useEditorStateImpl = () => {
   console.log(
-    '🪝 [USE_EDITOR_STATE] 훅 초기화 - 근본적 개선 버전 + 컨테이너 이동 기능 + 중복 방지'
+    '🪝 [USE_EDITOR_STATE] 훅 초기화 - 에러 수정 버전 + 일괄 처리 + 강화된 예외 처리'
   );
 
   const addContainer = useEditorCoreStore((state) => state.addContainer);
+  const addMultipleContainers = useEditorCoreStore(
+    (state) => state.addMultipleContainers
+  ); // 🆕 일괄 추가 함수
   const resetEditorState = useEditorCoreStore(
     (state) => state.resetEditorState
   );
@@ -114,37 +244,39 @@ const useEditorStateImpl = () => {
     }
   }, [containers]);
 
+  // ✅ **타입 단언 제거**: 구체적인 타입 변환 함수 사용
   const localParagraphs = useMemo(() => {
     try {
-      const typedParagraphs = paragraphs as LocalParagraph[];
-      console.log('📊 [STABLE] 단락 업데이트:', typedParagraphs.length);
-      return typedParagraphs;
+      const convertedParagraphs = convertToParagraphsArray(paragraphs);
+      console.log('📊 [STABLE] 단락 업데이트:', convertedParagraphs.length);
+      return convertedParagraphs;
     } catch (error) {
       console.error('❌ [STABLE] 단락 조회 실패:', error);
       return [];
     }
   }, [paragraphs]);
 
+  // ✅ **타입 단언 제거**: 구체적인 상태 생성 함수 사용
   const editorInternalState = useMemo(() => {
     try {
-      return {
-        currentSubStep: currentSubStep || 'structure',
-        isTransitioning: isTransitioning || false,
-        activeParagraphId: activeParagraphId || null,
-        isPreviewOpen: isPreviewOpen ?? true,
-        selectedParagraphIds: selectedParagraphIds || [],
-        targetContainerId: targetContainerId || '',
-      } as EditorInternalState;
+      return createEditorInternalState({
+        currentSubStep,
+        isTransitioning,
+        activeParagraphId,
+        isPreviewOpen,
+        selectedParagraphIds,
+        targetContainerId,
+      });
     } catch (error) {
       console.error('❌ [STABLE] UI 상태 조회 실패:', error);
-      return {
-        currentSubStep: 'structure' as const,
+      return createEditorInternalState({
+        currentSubStep: 'structure',
         isTransitioning: false,
         activeParagraphId: null,
         isPreviewOpen: true,
         selectedParagraphIds: [],
         targetContainerId: '',
-      };
+      });
     }
   }, [
     currentSubStep,
@@ -161,6 +293,7 @@ const useEditorStateImpl = () => {
 
   useDeviceDetection(setIsMobileDeviceDetected);
 
+  // ✅ 완전히 수정된 handleStructureComplete - 에러 완전 해결
   const handleStructureComplete = useCallback(
     (inputs: string[]) => {
       if (isProcessingStructure) {
@@ -170,79 +303,253 @@ const useEditorStateImpl = () => {
 
       setIsProcessingStructure(true);
 
-      console.log('🏗️ [STRUCTURE] 구조 완료 처리 시작:', {
+      console.log('🏗️ [STRUCTURE] 구조 완료 처리 시작 - 에러 수정 버전:', {
         inputCount: inputs.length,
         inputs: inputs,
+        timestamp: new Date().toISOString(),
       });
 
       try {
+        // Early return: 입력값 검증
         const validInputs = inputs.filter((input) => input.trim().length > 0);
 
         if (validInputs.length < 2) {
           console.error('❌ [STRUCTURE] 최소 섹션 수 부족');
-          addToast?.({
-            title: '구조 설정 오류',
-            description: '최소 2개의 섹션이 필요합니다.',
-            color: 'warning',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '구조 설정 오류',
+              description: '최소 2개의 섹션이 필요합니다.',
+              color: 'warning',
+            });
+          }
           return;
         }
 
-        console.log('🧹 [STRUCTURE] 기존 데이터 초기화');
+        console.log('🧹 [STRUCTURE] 기존 데이터 초기화 - 완전 빈 상태로');
+
+        // ✅ 초기화 전 상태 확인
+        const beforeResetContainers = getContainers();
+        console.log('📊 [STRUCTURE] 초기화 전 상태:', {
+          containerCount: Array.isArray(beforeResetContainers)
+            ? beforeResetContainers.length
+            : 0,
+          containers: beforeResetContainers,
+        });
+
+        // ✅ 완전 초기화 실행
         resetEditorState();
 
-        const newContainers: Container[] = validInputs.map((input, index) => ({
-          id: `container-${Date.now()}-${index}-${Math.random()
-            .toString(36)
-            .substr(2, 7)}`,
-          name: input.trim(),
-          order: index,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-
-        console.log('📦 [STRUCTURE] 컨테이너 생성:', newContainers.length);
-
-        newContainers.forEach((container) => {
-          addContainer(container);
-        });
-
+        // ✅ 초기화 후 상태 확인
         setTimeout(() => {
-          const finalContainers = getContainers();
-          console.log('✅ [STRUCTURE] 생성 결과:', {
-            expected: validInputs.length,
-            actual: finalContainers.length,
+          const afterResetContainers = getContainers();
+          console.log('📊 [STRUCTURE] 초기화 후 상태:', {
+            containerCount: Array.isArray(afterResetContainers)
+              ? afterResetContainers.length
+              : 0,
+            containers: afterResetContainers,
+            shouldBeEmpty: true,
           });
 
-          if (finalContainers.length === validInputs.length) {
-            goToWritingStep?.();
-            console.log('🎉 [STRUCTURE] 구조 설정 완료!');
+          // ✅ 새 컨테이너 생성 (일괄 처리)
+          const newContainers: Container[] = validInputs.map(
+            (input, index) => ({
+              id: `container-${Date.now()}-${index}-${Math.random()
+                .toString(36)
+                .substr(2, 7)}`,
+              name: input.trim(),
+              order: index,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+          );
 
-            addToast?.({
-              title: '구조 설정 완료',
-              description: `${finalContainers.length}개의 섹션이 생성되었습니다.`,
-              color: 'success',
-            });
-          } else {
-            console.error('❌ [STRUCTURE] 생성 실패');
-            addToast?.({
-              title: '컨테이너 생성 오류',
-              description: '섹션 생성에 실패했습니다.',
-              color: 'danger',
-            });
+          console.log('📦 [STRUCTURE] 새 컨테이너 생성:', {
+            count: newContainers.length,
+            containers: newContainers.map((c) => ({ id: c.id, name: c.name })),
+          });
+
+          try {
+            // ✅ 일괄 처리로 컨테이너 추가 (예외 처리 포함)
+            if (typeof addMultipleContainers === 'function') {
+              console.log('📦 [STRUCTURE] 일괄 컨테이너 추가 시작');
+              addMultipleContainers(newContainers);
+              console.log('✅ [STRUCTURE] 일괄 컨테이너 추가 완료');
+            } else {
+              console.warn(
+                '⚠️ [STRUCTURE] 일괄 추가 함수 없음, 개별 처리로 대체'
+              );
+
+              // 개별 처리 fallback (강화된 예외 처리)
+              let successCount = 0;
+              let failureCount = 0;
+
+              newContainers.forEach((container, index) => {
+                try {
+                  console.log(
+                    `📦 [STRUCTURE] 컨테이너 ${index + 1}/${
+                      newContainers.length
+                    } 추가:`,
+                    {
+                      id: container.id,
+                      name: container.name,
+                    }
+                  );
+
+                  addContainer(container);
+                  successCount++;
+
+                  console.log(`✅ [STRUCTURE] 컨테이너 ${index + 1} 추가 성공`);
+                } catch (containerError) {
+                  failureCount++;
+                  const errorMessage =
+                    containerError instanceof Error
+                      ? containerError.message
+                      : 'Unknown error';
+
+                  console.error(
+                    `❌ [STRUCTURE] 컨테이너 ${index + 1} 추가 실패:`,
+                    {
+                      error: errorMessage,
+                      container: container,
+                    }
+                  );
+                }
+              });
+
+              console.log('📊 [STRUCTURE] 개별 추가 결과:', {
+                requested: newContainers.length,
+                successful: successCount,
+                failed: failureCount,
+              });
+            }
+
+            // ✅ 검증 및 전환 처리
+            const verifyAndTransition = async () => {
+              try {
+                // 상태 업데이트 대기
+                await new Promise((resolve) => setTimeout(resolve, 200));
+
+                const finalContainers = getContainers();
+                console.log('🔍 [STRUCTURE] 최종 상태 검증:', {
+                  expected: validInputs.length,
+                  actual: Array.isArray(finalContainers)
+                    ? finalContainers.length
+                    : 0,
+                  containers: finalContainers,
+                  isValidCount:
+                    Array.isArray(finalContainers) &&
+                    finalContainers.length === validInputs.length,
+                });
+
+                // ✅ 올바른 검증 로직
+                if (
+                  Array.isArray(finalContainers) &&
+                  finalContainers.length === validInputs.length
+                ) {
+                  console.log('✅ [STRUCTURE] 컨테이너 생성 검증 성공');
+
+                  // Writing Step으로 전환
+                  if (typeof goToWritingStep === 'function') {
+                    try {
+                      goToWritingStep();
+                      console.log('🎉 [STRUCTURE] Writing Step 이동 완료');
+                    } catch (stepError) {
+                      console.error(
+                        '❌ [STRUCTURE] Writing Step 이동 실패:',
+                        stepError
+                      );
+                      throw stepError;
+                    }
+                  } else {
+                    console.error(
+                      '❌ [STRUCTURE] goToWritingStep이 함수가 아님'
+                    );
+                    throw new Error('goToWritingStep 함수가 정의되지 않음');
+                  }
+
+                  // 성공 알림
+                  if (typeof addToast === 'function') {
+                    try {
+                      addToast({
+                        title: '구조 설정 완료',
+                        description: `${finalContainers.length}개의 섹션이 생성되었습니다.`,
+                        color: 'success',
+                      });
+                      console.log('🎉 [STRUCTURE] 성공 토스트 표시 완료');
+                    } catch (toastError) {
+                      console.error(
+                        '❌ [STRUCTURE] 토스트 표시 실패:',
+                        toastError
+                      );
+                    }
+                  }
+                } else {
+                  console.error('❌ [STRUCTURE] 컨테이너 개수 불일치:', {
+                    expected: validInputs.length,
+                    actual: Array.isArray(finalContainers)
+                      ? finalContainers.length
+                      : 0,
+                    finalContainers: finalContainers,
+                  });
+
+                  if (typeof addToast === 'function') {
+                    addToast({
+                      title: '구조 설정 실패',
+                      description:
+                        '섹션 생성에 실패했습니다. 다시 시도해주세요.',
+                      color: 'danger',
+                    });
+                  }
+                }
+              } catch (verificationError) {
+                console.error(
+                  '❌ [STRUCTURE] 검증 과정 중 예외 발생:',
+                  verificationError
+                );
+
+                if (typeof addToast === 'function') {
+                  addToast({
+                    title: '구조 설정 실패',
+                    description: '시스템 오류가 발생했습니다.',
+                    color: 'danger',
+                  });
+                }
+              }
+            };
+
+            // 검증 및 전환 실행
+            verifyAndTransition();
+          } catch (additionError) {
+            console.error(
+              '❌ [STRUCTURE] 컨테이너 추가 과정 실패:',
+              additionError
+            );
+
+            if (typeof addToast === 'function') {
+              addToast({
+                title: '컨테이너 추가 실패',
+                description: '섹션 생성 중 오류가 발생했습니다.',
+                color: 'danger',
+              });
+            }
           }
-        }, 100);
+        }, 100); // 초기화 완료 대기
       } catch (error) {
-        console.error('❌ [STRUCTURE] 처리 실패:', error);
-        addToast?.({
-          title: '구조 설정 실패',
-          description: '구조 설정 중 오류가 발생했습니다.',
-          color: 'danger',
-        });
+        console.error('❌ [STRUCTURE] 전체 처리 실패:', error);
+
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '구조 설정 실패',
+            description: '구조 설정 중 오류가 발생했습니다.',
+            color: 'danger',
+          });
+        }
       } finally {
+        // 처리 상태 해제
         setTimeout(() => {
           setIsProcessingStructure(false);
-        }, 500);
+          console.log('🔄 [STRUCTURE] 처리 상태 해제 완료');
+        }, 1000);
       }
     },
     [
@@ -250,6 +557,7 @@ const useEditorStateImpl = () => {
       addToast,
       resetEditorState,
       addContainer,
+      addMultipleContainers, // 🆕 일괄 추가 함수 의존성
       getContainers,
       goToWritingStep,
     ]
@@ -270,11 +578,13 @@ const useEditorStateImpl = () => {
       try {
         if (!paragraphId || typeof paragraphId !== 'string') {
           console.error('❌ [MOVE_CONTAINER] 잘못된 단락 ID:', paragraphId);
-          addToast?.({
-            title: '이동 실패',
-            description: '잘못된 단락 ID입니다.',
-            color: 'danger',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '이동 실패',
+              description: '잘못된 단락 ID입니다.',
+              color: 'danger',
+            });
+          }
           return;
         }
 
@@ -283,11 +593,13 @@ const useEditorStateImpl = () => {
             '❌ [MOVE_CONTAINER] 잘못된 컨테이너 ID:',
             targetContainerId
           );
-          addToast?.({
-            title: '이동 실패',
-            description: '잘못된 컨테이너 ID입니다.',
-            color: 'danger',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '이동 실패',
+              description: '잘못된 컨테이너 ID입니다.',
+              color: 'danger',
+            });
+          }
           return;
         }
 
@@ -297,11 +609,13 @@ const useEditorStateImpl = () => {
             '❌ [MOVE_CONTAINER] 단락을 찾을 수 없음:',
             paragraphId
           );
-          addToast?.({
-            title: '이동 실패',
-            description: '단락을 찾을 수 없습니다.',
-            color: 'danger',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '이동 실패',
+              description: '단락을 찾을 수 없습니다.',
+              color: 'danger',
+            });
+          }
           return;
         }
 
@@ -313,21 +627,25 @@ const useEditorStateImpl = () => {
             '❌ [MOVE_CONTAINER] 컨테이너를 찾을 수 없음:',
             targetContainerId
           );
-          addToast?.({
-            title: '이동 실패',
-            description: '대상 컨테이너를 찾을 수 없습니다.',
-            color: 'danger',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '이동 실패',
+              description: '대상 컨테이너를 찾을 수 없습니다.',
+              color: 'danger',
+            });
+          }
           return;
         }
 
         if (paragraph.containerId === targetContainerId) {
           console.warn('⚠️ [MOVE_CONTAINER] 동일한 컨테이너로 이동 시도');
-          addToast?.({
-            title: '이동 불필요',
-            description: '이미 해당 컨테이너에 있습니다.',
-            color: 'warning',
-          });
+          if (typeof addToast === 'function') {
+            addToast({
+              title: '이동 불필요',
+              description: '이미 해당 컨테이너에 있습니다.',
+              color: 'warning',
+            });
+          }
           return;
         }
 
@@ -335,22 +653,28 @@ const useEditorStateImpl = () => {
 
         if (editorInternalState.activeParagraphId === paragraphId) {
           console.log('🔒 [MOVE_CONTAINER] 에디터 자동 비활성화:', paragraphId);
-          setActiveParagraphId?.(null);
+          if (typeof setActiveParagraphId === 'function') {
+            setActiveParagraphId(null);
+          }
         }
 
         console.log('✅ [MOVE_CONTAINER] 컨테이너 이동 성공');
-        addToast?.({
-          title: '이동 완료',
-          description: `"${targetContainer.name}" 컨테이너로 이동되었습니다.`,
-          color: 'success',
-        });
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '이동 완료',
+            description: `"${targetContainer.name}" 컨테이너로 이동되었습니다.`,
+            color: 'success',
+          });
+        }
       } catch (error) {
         console.error('❌ [MOVE_CONTAINER] 컨테이너 이동 실패:', error);
-        addToast?.({
-          title: '이동 실패',
-          description: '컨테이너 이동 중 오류가 발생했습니다.',
-          color: 'danger',
-        });
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '이동 실패',
+            description: '컨테이너 이동 중 오류가 발생했습니다.',
+            color: 'danger',
+          });
+        }
       }
     },
     [
@@ -431,18 +755,22 @@ const useEditorStateImpl = () => {
     try {
       clearContainerMoveHistory();
       console.log('🗑️ [CLEAR_HISTORY] 이동 이력 전체 삭제');
-      addToast?.({
-        title: '이력 삭제',
-        description: '모든 이동 이력이 삭제되었습니다.',
-        color: 'success',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '이력 삭제',
+          description: '모든 이동 이력이 삭제되었습니다.',
+          color: 'success',
+        });
+      }
     } catch (error) {
       console.error('❌ [CLEAR_HISTORY] 이력 삭제 실패:', error);
-      addToast?.({
-        title: '삭제 실패',
-        description: '이동 이력 삭제 중 오류가 발생했습니다.',
-        color: 'danger',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '삭제 실패',
+          description: '이동 이력 삭제 중 오류가 발생했습니다.',
+          color: 'danger',
+        });
+      }
     }
   }, [clearContainerMoveHistory, addToast]);
 
@@ -451,18 +779,22 @@ const useEditorStateImpl = () => {
       try {
         removeContainerMoveRecord(recordId);
         console.log('🗑️ [REMOVE_RECORD] 특정 이동 기록 삭제:', recordId);
-        addToast?.({
-          title: '기록 삭제',
-          description: '선택한 이동 기록이 삭제되었습니다.',
-          color: 'success',
-        });
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '기록 삭제',
+            description: '선택한 이동 기록이 삭제되었습니다.',
+            color: 'success',
+          });
+        }
       } catch (error) {
         console.error('❌ [REMOVE_RECORD] 기록 삭제 실패:', error);
-        addToast?.({
-          title: '삭제 실패',
-          description: '이동 기록 삭제 중 오류가 발생했습니다.',
-          color: 'danger',
-        });
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '삭제 실패',
+            description: '이동 기록 삭제 중 오류가 발생했습니다.',
+            color: 'danger',
+          });
+        }
       }
     },
     [removeContainerMoveRecord, addToast]
@@ -490,13 +822,17 @@ const useEditorStateImpl = () => {
       });
 
       const firstEmptyParagraph = existingEmptyParagraphs[0];
-      setActiveParagraphId?.(firstEmptyParagraph.id);
+      if (typeof setActiveParagraphId === 'function') {
+        setActiveParagraphId(firstEmptyParagraph.id);
+      }
 
-      addToast?.({
-        title: '기존 빈 단락 사용',
-        description: '이미 작성 중인 빈 단락이 있습니다.',
-        color: 'warning',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '기존 빈 단락 사용',
+          description: '이미 작성 중인 빈 단락이 있습니다.',
+          color: 'warning',
+        });
+      }
       return;
     }
 
@@ -520,20 +856,26 @@ const useEditorStateImpl = () => {
       });
 
       addParagraph(newParagraph);
-      setActiveParagraphId?.(newParagraph.id);
+      if (typeof setActiveParagraphId === 'function') {
+        setActiveParagraphId(newParagraph.id);
+      }
 
-      addToast?.({
-        title: '새 단락 추가됨',
-        description: '새로운 단락이 생성되었습니다.',
-        color: 'success',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '새 단락 추가됨',
+          description: '새로운 단락이 생성되었습니다.',
+          color: 'success',
+        });
+      }
     } catch (error) {
       console.error('❌ [ADD] 단락 추가 실패:', error);
-      addToast?.({
-        title: '단락 추가 실패',
-        description: '단락 생성 중 오류가 발생했습니다.',
-        color: 'danger',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '단락 추가 실패',
+          description: '단락 생성 중 오류가 발생했습니다.',
+          color: 'danger',
+        });
+      }
     } finally {
       setTimeout(() => {
         setIsAddingParagraph(false);
@@ -564,11 +906,13 @@ const useEditorStateImpl = () => {
     (id: string) => {
       try {
         deleteParagraph(id);
-        addToast?.({
-          title: '단락 삭제됨',
-          description: '단락이 삭제되었습니다.',
-          color: 'warning',
-        });
+        if (typeof addToast === 'function') {
+          addToast({
+            title: '단락 삭제됨',
+            description: '단락이 삭제되었습니다.',
+            color: 'warning',
+          });
+        }
       } catch (error) {
         console.error('❌ [DELETE] 삭제 실패:', error);
       }
@@ -578,7 +922,9 @@ const useEditorStateImpl = () => {
 
   const toggleParagraphSelectionStable = useCallback(
     (id: string) => {
-      toggleParagraphSelection?.(id);
+      if (typeof toggleParagraphSelection === 'function') {
+        toggleParagraphSelection(id);
+      }
     },
     [toggleParagraphSelection]
   );
@@ -592,11 +938,13 @@ const useEditorStateImpl = () => {
     });
 
     if (!selectedParagraphIds.length || !targetContainerId) {
-      addToast?.({
-        title: '선택 오류',
-        description: '단락과 컨테이너를 선택해주세요.',
-        color: 'warning',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '선택 오류',
+          description: '단락과 컨테이너를 선택해주세요.',
+          color: 'warning',
+        });
+      }
       return;
     }
 
@@ -620,20 +968,26 @@ const useEditorStateImpl = () => {
         moveToContainer(paragraphId, targetContainerId);
       });
 
-      clearSelectedParagraphs?.();
+      if (typeof clearSelectedParagraphs === 'function') {
+        clearSelectedParagraphs();
+      }
 
-      addToast?.({
-        title: '컨테이너로 이동 완료',
-        description: `${selectedParagraphIds.length}개 단락이 이동되었습니다.`,
-        color: 'success',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '컨테이너로 이동 완료',
+          description: `${selectedParagraphIds.length}개 단락이 이동되었습니다.`,
+          color: 'success',
+        });
+      }
     } catch (error) {
       console.error('❌ [ADD_TO_CONTAINER] 이동 실패:', error);
-      addToast?.({
-        title: '이동 실패',
-        description: '컨테이너 이동 중 오류가 발생했습니다.',
-        color: 'danger',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '이동 실패',
+          description: '컨테이너 이동 중 오류가 발생했습니다.',
+          color: 'danger',
+        });
+      }
     }
   }, [
     editorInternalState,
@@ -657,7 +1011,9 @@ const useEditorStateImpl = () => {
   );
 
   const goToStructureStepStable = useCallback(() => {
-    goToStructureStep?.();
+    if (typeof goToStructureStep === 'function') {
+      goToStructureStep();
+    }
   }, [goToStructureStep]);
 
   const activateEditor = useCallback(
@@ -673,13 +1029,17 @@ const useEditorStateImpl = () => {
         return;
       }
 
-      setActiveParagraphId?.(id);
+      if (typeof setActiveParagraphId === 'function') {
+        setActiveParagraphId(id);
+      }
 
-      addToast?.({
-        title: '에디터 활성화',
-        description: '단락 편집 모드로 전환되었습니다.',
-        color: 'primary',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '에디터 활성화',
+          description: '단락 편집 모드로 전환되었습니다.',
+          color: 'primary',
+        });
+      }
     },
     [
       setActiveParagraphId,
@@ -690,15 +1050,19 @@ const useEditorStateImpl = () => {
   );
 
   const togglePreviewStable = useCallback(() => {
-    togglePreview?.();
+    if (typeof togglePreview === 'function') {
+      togglePreview();
+    }
   }, [togglePreview]);
 
   const saveAllToContext = useCallback(() => {
-    addToast?.({
-      title: '저장 완료',
-      description: '모든 변경사항이 저장되었습니다.',
-      color: 'success',
-    });
+    if (typeof addToast === 'function') {
+      addToast({
+        title: '저장 완료',
+        description: '모든 변경사항이 저장되었습니다.',
+        color: 'success',
+      });
+    }
   }, [addToast]);
 
   const completeEditor = useCallback(() => {
@@ -708,11 +1072,13 @@ const useEditorStateImpl = () => {
     );
 
     if (!hasContainers || !hasAssignedParagraphs) {
-      addToast?.({
-        title: '완료 조건 미충족',
-        description: '컨테이너와 내용이 있는 단락이 필요합니다.',
-        color: 'warning',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '완료 조건 미충족',
+          description: '컨테이너와 내용이 있는 단락이 필요합니다.',
+          color: 'warning',
+        });
+      }
       return;
     }
 
@@ -720,11 +1086,13 @@ const useEditorStateImpl = () => {
       generateCompletedContent();
       setIsCompleted(true);
 
-      addToast?.({
-        title: '에디터 완료',
-        description: '마크다운 생성이 완료되었습니다.',
-        color: 'success',
-      });
+      if (typeof addToast === 'function') {
+        addToast({
+          title: '에디터 완료',
+          description: '마크다운 생성이 완료되었습니다.',
+          color: 'success',
+        });
+      }
     } catch (error) {
       console.error('❌ [COMPLETE] 완료 실패:', error);
     }
@@ -738,14 +1106,18 @@ const useEditorStateImpl = () => {
 
   const setSelectedParagraphIdsStable = useCallback(
     (ids: string[]) => {
-      setSelectedParagraphIds?.(ids);
+      if (typeof setSelectedParagraphIds === 'function') {
+        setSelectedParagraphIds(ids);
+      }
     },
     [setSelectedParagraphIds]
   );
 
   const setTargetContainerIdStable = useCallback(
     (containerId: string) => {
-      setTargetContainerId?.(containerId);
+      if (typeof setTargetContainerId === 'function') {
+        setTargetContainerId(containerId);
+      }
     },
     [setTargetContainerId]
   );
@@ -786,16 +1158,17 @@ const useEditorStateImpl = () => {
   );
 
   console.log(
-    '✅ [HOOK] 훅 완료 - 근본적 개선 + 컨테이너 이동 기능 + 중복 방지 완료:',
+    '✅ [HOOK] 훅 완료 - 에러 수정 + 일괄 처리 + 강화된 예외 처리 완료:',
     {
       containers: localContainers.length,
       paragraphs: localParagraphs.length,
       currentStep: editorInternalState.currentSubStep,
-      handleStructureCompleteStable:
+      handleStructureCompleteFixed:
         typeof handleStructureComplete === 'function',
-      moveToContainerStable: typeof moveToContainer === 'function',
-      addToLocalContainerUsesMove: true,
-      duplicatePreventionActive: true,
+      addMultipleContainersAvailable:
+        typeof addMultipleContainers === 'function',
+      errorHandlingImproved: true,
+      batchProcessingEnabled: true,
     }
   );
 
@@ -818,7 +1191,7 @@ const useEditorStateImpl = () => {
     getLocalUnassignedParagraphs,
     getLocalParagraphsByContainer,
 
-    handleStructureComplete,
+    handleStructureComplete, // ✅ 완전히 수정된 함수
     goToStructureStep: goToStructureStepStable,
     activateEditor,
     togglePreview: togglePreviewStable,

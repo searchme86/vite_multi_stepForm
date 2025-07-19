@@ -1,4 +1,3 @@
-//====여기부터 수정됨====
 // 📁 store/editorCore/initialEditorCoreState.ts
 import type {
   Container,
@@ -7,64 +6,164 @@ import type {
 } from '../shared/commonTypes';
 
 // EditorCoreState 인터페이스 정의
-// 1. 에디터 핵심 데이터를 관리하는 상태 구조
-// 2. persist 미들웨어로 localStorage에 저장됨
 export interface EditorCoreState {
-  // 1. 컨테이너 목록 - 글의 구조(섹션)를 나타냄
-  // 2. 각 컨테이너는 고유 ID, 이름, 순서를 가짐
   containers: Container[];
-
-  // 1. 단락 목록 - 실제 글 내용을 담는 블록들
-  // 2. 각 단락은 컨테이너에 할당되거나 미할당 상태
   paragraphs: ParagraphBlock[];
-
-  // 1. 완성된 마크다운 콘텐츠 - 최종 출력물
-  // 2. 컨테이너와 단락들이 결합되어 생성됨
   completedContent: string;
-
-  // 1. 에디터 완료 여부 - 작업 완료 상태 표시
-  // 2. true일 때 브릿지를 통해 다른 시스템으로 전송 가능
   isCompleted: boolean;
-
-  // 1. 섹션 입력 필드들 - 구조 설정 단계에서 사용
-  // 2. 사용자가 입력한 섹션명들을 임시 저장
   sectionInputs: string[];
-
-  // 🔄 컨테이너 이동 이력 - 단락의 컨테이너 간 이동 기록
-  // 1. 사용자의 이동 패턴 추적 및 분석에 활용
-  // 2. 실수로 이동한 경우 되돌리기 기능의 기반 데이터
   containerMoveHistory: ContainerMoveHistory;
 }
 
-// 초기 상태 정의
-// 1. 모든 데이터가 깨끗하게 비워진 상태
-// 2. 새로운 세션이 시작될 때 사용되는 기본값
-export const initialEditorCoreState: EditorCoreState = {
-  containers: [], // 1. 빈 컨테이너 배열 2. 구조가 아직 정의되지 않은 상태
-  paragraphs: [], // 1. 빈 단락 배열 2. 작성된 내용이 없는 상태
-  completedContent: '', // 1. 빈 완성 콘텐츠 2. 아직 글이 완성되지 않은 상태
-  isCompleted: false, // 1. 미완료 상태 2. 에디터 작업이 진행 중
-  sectionInputs: ['', '', '', ''], // 1. 기본 4개 빈 섹션 입력 필드 2. 구조 설정 단계 초기값
-  containerMoveHistory: [], // 🔄 빈 이동 이력 배열 - 아직 이동 기록이 없는 상태
+// 🔧 템플릿 데이터 생성 함수 (분리됨 - 필요시에만 사용)
+function createTemplateDataForDemonstration(): {
+  containers: Container[];
+  paragraphs: ParagraphBlock[];
+  completedContent: string;
+} {
+  const currentTimestamp = new Date();
+
+  console.log('📝 [TEMPLATE] 데모용 템플릿 데이터 생성 (초기 상태와 분리됨)');
+
+  const templateContainers: Container[] = [
+    {
+      id: 'demo-intro',
+      name: '소개 (데모)',
+      order: 1,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+    {
+      id: 'demo-content',
+      name: '주요 내용 (데모)',
+      order: 2,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+    {
+      id: 'demo-conclusion',
+      name: '결론 (데모)',
+      order: 3,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+  ];
+
+  const templateParagraphs: ParagraphBlock[] = [
+    {
+      id: 'demo-intro-paragraph-1',
+      content: '이곳에 소개 내용을 작성해주세요. (데모용 텍스트)',
+      containerId: 'demo-intro',
+      order: 1,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+    {
+      id: 'demo-content-paragraph-1',
+      content: '주요 내용의 첫 번째 문단입니다. (데모용 텍스트)',
+      containerId: 'demo-content',
+      order: 1,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+    {
+      id: 'demo-conclusion-paragraph-1',
+      content: '결론 부분입니다. (데모용 텍스트)',
+      containerId: 'demo-conclusion',
+      order: 1,
+      createdAt: currentTimestamp,
+      updatedAt: currentTimestamp,
+    },
+  ];
+
+  const completedContent = `# 소개 (데모)
+
+이곳에 소개 내용을 작성해주세요. (데모용 텍스트)
+
+# 주요 내용 (데모)
+
+주요 내용의 첫 번째 문단입니다. (데모용 텍스트)
+
+# 결론 (데모)
+
+결론 부분입니다. (데모용 텍스트)`;
+
+  console.log('✅ [TEMPLATE] 데모용 템플릿 데이터 생성 완료:', {
+    containerCount: templateContainers.length,
+    paragraphCount: templateParagraphs.length,
+    contentLength: completedContent.length,
+  });
+
+  return {
+    containers: templateContainers,
+    paragraphs: templateParagraphs,
+    completedContent,
+  };
+}
+
+// ✅ 수정된 초기 상태 - 에러 방지를 위해 완전히 빈 상태로 설정
+export const initialEditorCoreState: EditorCoreState = (() => {
+  console.log('🔧 [INITIAL_STATE] 에러 방지 초기 상태 생성 시작');
+
+  const cleanInitialState: EditorCoreState = {
+    containers: [], // ✅ 빈 배열 - 템플릿 데이터 없음
+    paragraphs: [], // ✅ 빈 배열 - 템플릿 데이터 없음
+    completedContent: '', // ✅ 빈 문자열
+    isCompleted: false, // ✅ 미완료 상태
+    sectionInputs: ['', '', '', ''], // ✅ 빈 입력 필드 4개
+    containerMoveHistory: [], // ✅ 빈 이동 이력
+  };
+
+  console.log('✅ [INITIAL_STATE] 에러 방지 초기 상태 생성 완료:', {
+    containerCount: cleanInitialState.containers.length,
+    paragraphCount: cleanInitialState.paragraphs.length,
+    hasContent: cleanInitialState.completedContent.length > 0,
+    isCompleted: cleanInitialState.isCompleted,
+    sectionInputCount: cleanInitialState.sectionInputs.length,
+    moveHistoryCount: cleanInitialState.containerMoveHistory.length,
+    isCleanState: true,
+  });
+
+  return cleanInitialState;
+})();
+
+// 🆕 템플릿 데이터가 필요한 경우를 위한 별도 함수
+export const createInitialStateWithTemplate = (): EditorCoreState => {
+  console.log('📝 [TEMPLATE_STATE] 템플릿 포함 초기 상태 생성');
+
+  const templateData = createTemplateDataForDemonstration();
+
+  const templateInitialState: EditorCoreState = {
+    containers: templateData.containers,
+    paragraphs: templateData.paragraphs,
+    completedContent: templateData.completedContent,
+    isCompleted: false,
+    sectionInputs: ['소개', '주요 내용', '결론', ''],
+    containerMoveHistory: [],
+  };
+
+  console.log('✅ [TEMPLATE_STATE] 템플릿 포함 초기 상태 생성 완료');
+
+  return templateInitialState;
 };
 
-// 초기 상태 검증 함수
-// 1. 초기 상태가 올바른 형태인지 확인
-// 2. 타입 안전성과 데이터 무결성 보장
+// 초기 상태 검증 함수 (강화됨)
 export const validateInitialEditorCoreState = (
   state: Partial<EditorCoreState>
 ): boolean => {
   try {
-    // 1. 필수 속성들이 모두 존재하는지 확인
+    console.log('🔍 [CORE_STATE] 초기 상태 검증 시작:', state);
+
     const requiredKeys: (keyof EditorCoreState)[] = [
       'containers',
       'paragraphs',
       'completedContent',
       'isCompleted',
       'sectionInputs',
-      'containerMoveHistory', // 🔄 새로 추가된 필수 속성
+      'containerMoveHistory',
     ];
 
+    // 필수 속성 존재 여부 확인
     for (const key of requiredKeys) {
       if (!(key in state)) {
         console.error(`❌ [CORE_STATE] 필수 속성 누락: ${key}`);
@@ -72,37 +171,96 @@ export const validateInitialEditorCoreState = (
       }
     }
 
-    // 2. 배열 타입 검증
-    if (!Array.isArray(state.containers)) {
-      console.error('❌ [CORE_STATE] containers는 배열이어야 합니다');
-      return false;
+    // 배열 타입 검증
+    const arrayKeys: (keyof EditorCoreState)[] = [
+      'containers',
+      'paragraphs',
+      'sectionInputs',
+      'containerMoveHistory',
+    ];
+
+    for (const key of arrayKeys) {
+      if (!Array.isArray(state[key])) {
+        console.error(
+          `❌ [CORE_STATE] ${key}는 배열이어야 합니다:`,
+          typeof state[key]
+        );
+        return false;
+      }
     }
 
-    if (!Array.isArray(state.paragraphs)) {
-      console.error('❌ [CORE_STATE] paragraphs는 배열이어야 합니다');
-      return false;
-    }
-
-    if (!Array.isArray(state.sectionInputs)) {
-      console.error('❌ [CORE_STATE] sectionInputs는 배열이어야 합니다');
-      return false;
-    }
-
-    // 🔄 컨테이너 이동 이력 배열 검증 추가
-    if (!Array.isArray(state.containerMoveHistory)) {
-      console.error('❌ [CORE_STATE] containerMoveHistory는 배열이어야 합니다');
-      return false;
-    }
-
-    // 3. 기본 타입 검증
+    // 문자열 타입 검증
     if (typeof state.completedContent !== 'string') {
-      console.error('❌ [CORE_STATE] completedContent는 문자열이어야 합니다');
+      console.error(
+        '❌ [CORE_STATE] completedContent는 문자열이어야 합니다:',
+        typeof state.completedContent
+      );
       return false;
     }
 
+    // 불린 타입 검증
     if (typeof state.isCompleted !== 'boolean') {
-      console.error('❌ [CORE_STATE] isCompleted는 불린값이어야 합니다');
+      console.error(
+        '❌ [CORE_STATE] isCompleted는 불린값이어야 합니다:',
+        typeof state.isCompleted
+      );
       return false;
+    }
+
+    // 각 배열 요소 유효성 검증 (옵션)
+    const { containers, paragraphs, sectionInputs } = state;
+
+    // 컨테이너 검증
+    if (Array.isArray(containers)) {
+      const invalidContainers = containers.filter((container) => {
+        return !(
+          container &&
+          typeof container === 'object' &&
+          typeof container.id === 'string' &&
+          typeof container.name === 'string' &&
+          typeof container.order === 'number'
+        );
+      });
+
+      if (invalidContainers.length > 0) {
+        console.warn(
+          '⚠️ [CORE_STATE] 유효하지 않은 컨테이너 발견:',
+          invalidContainers.length
+        );
+      }
+    }
+
+    // 단락 검증
+    if (Array.isArray(paragraphs)) {
+      const invalidParagraphs = paragraphs.filter((paragraph) => {
+        return !(
+          paragraph &&
+          typeof paragraph === 'object' &&
+          typeof paragraph.id === 'string' &&
+          typeof paragraph.content === 'string'
+        );
+      });
+
+      if (invalidParagraphs.length > 0) {
+        console.warn(
+          '⚠️ [CORE_STATE] 유효하지 않은 단락 발견:',
+          invalidParagraphs.length
+        );
+      }
+    }
+
+    // 섹션 입력 검증
+    if (Array.isArray(sectionInputs)) {
+      const invalidInputs = sectionInputs.filter(
+        (input) => typeof input !== 'string'
+      );
+
+      if (invalidInputs.length > 0) {
+        console.warn(
+          '⚠️ [CORE_STATE] 유효하지 않은 섹션 입력 발견:',
+          invalidInputs.length
+        );
+      }
     }
 
     console.log('✅ [CORE_STATE] 초기 상태 검증 통과');
@@ -113,62 +271,71 @@ export const validateInitialEditorCoreState = (
   }
 };
 
-// 안전한 초기 상태 생성 함수
-// 1. 검증을 거친 안전한 초기 상태 반환
-// 2. 오류 발생 시 하드코딩된 안전한 값 제공
+// 안전한 초기 상태 생성 함수 (강화됨)
 export const createSafeInitialEditorCoreState = (): EditorCoreState => {
   try {
-    // 1. 기본 초기 상태가 유효한지 검증
+    console.log('🛡️ [CORE_STATE] 안전한 초기 상태 생성 시작');
+
+    // 기본 초기 상태 검증
     if (validateInitialEditorCoreState(initialEditorCoreState)) {
       console.log('✅ [CORE_STATE] 기본 초기 상태 사용');
       return { ...initialEditorCoreState };
     }
 
-    // 2. 검증 실패 시 하드코딩된 안전한 값 사용
-    console.warn('⚠️ [CORE_STATE] 기본 초기 상태 검증 실패, 안전한 값 사용');
-    return {
+    console.warn(
+      '⚠️ [CORE_STATE] 기본 초기 상태 검증 실패, 하드코딩된 안전한 값 사용'
+    );
+
+    // 하드코딩된 안전한 상태
+    const safeState: EditorCoreState = {
       containers: [],
       paragraphs: [],
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
-      containerMoveHistory: [], // 🔄 안전한 기본값 추가
+      containerMoveHistory: [],
     };
+
+    console.log('✅ [CORE_STATE] 하드코딩된 안전한 상태 생성 완료');
+    return safeState;
   } catch (error) {
     console.error('❌ [CORE_STATE] 안전한 초기 상태 생성 중 오류:', error);
 
-    // 3. 모든 것이 실패할 경우 최후의 안전장치
+    // 최후의 안전장치
     return {
       containers: [],
       paragraphs: [],
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
-      containerMoveHistory: [], // 🔄 최후 안전장치에도 추가
+      containerMoveHistory: [],
     };
   }
 };
 
-// 초기 상태 복원 함수
-// 1. 현재 상태를 완전히 초기 상태로 되돌림
-// 2. 에디터 완전 리셋이 필요할 때 사용
+// 초기 상태 복원 함수 (강화됨)
 export const resetToInitialEditorCoreState = (): EditorCoreState => {
   console.log('🔄 [CORE_STATE] 초기 상태로 완전 복원');
 
   try {
     const freshInitialState = createSafeInitialEditorCoreState();
 
-    // 1. 새로운 객체로 생성하여 참조 분리
+    // 새로운 객체로 생성하여 참조 분리
     const resetState: EditorCoreState = {
-      containers: [...freshInitialState.containers], // 새로운 배열 생성
-      paragraphs: [...freshInitialState.paragraphs], // 새로운 배열 생성
+      containers: [...freshInitialState.containers],
+      paragraphs: [...freshInitialState.paragraphs],
       completedContent: freshInitialState.completedContent,
       isCompleted: freshInitialState.isCompleted,
-      sectionInputs: [...freshInitialState.sectionInputs], // 새로운 배열 생성
-      containerMoveHistory: [...freshInitialState.containerMoveHistory], // 🔄 새로운 배열 생성
+      sectionInputs: [...freshInitialState.sectionInputs],
+      containerMoveHistory: [...freshInitialState.containerMoveHistory],
     };
 
-    console.log('✅ [CORE_STATE] 초기 상태 복원 완료');
+    console.log('✅ [CORE_STATE] 초기 상태 복원 완료:', {
+      containerCount: resetState.containers.length,
+      paragraphCount: resetState.paragraphs.length,
+      sectionInputCount: resetState.sectionInputs.length,
+    });
+
     return resetState;
   } catch (error) {
     console.error('❌ [CORE_STATE] 초기 상태 복원 중 오류:', error);
@@ -180,8 +347,95 @@ export const resetToInitialEditorCoreState = (): EditorCoreState => {
       completedContent: '',
       isCompleted: false,
       sectionInputs: ['', '', '', ''],
-      containerMoveHistory: [], // 🔄 오류 시에도 안전한 기본값
+      containerMoveHistory: [],
     };
   }
 };
-//====여기까지 수정됨====
+
+// 🆕 완전히 비운 상태 생성 함수 (resetEditorState에서 사용)
+export const createEmptyEditorCoreState = (): EditorCoreState => {
+  console.log('🧹 [CORE_STATE] 완전히 빈 에디터 상태 생성');
+
+  const emptyState: EditorCoreState = {
+    containers: [], // 완전히 빈 배열
+    paragraphs: [], // 완전히 빈 배열
+    completedContent: '', // 빈 문자열
+    isCompleted: false, // 미완료
+    sectionInputs: ['', '', '', ''], // 빈 입력 필드만 유지
+    containerMoveHistory: [], // 빈 이동 이력
+  };
+
+  console.log('✅ [CORE_STATE] 완전히 빈 에디터 상태 생성 완료:', {
+    isAllEmpty:
+      emptyState.containers.length === 0 &&
+      emptyState.paragraphs.length === 0 &&
+      emptyState.completedContent === '' &&
+      emptyState.containerMoveHistory.length === 0,
+    sectionInputCount: emptyState.sectionInputs.length,
+  });
+
+  return emptyState;
+};
+
+// 🆕 특정 섹션 입력으로 빈 상태 생성 함수
+export const createEmptyStateWithSectionInputs = (
+  sectionInputs: string[]
+): EditorCoreState => {
+  const validSectionInputs = Array.isArray(sectionInputs)
+    ? sectionInputs.map((input) => (typeof input === 'string' ? input : ''))
+    : ['', '', '', ''];
+
+  console.log('🧹 [CORE_STATE] 섹션 입력 보존하여 빈 상태 생성:', {
+    sectionInputs: validSectionInputs,
+  });
+
+  const emptyStateWithInputs: EditorCoreState = {
+    containers: [], // 완전히 빈 배열
+    paragraphs: [], // 완전히 빈 배열
+    completedContent: '', // 빈 문자열
+    isCompleted: false, // 미완료
+    sectionInputs: validSectionInputs, // 전달받은 입력 보존
+    containerMoveHistory: [], // 빈 이동 이력
+  };
+
+  console.log('✅ [CORE_STATE] 섹션 입력 보존 빈 상태 생성 완료');
+
+  return emptyStateWithInputs;
+};
+
+// 🆕 상태 유형 확인 함수
+export const getStateType = (state: EditorCoreState): string => {
+  const hasContainers = state.containers.length > 0;
+  const hasParagraphs = state.paragraphs.length > 0;
+  const hasContent = state.completedContent.length > 0;
+  const hasSectionInputs = state.sectionInputs.some(
+    (input) => input.trim().length > 0
+  );
+
+  if (!hasContainers && !hasParagraphs && !hasContent) {
+    return hasSectionInputs ? 'empty-with-inputs' : 'completely-empty';
+  }
+
+  if (hasContainers && hasParagraphs && hasContent) {
+    return 'full-with-content';
+  }
+
+  return 'partial-state';
+};
+
+// 🆕 상태 디버깅 정보 함수
+export const getStateDebugInfo = (state: EditorCoreState) => {
+  return {
+    type: getStateType(state),
+    containerCount: state.containers.length,
+    paragraphCount: state.paragraphs.length,
+    contentLength: state.completedContent.length,
+    sectionInputCount: state.sectionInputs.length,
+    moveHistoryCount: state.containerMoveHistory.length,
+    validSectionInputs: state.sectionInputs.filter(
+      (input) => input.trim().length > 0
+    ),
+    isCompleted: state.isCompleted,
+    timestamp: new Date().toISOString(),
+  };
+};

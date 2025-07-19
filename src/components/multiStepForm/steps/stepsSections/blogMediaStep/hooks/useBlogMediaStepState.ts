@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useHybridImageGalleryStore } from '../../../../../../store/imageGallery/imageGalleryStore';
+import { useMultiStepFormStore } from '../../../../store/multiStepForm/multiStepFormStore';
 import type {
   FormValues,
   ToastItem,
@@ -37,6 +38,9 @@ export const useBlogMediaStepState = () => {
   const { watch, setValue, getValues } = useFormContext<FormValues>();
   const galleryStore = useHybridImageGalleryStore();
 
+  // 🚨 핵심 수정: multiStepFormStore 추가
+  const multiStepFormStore = useMultiStepFormStore();
+
   // 🚨 Race Condition 해결: 상태 락 시스템
   const [isStateLocked, setIsStateLocked] = useState(false);
   const [syncInitialized, setSyncInitialized] = useState(false);
@@ -57,15 +61,19 @@ export const useBlogMediaStepState = () => {
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  console.log('🔧 [BLOG_MEDIA_STATE] Race Condition 해결된 상태 관리 초기화:', {
-    currentMediaFilesCount: currentMediaFiles.length,
-    syncInitialized,
-    isStateLocked,
-    queueLength: operationQueueRef.current.length,
-    galleryStoreInitialized: galleryStore.getIsInitialized(),
-    raceConditionFixed: true,
-    timestamp: new Date().toLocaleTimeString(),
-  });
+  console.log(
+    '🔧 [BLOG_MEDIA_STATE] multiStepFormStore 연동된 상태 관리 초기화:',
+    {
+      currentMediaFilesCount: currentMediaFiles.length,
+      syncInitialized,
+      isStateLocked,
+      queueLength: operationQueueRef.current.length,
+      galleryStoreInitialized: galleryStore.getIsInitialized(),
+      hasMultiStepFormStore: !!multiStepFormStore,
+      multiStepFormStoreFixed: true,
+      timestamp: new Date().toLocaleTimeString(),
+    }
+  );
 
   // 🔧 상태 락 관리 함수들
   const acquireLock = useCallback(
@@ -394,6 +402,9 @@ export const useBlogMediaStepState = () => {
         // React Hook Form 즉시 업데이트
         setValue('media', finalFiles, { shouldDirty: true });
 
+        // 🚨 핵심 수정: multiStepFormStore도 동시 업데이트
+        multiStepFormStore.updateFormValue('media', finalFiles);
+
         // Zustand 동기화는 큐로 처리
         const syncOperation: StateUpdateOperation = {
           id: `sync_${Date.now()}`,
@@ -407,6 +418,7 @@ export const useBlogMediaStepState = () => {
         console.log('✅ [SET_MEDIA] 큐 기반 동기화 예약 완료:', {
           finalFilesCount: finalFiles.length,
           operationId: syncOperation.id,
+          multiStepFormStoreUpdated: true,
         });
       } catch (syncError) {
         console.error('❌ [SET_MEDIA] 동기화 예약 실패:', {
@@ -414,18 +426,50 @@ export const useBlogMediaStepState = () => {
         });
       }
     },
-    [isStateLocked, getValues, setValue, addToOperationQueue]
+    [
+      isStateLocked,
+      getValues,
+      setValue,
+      addToOperationQueue,
+      multiStepFormStore,
+    ]
   );
 
+  // 🚨 핵심 수정: setMainImageValue에 multiStepFormStore 연동 추가
   const setMainImageValue = useCallback(
     (imageUrl: string) => {
-      console.log('🔧 [SET_MAIN_IMAGE] setMainImageValue 호출:', {
-        imageUrlPreview: imageUrl ? imageUrl.slice(0, 30) + '...' : 'none',
-      });
+      console.log(
+        '🔧 [SET_MAIN_IMAGE] setMainImageValue 호출 - multiStepFormStore 연동:',
+        {
+          imageUrlPreview: imageUrl ? imageUrl.slice(0, 30) + '...' : 'none',
+          multiStepFormStoreFixed: true,
+        }
+      );
 
-      setValue('mainImage', imageUrl, { shouldDirty: true });
+      try {
+        // React Hook Form 업데이트
+        setValue('mainImage', imageUrl, { shouldDirty: true });
+
+        // 🚨 핵심 수정: multiStepFormStore 동시 업데이트
+        multiStepFormStore.updateFormValue('mainImage', imageUrl);
+
+        console.log(
+          '✅ [SET_MAIN_IMAGE] React Hook Form + multiStepFormStore 동시 업데이트 완료:',
+          {
+            imageUrlPreview: imageUrl ? imageUrl.slice(0, 30) + '...' : 'none',
+            reactHookFormUpdated: true,
+            multiStepFormStoreUpdated: true,
+            bothStoresSync: true,
+          }
+        );
+      } catch (updateError) {
+        console.error('❌ [SET_MAIN_IMAGE] 메인 이미지 업데이트 실패:', {
+          error: updateError,
+          imageUrl,
+        });
+      }
     },
-    [setValue]
+    [setValue, multiStepFormStore]
   );
 
   const setSelectedFileNames = useCallback(
@@ -504,13 +548,14 @@ export const useBlogMediaStepState = () => {
     });
   }, [isStateLocked, addToOperationQueue]);
 
-  console.log('✅ [BLOG_MEDIA_STATE] Race Condition 해결된 상태 반환:', {
+  console.log('✅ [BLOG_MEDIA_STATE] multiStepFormStore 연동된 상태 반환:', {
     formValuesKeys: Object.keys(formValues),
     currentMediaFilesCount: currentMediaFiles.length,
     isStateLocked,
     queueLength: operationQueueRef.current.length,
     syncInitialized,
-    raceConditionFixed: true,
+    multiStepFormStoreFixed: true,
+    mainImageBindingFixed: true,
     stateQueueSystem: true,
     timestamp: new Date().toLocaleTimeString(),
   });
@@ -522,7 +567,7 @@ export const useBlogMediaStepState = () => {
     toasts,
 
     setMediaValue,
-    setMainImageValue,
+    setMainImageValue, // 🚨 이제 multiStepFormStore 연동됨
     setSelectedFileNames,
     addToast,
     removeToast,
