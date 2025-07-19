@@ -3,6 +3,23 @@
 import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 import type { FormValues } from '../../components/multiStepForm/types/formTypes';
 
+// 🔧 외부 에디터 데이터 인터페이스 - 새로 추가
+export interface ExternalEditorData {
+  readonly localContainers: readonly Container[];
+  readonly localParagraphs: readonly LocalParagraphForExternal[];
+}
+
+// 🔧 외부 데이터용 문단 인터페이스
+export interface LocalParagraphForExternal {
+  readonly id: string;
+  readonly content: string;
+  readonly containerId: string | null;
+  readonly order: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly originalId?: string;
+}
+
 // 🔧 기본 스냅샷 메타데이터 인터페이스 - Map 기반 최적화
 export interface SnapshotMetadata {
   readonly extractionTimestamp: number;
@@ -92,6 +109,7 @@ export interface BridgeSystemConfiguration {
   readonly strictTypeChecking: boolean;
   readonly customValidationRules: Map<string, (data: unknown) => boolean>;
   readonly featureFlags: Set<string>;
+  readonly [key: string]: unknown; // 인덱스 시그니처 추가
 }
 
 // 🔧 에디터 상태 스냅샷 - 모든 필수 데이터 포함
@@ -408,9 +426,10 @@ export interface DevelopmentUtilities {
 
 console.log('🏗️ [MODERN_BRIDGE_TYPES] 모든 브릿지 타입 정의 완료');
 console.log('📊 [MODERN_BRIDGE_TYPES] 인터페이스 개수:', {
-  coreInterfaces: 15,
+  coreInterfaces: 17,
   utilityTypes: 12,
   functionTypes: 11,
   helperInterfaces: 8,
 });
 console.log('✅ [MODERN_BRIDGE_TYPES] 타입 안전성 및 성능 최적화 완료');
+console.log('🔧 [MODERN_BRIDGE_TYPES] ExternalEditorData 인터페이스 추가 완료');

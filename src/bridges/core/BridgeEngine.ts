@@ -5,12 +5,15 @@ import type {
   BridgeOperationExecutionResult,
   EditorStateSnapshotForBridge,
   EditorToMultiStepDataTransformationResult,
+  ExternalEditorData,
+  LocalParagraphForExternal,
 } from '../editorMultiStepBridge/modernBridgeTypes';
 import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateCapture';
 import { createDataStructureTransformer } from '../editorMultiStepBridge/dataTransformProcessor';
 import { createMultiStepStateUpdater } from '../editorMultiStepBridge/multiStepUpdater';
 import { createBridgeDataValidationHandler } from '../editorMultiStepBridge/systemValidator';
 import { createBridgeErrorHandler } from '../editorMultiStepBridge/errorSystemManager';
+import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 
 // 🔧 엔진 상태 인터페이스
 interface BridgeEngineState {
@@ -18,6 +21,8 @@ interface BridgeEngineState {
   readonly lastOperationTime: number;
   readonly operationCount: number;
   readonly currentOperationId: string | null;
+  readonly hasExternalData: boolean;
+  readonly externalDataTimestamp: number;
 }
 
 // 🔧 엔진 컴포넌트 인터페이스
@@ -37,6 +42,7 @@ interface BridgeEngineMetrics {
   readonly totalOperations: number;
   readonly successfulOperations: number;
   readonly failedOperations: number;
+  readonly externalDataValidations: number;
 }
 
 // 🔧 엔진 상태 정보 인터페이스
@@ -51,6 +57,7 @@ interface BridgeEngineStatus {
   };
   readonly metrics: BridgeEngineMetrics;
   readonly isReady: boolean;
+  readonly hasValidExternalData: boolean;
 }
 
 // 🔧 안전한 타입 변환 유틸리티
@@ -129,6 +136,199 @@ function createSafeTypeConverters() {
   };
 }
 
+// 🔧 외부 데이터 검증 유틸리티
+function createExternalDataValidators() {
+  const isValidContainer = (candidate: unknown): candidate is Container => {
+    const isValidObject = candidate !== null && typeof candidate === 'object';
+    if (!isValidObject) {
+      return false;
+    }
+
+    const containerObj = candidate;
+    const hasRequiredProperties =
+      'id' in containerObj && 'name' in containerObj && 'order' in containerObj;
+
+    if (!hasRequiredProperties) {
+      return false;
+    }
+
+    const idValue = Reflect.get(containerObj, 'id');
+    const nameValue = Reflect.get(containerObj, 'name');
+    const orderValue = Reflect.get(containerObj, 'order');
+
+    const hasValidTypes =
+      typeof idValue === 'string' &&
+      typeof nameValue === 'string' &&
+      typeof orderValue === 'number';
+
+    return hasValidTypes && idValue.length > 0 && nameValue.length > 0;
+  };
+
+  const isValidParagraph = (
+    candidate: unknown
+  ): candidate is ParagraphBlock => {
+    const isValidObject = candidate !== null && typeof candidate === 'object';
+    if (!isValidObject) {
+      return false;
+    }
+
+    const paragraphObj = candidate;
+    const hasRequiredProperties =
+      'id' in paragraphObj &&
+      'content' in paragraphObj &&
+      'order' in paragraphObj &&
+      'containerId' in paragraphObj;
+
+    if (!hasRequiredProperties) {
+      return false;
+    }
+
+    const idValue = Reflect.get(paragraphObj, 'id');
+    const contentValue = Reflect.get(paragraphObj, 'content');
+    const orderValue = Reflect.get(paragraphObj, 'order');
+    const containerIdValue = Reflect.get(paragraphObj, 'containerId');
+
+    const hasValidTypes =
+      typeof idValue === 'string' &&
+      typeof contentValue === 'string' &&
+      typeof orderValue === 'number' &&
+      (containerIdValue === null || typeof containerIdValue === 'string');
+
+    return hasValidTypes && idValue.length > 0;
+  };
+
+  const isValidLocalParagraph = (
+    candidate: unknown
+  ): candidate is LocalParagraphForExternal => {
+    const isValidObject = candidate !== null && typeof candidate === 'object';
+    if (!isValidObject) {
+      return false;
+    }
+
+    const paragraphObj = candidate;
+    const hasRequiredProperties =
+      'id' in paragraphObj &&
+      'content' in paragraphObj &&
+      'order' in paragraphObj &&
+      'containerId' in paragraphObj &&
+      'createdAt' in paragraphObj &&
+      'updatedAt' in paragraphObj;
+
+    if (!hasRequiredProperties) {
+      return false;
+    }
+
+    const idValue = Reflect.get(paragraphObj, 'id');
+    const contentValue = Reflect.get(paragraphObj, 'content');
+    const orderValue = Reflect.get(paragraphObj, 'order');
+    const containerIdValue = Reflect.get(paragraphObj, 'containerId');
+    const createdAtValue = Reflect.get(paragraphObj, 'createdAt');
+    const updatedAtValue = Reflect.get(paragraphObj, 'updatedAt');
+
+    const hasValidTypes =
+      typeof idValue === 'string' &&
+      typeof contentValue === 'string' &&
+      typeof orderValue === 'number' &&
+      (containerIdValue === null || typeof containerIdValue === 'string') &&
+      createdAtValue instanceof Date &&
+      updatedAtValue instanceof Date;
+
+    return hasValidTypes && idValue.length > 0;
+  };
+
+  const isValidExternalData = (
+    candidate: unknown
+  ): candidate is ExternalEditorData => {
+    const isValidObject = candidate !== null && typeof candidate === 'object';
+    if (!isValidObject) {
+      console.debug('🔍 [BRIDGE_ENGINE] 외부 데이터가 객체가 아님');
+      return false;
+    }
+
+    const dataObj = candidate;
+    const hasRequiredProperties =
+      'localContainers' in dataObj && 'localParagraphs' in dataObj;
+
+    if (!hasRequiredProperties) {
+      console.debug('🔍 [BRIDGE_ENGINE] 외부 데이터 필수 속성 누락');
+      return false;
+    }
+
+    const containersValue = Reflect.get(dataObj, 'localContainers');
+    const paragraphsValue = Reflect.get(dataObj, 'localParagraphs');
+
+    const isValidContainersArray = Array.isArray(containersValue);
+    const isValidParagraphsArray = Array.isArray(paragraphsValue);
+
+    if (!isValidContainersArray || !isValidParagraphsArray) {
+      console.debug('🔍 [BRIDGE_ENGINE] 외부 데이터 배열 타입 오류');
+      return false;
+    }
+
+    console.debug('✅ [BRIDGE_ENGINE] 외부 데이터 구조 검증 통과');
+    return true;
+  };
+
+  const validateExternalDataQuality = (
+    externalData: ExternalEditorData
+  ): {
+    isQualityValid: boolean;
+    containerValidCount: number;
+    paragraphValidCount: number;
+    qualityScore: number;
+  } => {
+    console.debug('🔍 [BRIDGE_ENGINE] 외부 데이터 품질 검증 시작');
+
+    const { localContainers = [], localParagraphs = [] } = externalData;
+
+    // 컨테이너 검증
+    const validContainers = localContainers.filter(isValidContainer);
+    const containerValidCount = validContainers.length;
+    const containerQualityRatio =
+      localContainers.length > 0
+        ? containerValidCount / localContainers.length
+        : 1;
+
+    // 문단 검증
+    const validParagraphs = localParagraphs.filter(isValidLocalParagraph);
+    const paragraphValidCount = validParagraphs.length;
+    const paragraphQualityRatio =
+      localParagraphs.length > 0
+        ? paragraphValidCount / localParagraphs.length
+        : 1;
+
+    // 품질 점수 계산 (0-100)
+    const qualityScore = Math.round(
+      (containerQualityRatio + paragraphQualityRatio) * 50
+    );
+
+    // 품질 유효성 (80% 이상)
+    const isQualityValid = qualityScore >= 80;
+
+    console.debug('📊 [BRIDGE_ENGINE] 외부 데이터 품질 검증 결과:', {
+      containerValidCount,
+      paragraphValidCount,
+      qualityScore,
+      isQualityValid,
+    });
+
+    return {
+      isQualityValid,
+      containerValidCount,
+      paragraphValidCount,
+      qualityScore,
+    };
+  };
+
+  return {
+    isValidContainer,
+    isValidParagraph,
+    isValidLocalParagraph,
+    isValidExternalData,
+    validateExternalDataQuality,
+  };
+}
+
 // 🔧 엔진 검증 유틸리티
 function createBridgeEngineValidators() {
   const isValidConfiguration = (
@@ -146,7 +346,7 @@ function createBridgeEngineValidators() {
       'debugMode',
       'maxRetryAttempts',
       'timeoutMs',
-    ] as const;
+    ];
 
     const hasRequiredProperties = requiredProperties.every(
       (prop) => prop in configObject
@@ -170,7 +370,7 @@ function createBridgeEngineValidators() {
       'editorCompletedContent',
       'editorIsCompleted',
       'extractedTimestamp',
-    ] as const;
+    ];
 
     const hasRequiredProperties = requiredProperties.every(
       (prop) => prop in snapshotObject
@@ -192,7 +392,7 @@ function createBridgeEngineValidators() {
       'transformedContent',
       'transformedIsCompleted',
       'transformationSuccess',
-    ] as const;
+    ];
 
     const hasRequiredProperties = requiredProperties.every(
       (prop) => prop in resultObject
@@ -219,9 +419,156 @@ function createBridgeEngineValidators() {
   };
 }
 
+// 🔧 외부 데이터 스냅샷 생성 모듈
+function createExternalDataSnapshotGenerator() {
+  const generateSnapshotFromExternalData = (
+    externalData: ExternalEditorData
+  ): EditorStateSnapshotForBridge => {
+    console.debug('🔧 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성 시작');
+
+    const { localContainers = [], localParagraphs = [] } = externalData;
+    const extractionTimestamp = Date.now();
+
+    // 콘텐츠 생성
+    const sortedContainers = [...localContainers].sort(
+      (firstContainer: Container, secondContainer: Container) =>
+        firstContainer.order - secondContainer.order
+    );
+    const contentParts: string[] = [];
+
+    sortedContainers.forEach((container: Container) => {
+      const { id: containerId, name: containerName } = container;
+
+      // 해당 컨테이너의 문단들 찾기
+      const containerParagraphs = localParagraphs
+        .filter(
+          (paragraphItem: LocalParagraphForExternal) =>
+            paragraphItem.containerId === containerId
+        )
+        .sort(
+          (
+            firstParagraph: LocalParagraphForExternal,
+            secondParagraph: LocalParagraphForExternal
+          ) => firstParagraph.order - secondParagraph.order
+        );
+
+      const hasValidParagraphs = containerParagraphs.length > 0;
+      if (hasValidParagraphs) {
+        contentParts.push(`## ${containerName}`);
+
+        containerParagraphs.forEach(
+          (paragraphItem: LocalParagraphForExternal) => {
+            const { content } = paragraphItem;
+            const hasValidContent = content && content.trim().length > 0;
+            hasValidContent ? contentParts.push(content.trim()) : null;
+          }
+        );
+
+        contentParts.push('');
+      }
+    });
+
+    // 할당되지 않은 문단들 추가
+    const unassignedParagraphs = localParagraphs
+      .filter(
+        (paragraphItem: LocalParagraphForExternal) =>
+          paragraphItem.containerId === null
+      )
+      .sort(
+        (
+          firstParagraph: LocalParagraphForExternal,
+          secondParagraph: LocalParagraphForExternal
+        ) => firstParagraph.order - secondParagraph.order
+      );
+
+    unassignedParagraphs.forEach((paragraphItem: LocalParagraphForExternal) => {
+      const { content } = paragraphItem;
+      const hasValidContent = content && content.trim().length > 0;
+      hasValidContent ? contentParts.push(content.trim()) : null;
+    });
+
+    const completedContent = contentParts.join('\n');
+    const isCompleted = completedContent.length > 0;
+
+    // 메타데이터 생성
+    const additionalMetrics = new Map<string, number>();
+    additionalMetrics.set('containerCount', localContainers.length);
+    additionalMetrics.set('paragraphCount', localParagraphs.length);
+    additionalMetrics.set('contentLength', completedContent.length);
+
+    const processingFlags = new Set<string>();
+    processingFlags.add('EXTERNAL_DATA_SOURCE');
+    processingFlags.add('SNAPSHOT_GENERATED');
+
+    const snapshotMetadata = {
+      extractionTimestamp,
+      processingDurationMs: 0,
+      validationStatus: true,
+      dataIntegrity: completedContent.length > 0,
+      sourceInfo: {
+        coreStoreVersion: 'external-1.0.0',
+        uiStoreVersion: 'external-1.0.0',
+      },
+      additionalMetrics,
+      processingFlags,
+    };
+
+    const contentStatistics = new Map<string, number>();
+    contentStatistics.set('totalContainers', localContainers.length);
+    contentStatistics.set('totalParagraphs', localParagraphs.length);
+    contentStatistics.set('totalContentLength', completedContent.length);
+
+    const validationCache = new Map<string, boolean>();
+    validationCache.set('structureValid', true);
+    validationCache.set('hasContent', completedContent.length > 0);
+
+    // ParagraphBlock 타입으로 변환
+    const convertedParagraphs: ParagraphBlock[] = localParagraphs.map(
+      (paragraphItem: LocalParagraphForExternal): ParagraphBlock => ({
+        id: paragraphItem.id,
+        content: paragraphItem.content,
+        containerId: paragraphItem.containerId,
+        order: paragraphItem.order,
+        createdAt: paragraphItem.createdAt,
+        updatedAt: paragraphItem.updatedAt,
+      })
+    );
+
+    const snapshot: EditorStateSnapshotForBridge = {
+      editorContainers: localContainers,
+      editorParagraphs: convertedParagraphs,
+      editorCompletedContent: completedContent,
+      editorIsCompleted: isCompleted,
+      editorActiveParagraphId: null,
+      editorSelectedParagraphIds: [],
+      editorIsPreviewOpen: false,
+      extractedTimestamp: extractionTimestamp,
+      snapshotMetadata,
+      contentStatistics,
+      validationCache,
+    };
+
+    console.debug('✅ [BRIDGE_ENGINE] 외부 데이터 스냅샷 생성 완료:', {
+      containerCount: localContainers.length,
+      paragraphCount: localParagraphs.length,
+      contentLength: completedContent.length,
+      isCompleted,
+    });
+
+    return snapshot;
+  };
+
+  return {
+    generateSnapshotFromExternalData,
+  };
+}
+
 // 🔧 메인 브릿지 엔진 생성 함수
-function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
-  console.log('🔧 [BRIDGE_ENGINE] 핵심 엔진 생성 시작');
+function createBridgeEngineCore(
+  configuration: BridgeSystemConfiguration,
+  externalData?: ExternalEditorData
+) {
+  console.log('🔧 [BRIDGE_ENGINE] 핵심 엔진 생성 시작 (외부 데이터 지원)');
 
   const {
     convertToSafeNumber,
@@ -230,18 +577,45 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
   } = createSafeTypeConverters();
   const { isValidSnapshot, isValidTransformationResult } =
     createBridgeEngineValidators();
+  const { isValidExternalData, validateExternalDataQuality } =
+    createExternalDataValidators();
+  const { generateSnapshotFromExternalData } =
+    createExternalDataSnapshotGenerator();
+
+  // 외부 데이터 검증
+  const hasValidExternalData = externalData
+    ? isValidExternalData(externalData)
+    : false;
+  const externalDataQuality =
+    hasValidExternalData && externalData
+      ? validateExternalDataQuality(externalData)
+      : {
+          isQualityValid: false,
+          containerValidCount: 0,
+          paragraphValidCount: 0,
+          qualityScore: 0,
+        };
+
+  console.log('📊 [BRIDGE_ENGINE] 외부 데이터 검증 결과:', {
+    hasValidExternalData,
+    qualityScore: externalDataQuality.qualityScore,
+    isQualityValid: externalDataQuality.isQualityValid,
+  });
 
   let engineState: BridgeEngineState = {
     isInitialized: false,
     lastOperationTime: 0,
     operationCount: 0,
     currentOperationId: null,
+    hasExternalData: hasValidExternalData,
+    externalDataTimestamp: hasValidExternalData ? Date.now() : 0,
   };
 
   let operationMetrics = {
     totalOperations: 0,
     successfulOperations: 0,
     failedOperations: 0,
+    externalDataValidations: 0,
   };
 
   const components: BridgeEngineComponents = {
@@ -258,7 +632,7 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
       ...updates,
       lastOperationTime: Date.now(),
     };
-    console.log('📊 [BRIDGE_ENGINE] 엔진 상태 업데이트:', engineState);
+    console.debug('📊 [BRIDGE_ENGINE] 엔진 상태 업데이트:', engineState);
   };
 
   const updateOperationMetrics = (success: boolean): void => {
@@ -275,9 +649,39 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
   };
 
   const validatePreconditions = (): boolean => {
-    console.log('🔍 [BRIDGE_ENGINE] 사전 조건 검증 시작');
+    console.log('🔍 [BRIDGE_ENGINE] 사전 조건 검증 시작 (외부 데이터 우선)');
 
     try {
+      // Early Return: 외부 데이터가 있는 경우 우선 사용
+      if (hasValidExternalData && externalData) {
+        console.log('✅ [BRIDGE_ENGINE] 외부 데이터를 사용한 검증');
+
+        operationMetrics = {
+          ...operationMetrics,
+          externalDataValidations: operationMetrics.externalDataValidations + 1,
+        };
+
+        // 외부 데이터 품질 체크
+        const isQualityAcceptable = externalDataQuality.isQualityValid;
+        const hasMinimumData =
+          externalDataQuality.containerValidCount > 0 ||
+          externalDataQuality.paragraphValidCount > 0;
+
+        const externalDataValid = isQualityAcceptable && hasMinimumData;
+
+        console.log('📊 [BRIDGE_ENGINE] 외부 데이터 기반 검증 결과:', {
+          isQualityAcceptable,
+          hasMinimumData,
+          externalDataValid,
+          containerValidCount: externalDataQuality.containerValidCount,
+          paragraphValidCount: externalDataQuality.paragraphValidCount,
+        });
+
+        return externalDataValid;
+      }
+
+      // 기존 스토어 기반 검증
+      console.log('🔄 [BRIDGE_ENGINE] 기존 스토어 기반 검증 시도');
       const snapshot = components.extractor.getEditorStateWithValidation();
 
       // Early Return: 스냅샷이 없는 경우
@@ -296,7 +700,7 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
         components.validator.validateForTransfer(snapshot);
       const { isValidForTransfer = false } = validationResult;
 
-      console.log('✅ [BRIDGE_ENGINE] 사전 조건 검증 완료:', {
+      console.log('✅ [BRIDGE_ENGINE] 기존 스토어 기반 검증 완료:', {
         isValidForTransfer,
       });
       return isValidForTransfer;
@@ -308,7 +712,7 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
 
   const executeTransferOperation =
     async (): Promise<BridgeOperationExecutionResult> => {
-      console.log('🚀 [BRIDGE_ENGINE] 전송 작업 실행 시작');
+      console.log('🚀 [BRIDGE_ENGINE] 전송 작업 실행 시작 (외부 데이터 지원)');
       const operationStartTime = performance.now();
       const operationId = `bridge_${Date.now()}_${Math.random()
         .toString(36)
@@ -326,10 +730,20 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
           throw new Error('사전 조건 검증 실패');
         }
 
-        // 2단계: 데이터 추출
-        const snapshot = components.extractor.getEditorStateWithValidation();
-        if (!snapshot) {
-          throw new Error('에디터 데이터 추출 실패');
+        // 2단계: 데이터 추출 (외부 데이터 우선)
+        let snapshot: EditorStateSnapshotForBridge;
+
+        if (hasValidExternalData && externalData) {
+          console.log('📤 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성');
+          snapshot = generateSnapshotFromExternalData(externalData);
+        } else {
+          console.log('📤 [BRIDGE_ENGINE] 기존 스토어로부터 스냅샷 추출');
+          const extractedSnapshot =
+            components.extractor.getEditorStateWithValidation();
+          if (!extractedSnapshot) {
+            throw new Error('에디터 데이터 추출 실패');
+          }
+          snapshot = extractedSnapshot;
         }
 
         // 3단계: 데이터 변환
@@ -365,22 +779,27 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
         successMetadata.set('operationId', operationId);
         successMetadata.set('processingTimeMs', operationDuration);
         successMetadata.set('transformationSuccess', true);
+        successMetadata.set(
+          'dataSource',
+          hasValidExternalData ? 'external' : 'store'
+        );
         successMetadata.set('componentStatus', 'all_operational');
 
         const performanceProfile = new Map<string, number>();
         performanceProfile.set('totalDuration', operationDuration);
-        performanceProfile.set('extractionPhase', 0); // 실제 측정 시 업데이트 필요
+        performanceProfile.set('extractionPhase', 0);
         performanceProfile.set('transformationPhase', 0);
         performanceProfile.set('updatePhase', 0);
 
         const resourceUsage = new Map<string, number>();
-        resourceUsage.set('memoryUsed', 0); // 실제 측정 시 업데이트 필요
+        resourceUsage.set('memoryUsed', 0);
         resourceUsage.set('cpuTime', operationDuration);
 
         console.log('✅ [BRIDGE_ENGINE] 전송 작업 성공:', {
           operationId,
           duration: `${operationDuration.toFixed(2)}ms`,
           operationCount: engineState.operationCount,
+          dataSource: hasValidExternalData ? 'external' : 'store',
         });
 
         return {
@@ -444,18 +863,18 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
     };
 
   const generateEngineMetrics = (): BridgeEngineMetrics => {
-    console.log('📊 [BRIDGE_ENGINE] 엔진 메트릭 생성');
+    console.debug('📊 [BRIDGE_ENGINE] 엔진 메트릭 생성');
 
     const componentStatusMap = new Map<string, boolean>();
-    componentStatusMap.set('extractor', Boolean(components.extractor));
-    componentStatusMap.set('transformer', Boolean(components.transformer));
-    componentStatusMap.set('updater', Boolean(components.updater));
-    componentStatusMap.set('validator', Boolean(components.validator));
-    componentStatusMap.set('errorHandler', Boolean(components.errorHandler));
+    componentStatusMap.set('extractor', !!components.extractor);
+    componentStatusMap.set('transformer', !!components.transformer);
+    componentStatusMap.set('updater', !!components.updater);
+    componentStatusMap.set('validator', !!components.validator);
+    componentStatusMap.set('errorHandler', !!components.errorHandler);
 
     const allComponentsOperational = Array.from(
       componentStatusMap.values()
-    ).every((status) => status);
+    ).every((status: boolean) => status);
 
     return {
       operationDuration: engineState.lastOperationTime,
@@ -464,11 +883,12 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
       totalOperations: operationMetrics.totalOperations,
       successfulOperations: operationMetrics.successfulOperations,
       failedOperations: operationMetrics.failedOperations,
+      externalDataValidations: operationMetrics.externalDataValidations,
     };
   };
 
   const initializeEngine = (): boolean => {
-    console.log('🔧 [BRIDGE_ENGINE] 엔진 초기화');
+    console.log('🔧 [BRIDGE_ENGINE] 엔진 초기화 (외부 데이터 지원)');
 
     try {
       const allComponentsReady = Object.values(components).every(
@@ -486,7 +906,10 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
         operationCount: 0,
       });
 
-      console.log('✅ [BRIDGE_ENGINE] 엔진 초기화 완료');
+      console.log('✅ [BRIDGE_ENGINE] 엔진 초기화 완료:', {
+        hasExternalData: hasValidExternalData,
+        externalDataQuality: externalDataQuality.qualityScore,
+      });
       return true;
     } catch (initError) {
       console.error('❌ [BRIDGE_ENGINE] 엔진 초기화 실패:', initError);
@@ -515,6 +938,7 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
       },
       metrics: generateEngineMetrics(),
       isReady: engineState.isInitialized && validatePreconditions(),
+      hasValidExternalData,
     };
   };
 
@@ -537,16 +961,20 @@ function createBridgeEngineCore(configuration: BridgeSystemConfiguration) {
     isInitialized: () => engineState.isInitialized,
     getCurrentOperationId: () => engineState.currentOperationId,
     getMetrics: generateEngineMetrics,
+    hasExternalData: () => hasValidExternalData,
+    getExternalDataQuality: () => externalDataQuality,
   };
 }
 
-// 🔧 메인 팩토리 함수
+// 🔧 메인 팩토리 함수 (외부 데이터 지원 추가)
 export function createBridgeEngine(
-  customConfiguration?: Partial<BridgeSystemConfiguration>
+  customConfiguration?: Partial<BridgeSystemConfiguration>,
+  externalData?: ExternalEditorData
 ) {
-  console.log('🏭 [BRIDGE_ENGINE] Bridge 엔진 팩토리 시작');
+  console.log('🏭 [BRIDGE_ENGINE] Bridge 엔진 팩토리 시작 (외부 데이터 지원)');
 
   const { isValidConfiguration } = createBridgeEngineValidators();
+  const { isValidExternalData } = createExternalDataValidators();
 
   const defaultConfiguration: BridgeSystemConfiguration = {
     enableValidation: true,
@@ -567,21 +995,36 @@ export function createBridgeEngine(
   // Early Return: 유효하지 않은 설정인 경우
   if (!isValidConfiguration(mergedConfiguration)) {
     console.error('❌ [BRIDGE_ENGINE] 유효하지 않은 설정으로 기본값 사용');
-    return createBridgeEngineCore(defaultConfiguration);
+    return createBridgeEngineCore(defaultConfiguration, externalData);
   }
+
+  // 외부 데이터 검증 및 로깅
+  const hasValidExternalData = externalData
+    ? isValidExternalData(externalData)
+    : false;
+  console.log('📊 [BRIDGE_ENGINE] 외부 데이터 상태:', {
+    hasExternalData: !!externalData,
+    isValidExternalData: hasValidExternalData,
+    containerCount: externalData?.localContainers?.length || 0,
+    paragraphCount: externalData?.localParagraphs?.length || 0,
+  });
 
   console.log('✅ [BRIDGE_ENGINE] Bridge 엔진 생성 완료:', {
     enableValidation: mergedConfiguration.enableValidation,
     debugMode: mergedConfiguration.debugMode,
     maxRetryAttempts: mergedConfiguration.maxRetryAttempts,
+    hasExternalData: hasValidExternalData,
   });
 
-  return createBridgeEngineCore(mergedConfiguration);
+  return createBridgeEngineCore(mergedConfiguration, externalData);
 }
 
-console.log('🏗️ [BRIDGE_ENGINE] 브릿지 엔진 모듈 초기화 완료');
+console.log(
+  '🏗️ [BRIDGE_ENGINE] 브릿지 엔진 모듈 초기화 완료 (외부 데이터 지원)'
+);
 console.log('📊 [BRIDGE_ENGINE] 제공 기능:', {
   transferExecution: '에디터 → 멀티스텝 전송',
+  externalDataSupport: '외부 데이터 주입 지원',
   preconditionValidation: '사전 조건 검증',
   componentManagement: '컴포넌트 생명주기 관리',
   errorHandling: '통합 에러 처리',

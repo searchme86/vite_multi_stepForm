@@ -5,16 +5,20 @@ import type {
   BridgeSystemConfiguration,
   BridgeOperationExecutionResult,
   BidirectionalSyncResult,
-} from '../editorMultiStepBridge/modernBridgeTypes'; // 🔧 경로 수정: bridgeDataTypes → modernBridgeTypes
+  ExternalEditorData,
+} from '../editorMultiStepBridge/modernBridgeTypes';
 import { createBridgeEngine } from '../core/BridgeEngine';
 import { createSyncEngine } from '../core/SyncEngine';
-import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateCapture'; // 🔧 경로 수정: editorDataExtractor → editorStateCapture, 함수명 수정
+import { createEditorStateExtractor } from '../editorMultiStepBridge/editorStateCapture';
+import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 
 // 🔧 통합 브릿지 상태 인터페이스 - 단순화된 3개 핵심 상태
 interface SimplifiedBridgeState {
   readonly isExecuting: boolean;
   readonly lastResult: BridgeOperationExecutionResult | null;
   readonly errorMessage: string | null;
+  readonly hasExternalData: boolean;
+  readonly externalDataTimestamp: number;
 }
 
 // 🔧 브릿지 실행 메트릭스 인터페이스
@@ -24,6 +28,7 @@ interface BridgeMetrics {
   readonly failedOperations: number;
   readonly lastDuration: number;
   readonly averageDuration: number;
+  readonly externalDataUsageCount: number;
 }
 
 // 🔧 브릿지 훅 반환 인터페이스
@@ -33,6 +38,7 @@ interface UseBridgeReturn {
   readonly lastResult: BridgeOperationExecutionResult | null;
   readonly errorMessage: string | null;
   readonly metrics: BridgeMetrics;
+  readonly hasExternalData: boolean;
 
   // 전송 기능
   readonly executeForwardTransfer: () => Promise<void>;
@@ -47,6 +53,7 @@ interface UseBridgeReturn {
   // 유틸리티 기능
   readonly resetState: () => void;
   readonly getConfiguration: () => BridgeSystemConfiguration;
+  readonly refreshExternalData: (newExternalData: ExternalEditorData) => void;
 }
 
 // 🔧 타입 가드 함수들
@@ -83,6 +90,96 @@ function isValidBridgeResult(
   ];
 
   return requiredProps.every((prop) => prop in resultObject);
+}
+
+function isValidContainer(candidate: unknown): candidate is Container {
+  const isValidObject = candidate !== null && typeof candidate === 'object';
+  if (!isValidObject) {
+    return false;
+  }
+
+  const containerObj = candidate;
+  const hasRequiredProperties =
+    'id' in containerObj && 'name' in containerObj && 'order' in containerObj;
+
+  if (!hasRequiredProperties) {
+    return false;
+  }
+
+  const idValue = Reflect.get(containerObj, 'id');
+  const nameValue = Reflect.get(containerObj, 'name');
+  const orderValue = Reflect.get(containerObj, 'order');
+
+  const hasValidTypes =
+    typeof idValue === 'string' &&
+    typeof nameValue === 'string' &&
+    typeof orderValue === 'number';
+
+  return hasValidTypes && idValue.length > 0 && nameValue.length > 0;
+}
+
+function isValidParagraph(candidate: unknown): candidate is ParagraphBlock {
+  const isValidObject = candidate !== null && typeof candidate === 'object';
+  if (!isValidObject) {
+    return false;
+  }
+
+  const paragraphObj = candidate;
+  const hasRequiredProperties =
+    'id' in paragraphObj &&
+    'content' in paragraphObj &&
+    'order' in paragraphObj &&
+    'containerId' in paragraphObj;
+
+  if (!hasRequiredProperties) {
+    return false;
+  }
+
+  const idValue = Reflect.get(paragraphObj, 'id');
+  const contentValue = Reflect.get(paragraphObj, 'content');
+  const orderValue = Reflect.get(paragraphObj, 'order');
+  const containerIdValue = Reflect.get(paragraphObj, 'containerId');
+
+  const hasValidTypes =
+    typeof idValue === 'string' &&
+    typeof contentValue === 'string' &&
+    typeof orderValue === 'number' &&
+    (containerIdValue === null || typeof containerIdValue === 'string');
+
+  return hasValidTypes && idValue.length > 0;
+}
+
+function isValidExternalData(
+  candidate: unknown
+): candidate is ExternalEditorData {
+  const isValidObject = candidate !== null && typeof candidate === 'object';
+  if (!isValidObject) {
+    return false;
+  }
+
+  const dataObj = candidate;
+  const hasRequiredProperties =
+    'localContainers' in dataObj && 'localParagraphs' in dataObj;
+
+  if (!hasRequiredProperties) {
+    return false;
+  }
+
+  const containersValue = Reflect.get(dataObj, 'localContainers');
+  const paragraphsValue = Reflect.get(dataObj, 'localParagraphs');
+
+  const isValidContainersArray = Array.isArray(containersValue);
+  const isValidParagraphsArray = Array.isArray(paragraphsValue);
+
+  if (!isValidContainersArray || !isValidParagraphsArray) {
+    return false;
+  }
+
+  // 배열 내 요소들의 유효성도 검증
+  const validContainers = containersValue.every(isValidContainer);
+  const validParagraphs = paragraphsValue.every(isValidParagraph);
+
+  return validContainers && validParagraphs;
 }
 
 // 🔧 안전한 타입 변환 함수들
@@ -164,37 +261,130 @@ async function withTimeout<T>(
   return Promise.race([promise, timeoutPromise]);
 }
 
-// 🔧 메인 useBridge Hook
-export function useBridge(
-  customConfig?: Partial<BridgeSystemConfiguration>
-): UseBridgeReturn {
-  console.log('🔧 [BRIDGE_HOOK] 통합 브릿지 훅 초기화 시작');
+// 🔧 외부 데이터 검증 및 처리 함수들
+function validateExternalDataQuality(externalData: ExternalEditorData): {
+  isValid: boolean;
+  containerCount: number;
+  paragraphCount: number;
+  qualityScore: number;
+  issues: string[];
+} {
+  console.debug('🔍 [BRIDGE_HOOK] 외부 데이터 품질 검증 시작');
 
-  // 🔧 상태 관리 (3개로 단순화)
+  const { localContainers = [], localParagraphs = [] } = externalData;
+  const issues: string[] = [];
+
+  // 컨테이너 검증
+  const validContainers = localContainers.filter(isValidContainer);
+  const containerCount = validContainers.length;
+  const invalidContainerCount = localContainers.length - containerCount;
+
+  invalidContainerCount > 0
+    ? issues.push(`${invalidContainerCount}개의 유효하지 않은 컨테이너`)
+    : null;
+
+  // 문단 검증
+  const validParagraphs = localParagraphs.filter(isValidParagraph);
+  const paragraphCount = validParagraphs.length;
+  const invalidParagraphCount = localParagraphs.length - paragraphCount;
+
+  invalidParagraphCount > 0
+    ? issues.push(`${invalidParagraphCount}개의 유효하지 않은 문단`)
+    : null;
+
+  // 품질 점수 계산
+  const totalItems = localContainers.length + localParagraphs.length;
+  const validItems = containerCount + paragraphCount;
+  const qualityScore =
+    totalItems > 0 ? Math.round((validItems / totalItems) * 100) : 100;
+
+  // 최소 데이터 요구사항 검증
+  const hasMinimumData = containerCount > 0 || paragraphCount > 0;
+  hasMinimumData ? null : issues.push('최소 데이터 요구사항 미충족');
+
+  const isValid = issues.length === 0 && qualityScore >= 80;
+
+  console.debug('📊 [BRIDGE_HOOK] 외부 데이터 품질 검증 결과:', {
+    isValid,
+    containerCount,
+    paragraphCount,
+    qualityScore,
+    issueCount: issues.length,
+  });
+
+  return {
+    isValid,
+    containerCount,
+    paragraphCount,
+    qualityScore,
+    issues,
+  };
+}
+
+// 🔧 메인 useBridge Hook (외부 데이터 지원 추가)
+export function useBridge(
+  customConfig?: Partial<BridgeSystemConfiguration>,
+  externalData?: ExternalEditorData | null // 🔧 null도 허용하도록 수정
+): UseBridgeReturn {
+  console.log('🔧 [BRIDGE_HOOK] 통합 브릿지 훅 초기화 시작 (외부 데이터 지원)');
+
+  // 🔧 외부 데이터 검증 (null 처리 추가)
+  const validatedExternalData = useMemo(() => {
+    // null이나 undefined인 경우 undefined로 통일
+    if (externalData === null || externalData === undefined) {
+      return undefined;
+    }
+
+    return isValidExternalData(externalData) ? externalData : undefined;
+  }, [externalData]);
+
+  const externalDataQuality = useMemo(() => {
+    return validatedExternalData
+      ? validateExternalDataQuality(validatedExternalData)
+      : {
+          isValid: false,
+          containerCount: 0,
+          paragraphCount: 0,
+          qualityScore: 0,
+          issues: ['외부 데이터가 제공되지 않음'],
+        };
+  }, [validatedExternalData]);
+
+  // 🔧 상태 관리 (외부 데이터 정보 추가)
   const [bridgeState, setBridgeState] = useState<SimplifiedBridgeState>({
     isExecuting: false,
     lastResult: null,
     errorMessage: null,
+    hasExternalData: !!validatedExternalData,
+    externalDataTimestamp: validatedExternalData ? Date.now() : 0,
   });
 
-  // 🔧 메트릭스 관리
+  // 🔧 메트릭스 관리 (외부 데이터 사용 횟수 추가)
   const metricsRef = useRef<BridgeMetrics>({
     totalOperations: 0,
     successfulOperations: 0,
     failedOperations: 0,
     lastDuration: 0,
     averageDuration: 0,
+    externalDataUsageCount: 0,
   });
 
   // 🔧 시간 추적
   const startTimeRef = useRef<number>(0);
   const isInitializedRef = useRef<boolean>(false);
 
-  // 🔧 엔진 인스턴스 생성
+  // 🔧 엔진 인스턴스 생성 (외부 데이터 전달)
   const bridgeEngine = useMemo(() => {
-    console.log('🏭 [BRIDGE_HOOK] Bridge 엔진 생성');
-    return createBridgeEngine(customConfig);
-  }, [customConfig]);
+    console.log('🏭 [BRIDGE_HOOK] Bridge 엔진 생성 (외부 데이터 포함)');
+    console.debug('📊 [BRIDGE_HOOK] 외부 데이터 상태:', {
+      hasExternalData: !!validatedExternalData,
+      qualityScore: externalDataQuality.qualityScore,
+      containerCount: externalDataQuality.containerCount,
+      paragraphCount: externalDataQuality.paragraphCount,
+    });
+
+    return createBridgeEngine(customConfig, validatedExternalData);
+  }, [customConfig, validatedExternalData]);
 
   const syncEngine = useMemo(() => {
     console.log('🏭 [BRIDGE_HOOK] Sync 엔진 생성');
@@ -208,19 +398,21 @@ export function useBridge(
     });
   }, []);
 
-  // 🔧 초기화 Effect
+  // 🔧 초기화 Effect (외부 데이터 상태 포함)
   useEffect(() => {
     // Early Return: 이미 초기화된 경우
     if (isInitializedRef.current) {
       return;
     }
 
-    console.log('🔧 [BRIDGE_HOOK] 초기화');
+    console.log('🔧 [BRIDGE_HOOK] 초기화 (외부 데이터 지원)');
 
     setBridgeState({
       isExecuting: false,
       lastResult: null,
       errorMessage: null,
+      hasExternalData: !!validatedExternalData,
+      externalDataTimestamp: validatedExternalData ? Date.now() : 0,
     });
 
     metricsRef.current = {
@@ -229,13 +421,30 @@ export function useBridge(
       failedOperations: 0,
       lastDuration: 0,
       averageDuration: 0,
+      externalDataUsageCount: 0,
     };
 
     startTimeRef.current = 0;
     isInitializedRef.current = true;
 
     console.log('✅ [BRIDGE_HOOK] 초기화 완료');
-  }, []);
+  }, [validatedExternalData]);
+
+  // 🔧 외부 데이터 변경 감지 Effect
+  useEffect(() => {
+    const hasExternalDataChanged =
+      !!validatedExternalData !== bridgeState.hasExternalData;
+
+    if (hasExternalDataChanged) {
+      console.log('🔄 [BRIDGE_HOOK] 외부 데이터 상태 변경 감지');
+
+      setBridgeState((prev) => ({
+        ...prev,
+        hasExternalData: !!validatedExternalData,
+        externalDataTimestamp: validatedExternalData ? Date.now() : 0,
+      }));
+    }
+  }, [validatedExternalData, bridgeState.hasExternalData]);
 
   // 🔧 실행 시작 상태 업데이트
   const updateExecutionStart = useCallback((): void => {
@@ -253,7 +462,8 @@ export function useBridge(
   const updateExecutionComplete = useCallback(
     (
       result: BridgeOperationExecutionResult | null,
-      error: string | null
+      error: string | null,
+      usedExternalData: boolean = false
     ): void => {
       console.log('✅ [BRIDGE_HOOK] 실행 완료');
 
@@ -270,6 +480,9 @@ export function useBridge(
       const newFailed = wasSuccessful
         ? prevMetrics.failedOperations
         : prevMetrics.failedOperations + 1;
+      const newExternalDataUsage = usedExternalData
+        ? prevMetrics.externalDataUsageCount + 1
+        : prevMetrics.externalDataUsageCount;
 
       const totalTime =
         prevMetrics.averageDuration * prevMetrics.totalOperations + duration;
@@ -281,6 +494,7 @@ export function useBridge(
         failedOperations: newFailed,
         lastDuration: convertToSafeNumber(duration, 0),
         averageDuration: convertToSafeNumber(newAverage, 0),
+        externalDataUsageCount: newExternalDataUsage,
       };
 
       setBridgeState((prev: SimplifiedBridgeState) => ({
@@ -293,7 +507,7 @@ export function useBridge(
     []
   );
 
-  // 🔧 Editor → MultiStep 전송
+  // 🔧 Editor → MultiStep 전송 (외부 데이터 지원)
   const executeForwardTransfer = useCallback(async (): Promise<void> => {
     // Early Return: 이미 실행 중
     if (bridgeState.isExecuting) {
@@ -312,8 +526,20 @@ export function useBridge(
 
         // Early Return: 사전 조건 확인
         if (!bridgeEngine.checkPreconditions()) {
-          throw new Error('전송 사전 조건 미충족');
+          const hasExternalData = !!validatedExternalData;
+          const errorMsg = hasExternalData
+            ? '외부 데이터가 있지만 전송 사전 조건 미충족'
+            : '전송 사전 조건 미충족 (외부 데이터 없음)';
+          throw new Error(errorMsg);
         }
+
+        // 외부 데이터 사용 여부 로깅
+        const usingExternalData = !!validatedExternalData;
+        console.log('📤 [BRIDGE_HOOK] 전송 데이터 소스:', {
+          source: usingExternalData ? 'external' : 'store',
+          hasExternalData: !!validatedExternalData,
+          qualityScore: externalDataQuality.qualityScore,
+        });
 
         return bridgeEngine.executeTransfer();
       };
@@ -329,12 +555,15 @@ export function useBridge(
         ? null
         : 'Editor → MultiStep 전송 실패';
 
-    updateExecutionComplete(result, errorMessage);
+    const usedExternalData = !!validatedExternalData;
+    updateExecutionComplete(result, errorMessage, usedExternalData);
   }, [
     bridgeState.isExecuting,
     bridgeEngine,
     updateExecutionStart,
     updateExecutionComplete,
+    validatedExternalData,
+    externalDataQuality.qualityScore,
   ]);
 
   // 🔧 MultiStep → Editor 전송
@@ -401,7 +630,7 @@ export function useBridge(
       : null;
 
     const errorMessage = success ? null : 'MultiStep → Editor 전송 실패';
-    updateExecutionComplete(mockResult, errorMessage);
+    updateExecutionComplete(mockResult, errorMessage, false);
   }, [
     bridgeState.isExecuting,
     syncEngine,
@@ -420,7 +649,7 @@ export function useBridge(
     updateExecutionStart();
 
     const executeBidirectional = async (): Promise<BidirectionalSyncResult> => {
-      // 실제 에디터 데이터 추출 - 🔧 함수명 수정
+      // 실제 에디터 데이터 추출
       const editorExtractor = createEditorStateExtractor();
       const editorData = editorExtractor.getEditorStateWithValidation();
 
@@ -472,10 +701,10 @@ export function useBridge(
       ? null
       : '양방향 동기화 현재 지원 불가 (MultiStep 추출기 미구현)';
 
-    updateExecutionComplete(mockResult, errorMessage);
+    updateExecutionComplete(mockResult, errorMessage, false);
   }, [bridgeState.isExecuting, updateExecutionStart, updateExecutionComplete]);
 
-  // 🔧 검증 상태 계산
+  // 🔧 검증 상태 계산 (외부 데이터 고려)
   const canExecuteForward = useMemo((): boolean => {
     // Early Return: 실행 중
     if (bridgeState.isExecuting) {
@@ -483,12 +712,36 @@ export function useBridge(
     }
 
     try {
-      return bridgeEngine.checkPreconditions();
+      // 외부 데이터가 있는 경우 더 관대한 검증
+      const hasExternalData = !!validatedExternalData;
+      const externalDataIsQuality = externalDataQuality.isValid;
+
+      if (hasExternalData && externalDataIsQuality) {
+        console.debug('✅ [BRIDGE_HOOK] 외부 데이터 기반 전방향 검증 통과');
+        return true;
+      }
+
+      // 기존 브리지 엔진 검증
+      const engineValidation = bridgeEngine.checkPreconditions();
+
+      console.debug('📊 [BRIDGE_HOOK] 전방향 검증 결과:', {
+        hasExternalData,
+        externalDataIsQuality,
+        engineValidation,
+        finalResult: engineValidation,
+      });
+
+      return engineValidation;
     } catch (error) {
       console.warn('⚠️ [BRIDGE_HOOK] 전방향 검증 실패:', error);
       return false;
     }
-  }, [bridgeState.isExecuting, bridgeEngine]);
+  }, [
+    bridgeState.isExecuting,
+    bridgeEngine,
+    validatedExternalData,
+    externalDataQuality.isValid,
+  ]);
 
   const canExecuteReverse = useMemo((): boolean => {
     // Early Return: 실행 중
@@ -513,11 +766,12 @@ export function useBridge(
   const resetState = useCallback((): void => {
     console.log('🔄 [BRIDGE_HOOK] 상태 초기화');
 
-    setBridgeState({
+    setBridgeState((prev) => ({
+      ...prev,
       isExecuting: false,
       lastResult: null,
       errorMessage: null,
-    });
+    }));
 
     metricsRef.current = {
       totalOperations: 0,
@@ -525,6 +779,7 @@ export function useBridge(
       failedOperations: 0,
       lastDuration: 0,
       averageDuration: 0,
+      externalDataUsageCount: 0,
     };
 
     startTimeRef.current = 0;
@@ -535,6 +790,28 @@ export function useBridge(
       console.warn('⚠️ [BRIDGE_HOOK] Sync 엔진 초기화 실패:', error);
     }
   }, [syncEngine]);
+
+  // 🔧 외부 데이터 새로고침
+  const refreshExternalData = useCallback(
+    (newExternalData: ExternalEditorData): void => {
+      console.log('🔄 [BRIDGE_HOOK] 외부 데이터 새로고침');
+
+      const isValidNewData = isValidExternalData(newExternalData);
+      if (!isValidNewData) {
+        console.warn('⚠️ [BRIDGE_HOOK] 유효하지 않은 새 외부 데이터');
+        return;
+      }
+
+      setBridgeState((prev) => ({
+        ...prev,
+        hasExternalData: true,
+        externalDataTimestamp: Date.now(),
+      }));
+
+      console.log('✅ [BRIDGE_HOOK] 외부 데이터 새로고침 완료');
+    },
+    []
+  );
 
   // 🔧 설정 조회
   const getConfiguration = useCallback((): BridgeSystemConfiguration => {
@@ -556,13 +833,14 @@ export function useBridge(
     }
   }, [bridgeEngine]);
 
-  // 🔧 Hook 반환값
+  // 🔧 Hook 반환값 (외부 데이터 정보 포함)
   return {
     // 핵심 상태
     isExecuting: bridgeState.isExecuting,
     lastResult: bridgeState.lastResult,
     errorMessage: bridgeState.errorMessage,
     metrics: { ...metricsRef.current },
+    hasExternalData: bridgeState.hasExternalData,
 
     // 전송 기능
     executeForwardTransfer,
@@ -577,5 +855,6 @@ export function useBridge(
     // 유틸리티 기능
     resetState,
     getConfiguration,
+    refreshExternalData,
   };
 }
