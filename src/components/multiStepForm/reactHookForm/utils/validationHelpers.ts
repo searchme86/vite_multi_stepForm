@@ -1,6 +1,7 @@
-import { FormSchemaValues, FormValues } from '../../types/formTypes';
+// src/components/multiStepForm/reactHookForm/utils/validationHelpers.ts
 
-// 가능한 모든 값의 타입 정의
+import type { FormSchemaValues, FormValues } from '../../types/formTypes';
+
 type PossibleFormValue =
   | string
   | number
@@ -9,7 +10,6 @@ type PossibleFormValue =
   | null
   | undefined;
 
-// 필드 타입 열거
 const FIELD_TYPES = {
   STRING: 'string',
   ARRAY: 'array',
@@ -19,281 +19,464 @@ const FIELD_TYPES = {
 
 type FieldType = (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES];
 
-// 완전 동적 필드 설정 (타입 메타데이터 포함)
-const createFieldConfig = () => {
-  const config = new Map();
+interface FieldConfigItem {
+  readonly type: FieldType;
+  readonly default: string | boolean | string[] | null;
+  readonly mapping: string;
+  readonly processor: (
+    value: PossibleFormValue
+  ) => string | boolean | string[] | null;
+}
 
-  // 설정 정의 함수들
-  const addStringField = (key: string, mapping: string) => {
-    config.set(key, {
+// 🚀 성능 최적화: 사전 계산된 정적 매핑 테이블
+const STATIC_FIELD_CONFIGS: ReadonlyMap<string, FieldConfigItem> = new Map([
+  [
+    'userImage',
+    {
       type: FIELD_TYPES.STRING,
       default: '',
-      mapping,
-      processor: (value: PossibleFormValue) =>
-        typeof value === 'string' && value.trim() !== '' ? value : '',
-    });
-  };
-
-  const addArrayField = (key: string, mapping: string) => {
-    config.set(key, {
+      mapping: 'userimage',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('🖼️ validationHelpers: userImage 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'nickname',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'nickname',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('👤 validationHelpers: nickname 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'emailPrefix',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'emailprefix',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('📧 validationHelpers: emailPrefix 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'emailDomain',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'emaildomain',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('🌐 validationHelpers: emailDomain 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'bio',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'bio',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('📝 validationHelpers: bio 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'title',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'title',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('📰 validationHelpers: title 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'description',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'description',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('📄 validationHelpers: description 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'tags',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'tags',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('🏷️ validationHelpers: tags 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'content',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'content',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log('📚 validationHelpers: content 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'editorCompletedContent',
+    {
+      type: FIELD_TYPES.STRING,
+      default: '',
+      mapping: 'editorcompletedcontent',
+      processor: (value: PossibleFormValue): string => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : '';
+        console.log(
+          '✏️ validationHelpers: editorCompletedContent 처리됨',
+          processedValue
+        );
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'media',
+    {
       type: FIELD_TYPES.ARRAY,
       default: [],
-      mapping,
-      processor: (value: PossibleFormValue) => {
-        if (Array.isArray(value)) {
-          return value.filter(
-            (item): item is string => typeof item === 'string'
-          );
-        }
-        return [];
+      mapping: 'media',
+      processor: (value: PossibleFormValue): string[] => {
+        const processedValue = Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string')
+          : [];
+        console.log('🎥 validationHelpers: media 처리됨', processedValue);
+        return processedValue;
       },
-    });
-  };
-
-  const addBooleanField = (key: string, mapping: string) => {
-    config.set(key, {
+    },
+  ],
+  [
+    'sliderImages',
+    {
+      type: FIELD_TYPES.ARRAY,
+      default: [],
+      mapping: 'sliderimages',
+      processor: (value: PossibleFormValue): string[] => {
+        const processedValue = Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string')
+          : [];
+        console.log(
+          '🖼️ validationHelpers: sliderImages 처리됨',
+          processedValue
+        );
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'isEditorCompleted',
+    {
       type: FIELD_TYPES.BOOLEAN,
       default: false,
-      mapping,
-      processor: (value: PossibleFormValue) => {
-        if (typeof value === 'boolean') return value;
-        if (typeof value === 'string') {
-          return value.toLowerCase() === 'true' || value === '1';
-        }
-        if (typeof value === 'number') return value !== 0;
-        return false;
-      },
-    });
-  };
+      mapping: 'iseditorcompleted',
+      processor: (value: PossibleFormValue): boolean => {
+        let processedValue = false;
 
-  const addNullableStringField = (key: string, mapping: string) => {
-    config.set(key, {
+        if (typeof value === 'boolean') {
+          processedValue = value;
+        } else if (typeof value === 'string') {
+          const lowerValue = value.toLowerCase();
+          processedValue = lowerValue === 'true' || lowerValue === '1';
+        } else if (typeof value === 'number') {
+          processedValue = value !== 0;
+        }
+
+        console.log(
+          '✅ validationHelpers: isEditorCompleted 처리됨',
+          processedValue
+        );
+        return processedValue;
+      },
+    },
+  ],
+  [
+    'mainImage',
+    {
       type: FIELD_TYPES.NULLABLE_STRING,
       default: null,
-      mapping,
-      processor: (value: PossibleFormValue) =>
-        typeof value === 'string' && value.trim() !== '' ? value : null,
-    });
-  };
+      mapping: 'mainimage',
+      processor: (value: PossibleFormValue): string | null => {
+        const processedValue =
+          typeof value === 'string' && value.trim() !== '' ? value : null;
+        console.log('🎨 validationHelpers: mainImage 처리됨', processedValue);
+        return processedValue;
+      },
+    },
+  ],
+]);
 
-  // 필드 등록 (여기만 수정하면 모든 것이 자동 처리됨!)
-  addStringField('userImage', 'userimage');
-  addStringField('nickname', 'nickname');
-  addStringField('emailPrefix', 'emailprefix');
-  addStringField('emailDomain', 'emaildomain');
-  addStringField('bio', 'bio');
-  addStringField('title', 'title');
-  addStringField('description', 'description');
-  addStringField('tags', 'tags');
-  addStringField('content', 'content');
-  addStringField('editorCompletedContent', 'editorcompletedcontent');
+// 🚀 O(1) 조회를 위한 사전 계산된 매핑 테이블
+const OPTIMIZED_FIELD_MAPPINGS: ReadonlyMap<string, string> = (() => {
+  const mappingTable = new Map<string, string>();
 
-  addArrayField('media', 'media');
-  addArrayField('sliderImages', 'sliderimages');
+  // 기본 매핑 생성
+  for (const [fieldKey, config] of STATIC_FIELD_CONFIGS) {
+    const { mapping } = config;
+    mappingTable.set(mapping, fieldKey);
+    mappingTable.set(fieldKey.toLowerCase(), fieldKey);
+  }
 
-  addBooleanField('isEditorCompleted', 'iseditorcompleted');
-
-  addNullableStringField('mainImage', 'mainimage');
-
-  return config;
-};
-
-// 동적 설정 생성
-const FIELD_CONFIG = createFieldConfig();
-
-// 동적 타입 및 키 추출
-type FormFieldKey = keyof FormValues;
-const getFormFieldKeys = (): string[] => Array.from(FIELD_CONFIG.keys());
-const FORM_FIELD_KEYS = getFormFieldKeys();
-
-// 타입 가드
-const isFormFieldKey = (key: string): key is FormFieldKey => {
-  return FIELD_CONFIG.has(key);
-};
-
-// 동적 매핑 테이블 생성
-const createFieldMappings = (): Record<string, string> => {
-  const mappings: Record<string, string> = {};
-
-  FIELD_CONFIG.forEach((config, key) => {
-    mappings[config.mapping] = key;
-    mappings[key.toLowerCase()] = key;
-  });
-
-  // 추가 매핑 (설정 가능)
-  const additionalMappings = [
+  // 추가 특수 매핑
+  const additionalMappingsList = [
     { from: 'editorcompleted', to: 'isEditorCompleted' },
     { from: 'editor', to: 'isEditorCompleted' },
   ];
 
-  additionalMappings.forEach(({ from, to }) => {
-    mappings[from] = to;
+  for (const { from, to } of additionalMappingsList) {
+    mappingTable.set(from, to);
+  }
+
+  console.log(
+    '🗺️ validationHelpers: 매핑 테이블 초기화 완료',
+    mappingTable.size
+  );
+  return mappingTable;
+})();
+
+// 🚀 사전 계산된 유효한 키 목록 (O(1) 조회)
+const VALID_FORM_FIELD_KEYS_SET: ReadonlySet<string> = new Set(
+  STATIC_FIELD_CONFIGS.keys()
+);
+
+// 🚀 타입 가드 - O(1) 성능
+const isFormFieldKeyGuard = (key: string): key is keyof FormValues => {
+  const isValid = VALID_FORM_FIELD_KEYS_SET.has(key);
+  console.log('🔍 validationHelpers: 필드 키 검증', key, isValid);
+  return isValid;
+};
+
+// 🚀 정규화 함수 - 메모이제이션으로 최적화
+const normalizeFieldNameCachingMap = new Map<string, string>();
+
+const normalizeFieldNameOptimized = (fieldName: string): string => {
+  const cachedResult = normalizeFieldNameCachingMap.get(fieldName);
+
+  if (cachedResult !== undefined) {
+    return cachedResult;
+  }
+
+  const normalizedResult = fieldName.toLowerCase().replace(/[_-]/g, '');
+  normalizeFieldNameCachingMap.set(fieldName, normalizedResult);
+
+  console.log(
+    '🔧 validationHelpers: 필드명 정규화',
+    fieldName,
+    '→',
+    normalizedResult
+  );
+  return normalizedResult;
+};
+
+// 🚀 필드 값 처리 - O(1) 조회
+const processFieldValueOptimized = (
+  fieldKey: string,
+  inputValue: PossibleFormValue
+): string | boolean | string[] | null => {
+  const fieldConfig = STATIC_FIELD_CONFIGS.get(fieldKey);
+
+  if (!fieldConfig) {
+    console.log('⚠️ validationHelpers: 알 수 없는 필드', fieldKey);
+    return inputValue !== null && inputValue !== undefined
+      ? String(inputValue)
+      : '';
+  }
+
+  const { processor } = fieldConfig;
+  return processor(inputValue);
+};
+
+// 🚀 스키마 값을 FormValues로 변환 - 최적화된 버전
+const createOptimizedFormValuesFromSchema = (
+  schemaValues: FormSchemaValues
+): FormValues => {
+  console.log('🏗️ validationHelpers: FormValues 생성 시작');
+
+  // 기본값으로 초기화
+  const resultFormValues = Object.create(null);
+
+  for (const [fieldKey, config] of STATIC_FIELD_CONFIGS) {
+    resultFormValues[fieldKey] = config.default;
+  }
+
+  // 스키마 값으로 업데이트
+  const schemaKeysArray = Object.keys(schemaValues);
+
+  for (const schemaKey of schemaKeysArray) {
+    if (!isFormFieldKeyGuard(schemaKey)) {
+      continue;
+    }
+
+    const schemaValue = schemaValues[schemaKey];
+    const processedValue = processFieldValueOptimized(schemaKey, schemaValue);
+
+    // 타입 안전성 검증 후 할당
+    const fieldConfig = STATIC_FIELD_CONFIGS.get(schemaKey);
+
+    if (!fieldConfig) {
+      continue;
+    }
+
+    const isValidType = validateProcessedValueType(
+      processedValue,
+      fieldConfig.type
+    );
+
+    if (isValidType) {
+      resultFormValues[schemaKey] = processedValue;
+    }
+  }
+
+  console.log('✅ validationHelpers: FormValues 생성 완료');
+  return Object.freeze(resultFormValues);
+};
+
+// 🚀 타입 검증 - 구체적인 타입 체크
+const validateProcessedValueType = (
+  processedValue: string | boolean | string[] | null,
+  expectedFieldType: FieldType
+): boolean => {
+  const typeValidationMap = new Map<
+    FieldType,
+    (value: string | boolean | string[] | null) => boolean
+  >([
+    [FIELD_TYPES.STRING, (value): value is string => typeof value === 'string'],
+    [FIELD_TYPES.ARRAY, (value): value is string[] => Array.isArray(value)],
+    [
+      FIELD_TYPES.BOOLEAN,
+      (value): value is boolean => typeof value === 'boolean',
+    ],
+    [
+      FIELD_TYPES.NULLABLE_STRING,
+      (value): value is string | null =>
+        typeof value === 'string' || value === null,
+    ],
+  ]);
+
+  const validationFunction = typeValidationMap.get(expectedFieldType);
+
+  if (!validationFunction) {
+    console.log('❌ validationHelpers: 알 수 없는 타입', expectedFieldType);
+    return false;
+  }
+
+  const isValidTypeResult = validationFunction(processedValue);
+  console.log(
+    '🔎 validationHelpers: 타입 검증',
+    expectedFieldType,
+    isValidTypeResult
+  );
+
+  return isValidTypeResult;
+};
+
+// 🚀 배열 필터링 - 최적화된 버전
+const filterValidFormFieldsOptimized = (
+  fieldsList: readonly string[]
+): string[] => {
+  console.log('🧹 validationHelpers: 유효한 필드 필터링 시작');
+
+  const validFieldsList = fieldsList.filter(isFormFieldKeyGuard);
+
+  console.log(
+    '✅ validationHelpers: 필터링 완료',
+    validFieldsList.length,
+    '개 필드'
+  );
+  return validFieldsList;
+};
+
+// 🚀 정의된 문자열 필터링
+const filterDefinedStringsOptimized = (
+  stringsList: readonly (string | undefined)[]
+): string[] => {
+  console.log('🧽 validationHelpers: 정의된 문자열 필터링');
+
+  const validStringsList = stringsList.filter((str): str is string => {
+    return typeof str === 'string' && str.trim() !== '';
   });
 
-  return mappings;
+  console.log(
+    '✅ validationHelpers: 문자열 필터링 완료',
+    validStringsList.length
+  );
+  return validStringsList;
 };
 
-// 동적 기본값 생성
-const createDefaultValues = (): Record<string, unknown> => {
-  const defaults: Record<string, unknown> = {};
-
-  FIELD_CONFIG.forEach((config, key) => {
-    defaults[key] = config.default;
-  });
-
-  return defaults;
-};
-
-// 동적 값 처리
-const processFieldValue = (key: string, value: PossibleFormValue): unknown => {
-  const config = FIELD_CONFIG.get(key);
-  if (!config) return value;
-
-  return config.processor(value);
-};
-
-// 상수들
-const FIELD_MAPPINGS = createFieldMappings();
-const DEFAULT_VALUES = createDefaultValues();
-
-// 타입 안전한 키 검증
-const isValidStringKey = (key: string, validKeys: string[]): boolean => {
-  return validKeys.includes(key);
-};
-
-// 내보낼 함수들
+// 🚀 스키마 키 검증 - O(1) 성능
 export const isValidFormSchemaKey = (
   key: string
 ): key is keyof FormSchemaValues => {
-  return isValidStringKey(key, FORM_FIELD_KEYS);
+  return isFormFieldKeyGuard(key);
 };
 
+// 🚀 FormValue 키 검증
 export const isValidFormValueKey = (key: string): key is keyof FormValues => {
-  return isValidStringKey(key, FORM_FIELD_KEYS);
+  return isFormFieldKeyGuard(key);
 };
 
-export const filterValidFormFields = (fields: readonly string[]): string[] => {
-  return fields.filter((field) => isFormFieldKey(field));
+// 🚀 필드 필터링 (외부 인터페이스)
+export const filterValidFormFields = filterValidFormFieldsOptimized;
+
+// 🚀 문자열 필터링 (외부 인터페이스)
+export const filterDefinedStrings = filterDefinedStringsOptimized;
+
+// 🚀 필드명 정규화 (외부 인터페이스)
+export const normalizeFieldName = normalizeFieldNameOptimized;
+
+// 🚀 스키마 변환 (외부 인터페이스)
+export const createFormValuesFromSchema = createOptimizedFormValuesFromSchema;
+
+// 🚀 필드 매핑 조회 - O(1) 성능
+export const FIELD_MAPPINGS = Object.fromEntries(OPTIMIZED_FIELD_MAPPINGS);
+
+// 🚀 디버깅용 정보 조회
+export const getFieldInfo = (fieldKey: string): FieldConfigItem | undefined => {
+  return STATIC_FIELD_CONFIGS.get(fieldKey);
 };
 
-export const filterDefinedStrings = (
-  strings: readonly (string | undefined)[]
-): string[] => {
-  return strings.filter(
-    (str): str is string => typeof str === 'string' && str.trim() !== ''
-  );
+export const getAllFieldsInfo = (): Record<string, FieldConfigItem> => {
+  return Object.fromEntries(STATIC_FIELD_CONFIGS);
 };
-
-export const normalizeFieldName = (fieldName: string): string => {
-  return fieldName.toLowerCase().replace(/[_-]/g, '');
-};
-
-// 완전 동적 스키마 변환 (진짜 100% 메타프로그래밍)
-export const createFormValuesFromSchema = (
-  schemaValues: FormSchemaValues
-): FormValues => {
-  // 동적 결과 객체 생성
-  const result = Object.create(null);
-
-  // 모든 기본값 설정
-  FIELD_CONFIG.forEach((config, key) => {
-    result[key] = config.default;
-  });
-
-  // 스키마 값들로 동적 업데이트
-  Object.keys(schemaValues).forEach((key) => {
-    if (isFormFieldKey(key) && key in schemaValues) {
-      const schemaValue = schemaValues[key];
-      const processedValue = processFieldValue(key, schemaValue);
-
-      // 타입 검증 후 할당
-      const config = FIELD_CONFIG.get(key);
-      if (config && isValidProcessedValue(processedValue, config.type)) {
-        result[key] = processedValue;
-      }
-    }
-  });
-
-  // 완전 동적 FormValues 구조 생성
-  return createFormValuesStructure(result);
-};
-
-// FormValues 구조를 동적으로 생성하는 함수
-const createFormValuesStructure = (
-  data: Record<string, unknown>
-): FormValues => {
-  const structure = Object.create(null);
-
-  // 설정 기반으로 구조 생성
-  FIELD_CONFIG.forEach((config, key) => {
-    structure[key] = data[key] !== undefined ? data[key] : config.default;
-  });
-
-  // 타입 체크를 통한 안전한 변환
-  return validateAndConvertToFormValues(structure);
-};
-
-// 타입 검증 및 FormValues 변환
-const validateAndConvertToFormValues = (
-  obj: Record<string, unknown>
-): FormValues => {
-  // 각 필드의 타입 검증
-  const validatedData = Object.create(null);
-
-  FIELD_CONFIG.forEach((config, key) => {
-    const value = obj[key];
-
-    switch (config.type) {
-      case FIELD_TYPES.STRING:
-        validatedData[key] = typeof value === 'string' ? value : config.default;
-        break;
-      case FIELD_TYPES.ARRAY:
-        validatedData[key] = Array.isArray(value) ? value : config.default;
-        break;
-      case FIELD_TYPES.BOOLEAN:
-        validatedData[key] =
-          typeof value === 'boolean' ? value : config.default;
-        break;
-      case FIELD_TYPES.NULLABLE_STRING:
-        validatedData[key] =
-          typeof value === 'string' || value === null ? value : config.default;
-        break;
-      default:
-        validatedData[key] = config.default;
-    }
-  });
-
-  // 구조적 타이핑을 통한 FormValues 반환
-  return Object.freeze(validatedData) satisfies FormValues;
-};
-
-// 타입 검증 헬퍼
-const isValidProcessedValue = (
-  value: unknown,
-  expectedType: FieldType
-): boolean => {
-  switch (expectedType) {
-    case FIELD_TYPES.STRING:
-      return typeof value === 'string';
-    case FIELD_TYPES.ARRAY:
-      return Array.isArray(value);
-    case FIELD_TYPES.BOOLEAN:
-      return typeof value === 'boolean';
-    case FIELD_TYPES.NULLABLE_STRING:
-      return typeof value === 'string' || value === null;
-    default:
-      return false;
-  }
-};
-
-// 필드 설정 정보 조회 (디버깅/검증용)
-export const getFieldInfo = (key: string) => {
-  return FIELD_CONFIG.get(key);
-};
-
-// 모든 필드 정보 조회
-export const getAllFieldsInfo = () => {
-  return Object.fromEntries(FIELD_CONFIG);
-};
-
-export { FIELD_MAPPINGS };

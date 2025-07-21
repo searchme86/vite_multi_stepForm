@@ -10,292 +10,404 @@ import {
   getMaxStep,
   getMinStep,
   isValidStepNumber,
-  type StepNumber,
-} from '../types/stepTypes.ts';
+} from '../types/stepTypes';
+import type { StepNumber } from '../types/stepTypes';
+import {
+  convertCompatibleFormDataToFormValues,
+  convertFormValuesToCompatibleFormData,
+  isValidFormValues,
+  isValidCompatibleFormData,
+} from '../../../store/shared/commonTypes';
+import type {
+  FormValues,
+  BridgeFormValues,
+  CompatibleFormData,
+} from '../../../store/shared/commonTypes';
 
-// 🔧 구체적인 토스트 옵션 인터페이스 정의 (any 제거)
-interface ToastOptionsFromValidation {
-  title: string;
-  description?: string;
-  color: string;
+// 🔧 토스트 옵션 타입
+interface ValidationToastOptions {
+  readonly title: string;
+  readonly description?: string;
+  readonly color: string;
 }
 
-interface ToastOptionsFromFormSubmit {
-  title?: string;
-  color?: string;
-  message?: string;
+interface FormSubmitToastOptions {
+  readonly title?: string;
+  readonly color?: string;
+  readonly message?: string;
 }
 
-// 🔧 스텝 번호 변환 함수들 (타입단언 제거)
-const createNextStepNumber = (currentStepValue: StepNumber): StepNumber => {
-  const nextStepCandidate = currentStepValue + 1;
+// 🔧 스토어 데이터 타입 (mutable)
+interface MultiStepFormStoreData {
+  getFormValues?: () => CompatibleFormData;
+  updateFormValue?: (
+    fieldName: string,
+    value: string | string[] | boolean | null
+  ) => void;
+  updateFormValues?: (
+    values: Record<string, string | string[] | boolean | null>
+  ) => void;
+  addToast?: (toast: {
+    title: string;
+    description: string;
+    color: string;
+  }) => void;
+  updateEditorContent?: (content: string) => void;
+  setEditorCompleted?: (completed: boolean) => void;
+  setFormValues?: (values: BridgeFormValues) => void;
+}
 
-  // 유효성 검증을 통한 안전한 타입 변환
-  if (isValidStepNumber(nextStepCandidate)) {
-    return nextStepCandidate;
-  }
+// 🔧 실행 결과 타입
+interface ExecutionResult<DataType = void> {
+  success: boolean;
+  data?: DataType;
+  error?: string;
+}
 
-  // fallback: 현재 스텝 유지
-  console.warn(
-    '⚠️ [STEP_CONVERTER] 다음 스텝이 유효하지 않음, 현재 스텝 유지:',
-    {
-      currentStep: currentStepValue,
-      nextStepCandidate,
-    }
-  );
-  return currentStepValue;
+// 🔧 기본 폼 데이터
+const DEFAULT_FORM_DATA: FormValues = {
+  nickname: '',
+  emailPrefix: '',
+  emailDomain: '',
+  bio: '',
+  title: '',
+  description: '',
+  tags: '',
+  content: '',
+  userImage: '',
+  mainImage: null,
+  media: [],
+  sliderImages: [],
+  editorCompletedContent: '',
+  isEditorCompleted: false,
 };
 
-const createPrevStepNumber = (currentStepValue: StepNumber): StepNumber => {
-  const prevStepCandidate = currentStepValue - 1;
+// 🔧 스텝 번호 계산
+const calculateNextStepNumber = (currentStep: StepNumber): StepNumber => {
+  const nextStep = currentStep + 1;
+  return isValidStepNumber(nextStep) ? nextStep : currentStep;
+};
 
-  // 유효성 검증을 통한 안전한 타입 변환
-  if (isValidStepNumber(prevStepCandidate)) {
-    return prevStepCandidate;
+const calculatePrevStepNumber = (currentStep: StepNumber): StepNumber => {
+  const prevStep = currentStep - 1;
+  return isValidStepNumber(prevStep) ? prevStep : currentStep;
+};
+
+// 🔧 안전 실행 유틸리티
+const executeGetFormValues = (
+  storeData: MultiStepFormStoreData | null
+): ExecutionResult<CompatibleFormData> => {
+  try {
+    const { getFormValues } = storeData || {};
+    const result = typeof getFormValues === 'function' ? getFormValues() : {};
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: `getFormValues 실행 실패: ${error}` };
   }
+};
 
-  // fallback: 현재 스텝 유지
-  console.warn(
-    '⚠️ [STEP_CONVERTER] 이전 스텝이 유효하지 않음, 현재 스텝 유지:',
-    {
-      currentStep: currentStepValue,
-      prevStepCandidate,
+const executeUpdateFormValue = (
+  storeData: MultiStepFormStoreData | null,
+  fieldName: string,
+  value: string | string[] | boolean | null
+): ExecutionResult => {
+  try {
+    const { updateFormValue } = storeData || {};
+    if (typeof updateFormValue === 'function') {
+      updateFormValue(fieldName, value);
     }
-  );
-  return currentStepValue;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `updateFormValue 실행 실패: ${error}` };
+  }
+};
+
+const executeUpdateFormValues = (
+  storeData: MultiStepFormStoreData | null,
+  values: Record<string, string | string[] | boolean | null>
+): ExecutionResult => {
+  try {
+    const { updateFormValues } = storeData || {};
+    if (typeof updateFormValues === 'function') {
+      updateFormValues(values);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `updateFormValues 실행 실패: ${error}` };
+  }
+};
+
+const executeAddToast = (
+  storeData: MultiStepFormStoreData | null,
+  toast: { title: string; description: string; color: string }
+): ExecutionResult => {
+  try {
+    const { addToast } = storeData || {};
+    if (typeof addToast === 'function') {
+      addToast(toast);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `addToast 실행 실패: ${error}` };
+  }
+};
+
+const executeUpdateEditorContent = (
+  storeData: MultiStepFormStoreData | null,
+  content: string
+): ExecutionResult => {
+  try {
+    const { updateEditorContent } = storeData || {};
+    if (typeof updateEditorContent === 'function') {
+      updateEditorContent(content);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `updateEditorContent 실행 실패: ${error}` };
+  }
+};
+
+const executeSetEditorCompleted = (
+  storeData: MultiStepFormStoreData | null,
+  completed: boolean
+): ExecutionResult => {
+  try {
+    const { setEditorCompleted } = storeData || {};
+    if (typeof setEditorCompleted === 'function') {
+      setEditorCompleted(completed);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `setEditorCompleted 실행 실패: ${error}` };
+  }
+};
+
+const executeSetFormValues = (
+  storeData: MultiStepFormStoreData | null,
+  values: BridgeFormValues
+): ExecutionResult => {
+  try {
+    const { setFormValues } = storeData || {};
+    if (typeof setFormValues === 'function') {
+      setFormValues(values);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: `setFormValues 실행 실패: ${error}` };
+  }
 };
 
 export const useMultiStepFormState = () => {
-  console.log('🎣 [USE_MULTI_STEP_FORM_STATE] 훅 호출됨');
-
   const { methods, handleSubmit, errors, trigger } = useFormMethods();
+  const rawStoreData = useMultiStepFormStore();
 
-  // 🔧 실제 multiStepFormStore API 사용
-  const {
-    getFormValues,
-    updateFormValue,
-    addToast: storeAddToast,
-  } = useMultiStepFormStore();
+  // 🔧 스토어 데이터 변환
+  const storeData = useMemo<MultiStepFormStoreData | null>(() => {
+    if (!rawStoreData) {
+      return null;
+    }
 
-  // 🔧 로컬 상태로 스텝 관리 (스토어에 없는 기능)
-  const [currentStepState, setCurrentStepState] = useState<StepNumber>(
+    const storeMap = new Map(Object.entries(rawStoreData));
+    const typedStoreData: MultiStepFormStoreData = {};
+
+    // Map을 사용하여 안전하게 변환
+    const getFormValues = storeMap.get('getFormValues');
+    if (typeof getFormValues === 'function') {
+      typedStoreData.getFormValues = getFormValues;
+    }
+
+    const updateFormValue = storeMap.get('updateFormValue');
+    if (typeof updateFormValue === 'function') {
+      typedStoreData.updateFormValue = updateFormValue;
+    }
+
+    const updateFormValues = storeMap.get('updateFormValues');
+    if (typeof updateFormValues === 'function') {
+      typedStoreData.updateFormValues = updateFormValues;
+    }
+
+    const addToast = storeMap.get('addToast');
+    if (typeof addToast === 'function') {
+      typedStoreData.addToast = addToast;
+    }
+
+    const updateEditorContent = storeMap.get('updateEditorContent');
+    if (typeof updateEditorContent === 'function') {
+      typedStoreData.updateEditorContent = updateEditorContent;
+    }
+
+    const setEditorCompleted = storeMap.get('setEditorCompleted');
+    if (typeof setEditorCompleted === 'function') {
+      typedStoreData.setEditorCompleted = setEditorCompleted;
+    }
+
+    const setFormValues = storeMap.get('setFormValues');
+    if (typeof setFormValues === 'function') {
+      typedStoreData.setFormValues = setFormValues;
+    }
+
+    return typedStoreData;
+  }, [rawStoreData]);
+
+  // 🔧 로컬 상태로 스텝 관리
+  const [currentStep, setCurrentStep] = useState<StepNumber>(() =>
     getMinStep()
   );
-  const [progressWidthState, setProgressWidthState] = useState<number>(0);
+  const [progressWidth, setProgressWidth] = useState<number>(0);
 
-  console.log('📊 [USE_MULTI_STEP_FORM_STATE] 스토어 및 상태 초기화:', {
-    hasGetFormValues: typeof getFormValues === 'function',
-    hasUpdateFormValue: typeof updateFormValue === 'function',
-    hasAddToast: typeof storeAddToast === 'function',
-    currentStepState,
-    progressWidthState,
-    timestamp: new Date().toISOString(),
-  });
+  // 🔧 폼 데이터 조회
+  const formData = useMemo<FormValues>(() => {
+    const result = executeGetFormValues(storeData);
 
-  // 🔧 currentStep 안전성 확보
-  const currentStep = useMemo<StepNumber>(() => {
-    console.log('🔍 [USE_MULTI_STEP_FORM_STATE] currentStep 안전성 검증:', {
-      currentStepState,
-      stepType: typeof currentStepState,
-      timestamp: new Date().toISOString(),
-    });
-
-    const hasValidCurrentStep =
-      currentStepState !== null && currentStepState !== undefined;
-
-    if (!hasValidCurrentStep) {
-      console.warn(
-        '⚠️ [USE_MULTI_STEP_FORM_STATE] currentStepState가 null/undefined, fallback 적용'
-      );
-      const fallbackStep = getMinStep();
-      console.log(
-        '🔧 [USE_MULTI_STEP_FORM_STATE] fallback 스텝:',
-        fallbackStep
-      );
-      return fallbackStep;
+    if (!result.success || !result.data) {
+      return DEFAULT_FORM_DATA;
     }
 
-    const isValidStep = isValidStepNumber(currentStepState);
-
-    if (!isValidStep) {
-      console.warn(
-        '⚠️ [USE_MULTI_STEP_FORM_STATE] 지원되지 않는 스텝 번호, fallback 적용:',
-        {
-          invalidStep: currentStepState,
-        }
-      );
-      const fallbackStep = getMinStep();
-      console.log(
-        '🔧 [USE_MULTI_STEP_FORM_STATE] fallback 스텝:',
-        fallbackStep
-      );
-      return fallbackStep;
-    }
-
-    console.log(
-      '✅ [USE_MULTI_STEP_FORM_STATE] 유효한 currentStep:',
-      currentStepState
-    );
-    return currentStepState;
-  }, [currentStepState]);
-
-  // 🔧 폼 데이터 가져오기 (구조분해할당과 fallback)
-  const formData = useMemo(() => {
     try {
-      const rawFormData = getFormValues();
-      console.log('📋 [USE_MULTI_STEP_FORM_STATE] 폼 데이터 조회:', {
-        hasData: !!rawFormData,
-        keys: rawFormData ? Object.keys(rawFormData) : [],
-        timestamp: new Date().toISOString(),
-      });
+      const { data: rawFormData } = result;
 
-      // 구조분해할당과 fallback으로 안전한 데이터 추출
-      const {
-        nickname = '',
-        emailPrefix = '',
-        emailDomain = '',
-        bio = '',
-        title = '',
-        description = '',
-        tags = '',
-        content = '',
-        userImage = '',
-        mainImage = null,
-        media = [],
-        sliderImages = [],
-        editorCompletedContent = '',
-        isEditorCompleted = false,
-      } = rawFormData || {};
+      if (!isValidCompatibleFormData(rawFormData)) {
+        return DEFAULT_FORM_DATA;
+      }
 
-      return {
-        nickname,
-        emailPrefix,
-        emailDomain,
-        bio,
-        title,
-        description,
-        tags,
-        content,
-        userImage,
-        mainImage,
-        media,
-        sliderImages,
-        editorCompletedContent,
-        isEditorCompleted,
+      const convertedFormValues =
+        convertCompatibleFormDataToFormValues(rawFormData);
+      const formDataMap = new Map(Object.entries(convertedFormValues));
+
+      const extractedFormData: FormValues = {
+        nickname:
+          typeof formDataMap.get('nickname') === 'string'
+            ? formDataMap.get('nickname')
+            : '',
+        emailPrefix:
+          typeof formDataMap.get('emailPrefix') === 'string'
+            ? formDataMap.get('emailPrefix')
+            : '',
+        emailDomain:
+          typeof formDataMap.get('emailDomain') === 'string'
+            ? formDataMap.get('emailDomain')
+            : '',
+        bio:
+          typeof formDataMap.get('bio') === 'string'
+            ? formDataMap.get('bio')
+            : '',
+        title:
+          typeof formDataMap.get('title') === 'string'
+            ? formDataMap.get('title')
+            : '',
+        description:
+          typeof formDataMap.get('description') === 'string'
+            ? formDataMap.get('description')
+            : '',
+        tags:
+          typeof formDataMap.get('tags') === 'string'
+            ? formDataMap.get('tags')
+            : '',
+        content:
+          typeof formDataMap.get('content') === 'string'
+            ? formDataMap.get('content')
+            : '',
+        userImage:
+          typeof formDataMap.get('userImage') === 'string'
+            ? formDataMap.get('userImage')
+            : '',
+        mainImage:
+          formDataMap.get('mainImage') !== undefined
+            ? formDataMap.get('mainImage')
+            : null,
+        media: Array.isArray(formDataMap.get('media'))
+          ? formDataMap.get('media')
+          : [],
+        sliderImages: Array.isArray(formDataMap.get('sliderImages'))
+          ? formDataMap.get('sliderImages')
+          : [],
+        editorCompletedContent:
+          typeof formDataMap.get('editorCompletedContent') === 'string'
+            ? formDataMap.get('editorCompletedContent')
+            : '',
+        isEditorCompleted:
+          typeof formDataMap.get('isEditorCompleted') === 'boolean'
+            ? formDataMap.get('isEditorCompleted')
+            : false,
       };
+
+      return extractedFormData;
     } catch (error) {
-      console.error(
-        '❌ [USE_MULTI_STEP_FORM_STATE] 폼 데이터 조회 실패:',
-        error
-      );
-      return {
-        nickname: '',
-        emailPrefix: '',
-        emailDomain: '',
-        bio: '',
-        title: '',
-        description: '',
-        tags: '',
-        content: '',
-        userImage: '',
-        mainImage: null,
-        media: [],
-        sliderImages: [],
-        editorCompletedContent: '',
-        isEditorCompleted: false,
-      };
+      console.error('❌ 폼 데이터 변환 실패:', error);
+      return DEFAULT_FORM_DATA;
     }
-  }, [getFormValues]);
+  }, [storeData]);
 
-  // 🔧 에디터 상태 안전하게 처리 (구조분해할당 적용)
   const { editorCompletedContent = '', isEditorCompleted = false } = formData;
 
-  // 스텝 관련 정보를 useMemo로 최적화
-  const stepInformation = useMemo(() => {
-    const totalStepsCount = getTotalSteps();
-    const maxStepNumber = getMaxStep();
+  const stepInformation = useMemo(
+    () => ({
+      totalSteps: getTotalSteps(),
+      maxStep: getMaxStep(),
+    }),
+    []
+  );
 
-    console.log('📊 [USE_MULTI_STEP_FORM_STATE] 스텝 정보 계산됨:', {
-      totalStepsCount,
-      maxStepNumber,
-      currentStep,
-    });
-
-    return {
-      totalSteps: totalStepsCount,
-      maxStep: maxStepNumber,
-    };
-  }, [currentStep]);
-
-  // 🔧 진행률 계산 함수
-  const calculateProgress = useCallback((step: StepNumber): number => {
+  // 🔧 진행률 계산
+  const calculateProgressWidth = useCallback((step: StepNumber): number => {
     const minStep = getMinStep();
     const totalSteps = getTotalSteps();
 
-    if (totalSteps <= 1) return 100;
+    if (totalSteps <= 1) {
+      return 100;
+    }
 
     const progress = ((step - minStep) / (totalSteps - 1)) * 100;
     return Math.max(0, Math.min(100, progress));
   }, []);
 
-  // 🔧 안전한 토스트 함수 래핑 (multiStepFormStore API에 맞게 수정)
-  const safeAddToast = useCallback(
-    (message: string, color: 'success' | 'danger' | 'warning' | 'info') => {
-      console.log('📢 [USE_MULTI_STEP_FORM_STATE] 토스트 메시지:', {
-        message,
-        color,
-      });
-
-      if (typeof storeAddToast === 'function') {
-        // multiStepFormStore의 ToastMessage 형식에 맞게 수정
-        const toastMessage = {
-          title: message,
-          description: '', // 필수 속성 추가
-          color, // 이미 올바른 리터럴 타입
-        };
-        storeAddToast(toastMessage);
-      } else {
-        console.warn(
-          '⚠️ [USE_MULTI_STEP_FORM_STATE] addToast 함수를 찾을 수 없음'
-        );
-      }
-    },
-    [storeAddToast]
-  );
-
-  // 🔧 색상 타입 검증 함수 (타입단언 완전 제거)
-  const validateColorType = useCallback(
+  // 🔧 색상 검증 - 타입 단언 제거
+  const validateToastColor = useCallback(
     (color: string): 'success' | 'danger' | 'warning' | 'info' => {
-      // Map을 사용한 타입 안전한 검증 (as const 제거)
-      const validColorsMap = new Map<
-        string,
-        'success' | 'danger' | 'warning' | 'info'
-      >([
-        ['success', 'success'],
-        ['danger', 'danger'],
-        ['warning', 'warning'],
-        ['info', 'info'],
+      // Set을 사용하여 안전한 타입 체크
+      const validColorSet = new Set<string>([
+        'success',
+        'danger',
+        'warning',
+        'info',
       ]);
 
-      const validatedColor = validColorsMap.get(color);
-
-      if (validatedColor) {
-        return validatedColor;
+      if (validColorSet.has(color)) {
+        // 이미 검증된 색상이므로 안전하게 반환
+        return color === 'success'
+          ? 'success'
+          : color === 'danger'
+          ? 'danger'
+          : color === 'warning'
+          ? 'warning'
+          : 'info';
       }
 
-      return 'info'; // fallback
+      return 'info';
     },
     []
   );
 
-  // 🔧 검증용 addToast 래퍼 (useValidation API에 맞게)
+  // 🔧 토스트 함수
+  const safeAddToast = useCallback(
+    (
+      message: string,
+      color: 'success' | 'danger' | 'warning' | 'info'
+    ): void => {
+      const toastMessage = { title: message, description: '', color };
+      executeAddToast(storeData, toastMessage);
+    },
+    [storeData]
+  );
+
+  // 🔧 검증용 토스트 래퍼
   const validationAddToast = useCallback(
-    (options: ToastOptionsFromValidation) => {
+    (options: ValidationToastOptions): void => {
       const { title, color } = options;
-      const validColor = validateColorType(color);
+      const validColor = validateToastColor(color);
       safeAddToast(title, validColor);
     },
-    [safeAddToast, validateColorType]
+    [safeAddToast, validateToastColor]
   );
 
   const { validateCurrentStep } = useValidation({
@@ -310,251 +422,230 @@ export const useMultiStepFormState = () => {
     addToast: validationAddToast,
   });
 
-  console.log(
-    '🔍 [USE_MULTI_STEP_FORM_STATE] validateCurrentStep 함수 준비 완료'
-  );
-
-  // 🔧 폼 제출용 addToast 래퍼 (useFormSubmit API에 맞게, any 제거)
+  // 🔧 폼 제출용 토스트 래퍼
   const formSubmitAddToast = useCallback(
-    (options: ToastOptionsFromFormSubmit) => {
-      const { title, message, color } = options;
-
-      // 메시지 추출 로직
-      const finalMessage = title || message || '알림';
-
-      // 색상 추출 및 검증
-      const finalColor = color || 'info';
-      const validColor = validateColorType(finalColor);
-
+    (options: FormSubmitToastOptions): void => {
+      const { title = '', message = '', color = 'info' } = options;
+      const finalMessage =
+        title.length > 0 ? title : message.length > 0 ? message : '알림';
+      const validColor = validateToastColor(color);
       safeAddToast(finalMessage, validColor);
     },
-    [safeAddToast, validateColorType]
+    [safeAddToast, validateToastColor]
   );
 
   const { onSubmit } = useFormSubmit({ addToast: formSubmitAddToast });
 
-  // 🔧 스텝 이동 함수들 (로컬 상태 기반, 타입단언 제거)
-  const enhancedGoToNextStepHandler = useCallback(async () => {
-    console.log(
-      '➡️ [USE_MULTI_STEP_FORM_STATE] enhancedGoToNextStep 호출됨, 현재 스텝:',
-      currentStep
-    );
-
-    const isCurrentStepValid = isValidStepNumber(currentStep);
-    if (!isCurrentStepValid) {
-      console.error(
-        `❌ [USE_MULTI_STEP_FORM_STATE] Invalid current step: ${currentStep}`
-      );
+  // 🔧 스텝 이동 함수들
+  const goToNextStep = useCallback(async (): Promise<void> => {
+    if (!isValidStepNumber(currentStep)) {
       const recoveryStep = getMinStep();
-      setCurrentStepState(recoveryStep);
-      setProgressWidthState(calculateProgress(recoveryStep));
+      setCurrentStep(recoveryStep);
+      setProgressWidth(calculateProgressWidth(recoveryStep));
       return;
     }
 
     if (currentStep >= stepInformation.maxStep) {
-      console.log('⚠️ [USE_MULTI_STEP_FORM_STATE] 이미 마지막 스텝에 도달');
       return;
     }
 
     try {
-      const stepValidationResult = await validateCurrentStep(currentStep);
-      console.log(
-        '✅ [USE_MULTI_STEP_FORM_STATE] 현재 스텝 검증 결과:',
-        stepValidationResult
-      );
+      const stepValidationResult = validateCurrentStep
+        ? await validateCurrentStep(currentStep)
+        : true;
 
-      const canMoveToNextStep =
-        stepValidationResult && currentStep < stepInformation.maxStep;
-
-      if (canMoveToNextStep) {
-        // 🔧 타입단언 제거: 안전한 스텝 번호 생성 함수 사용
-        const nextStep = createNextStepNumber(currentStep);
-        console.log(
-          `➡️ [USE_MULTI_STEP_FORM_STATE] 다음 스텝으로 이동: ${currentStep} → ${nextStep}`
-        );
-
-        setCurrentStepState(nextStep);
-        setProgressWidthState(calculateProgress(nextStep));
-      } else {
-        console.log('⚠️ [USE_MULTI_STEP_FORM_STATE] 다음 스텝 이동 불가');
+      if (stepValidationResult && currentStep < stepInformation.maxStep) {
+        const nextStep = calculateNextStepNumber(currentStep);
+        setCurrentStep(nextStep);
+        setProgressWidth(calculateProgressWidth(nextStep));
       }
     } catch (validationError) {
-      console.error(
-        '❌ [USE_MULTI_STEP_FORM_STATE] 스텝 검증 중 에러 발생:',
-        validationError
-      );
-      safeAddToast(
-        '스텝 이동 중 오류가 발생했습니다. 다시 시도해주세요.',
-        'danger'
-      );
+      console.error('❌ 스텝 검증 중 에러:', validationError);
+      safeAddToast('스텝 이동 중 오류가 발생했습니다.', 'danger');
     }
   }, [
     validateCurrentStep,
     currentStep,
     stepInformation.maxStep,
     safeAddToast,
-    calculateProgress,
+    calculateProgressWidth,
   ]);
 
-  // 🔧 이전 스텝 이동 함수 (타입단언 제거)
-  const enhancedGoToPrevStepHandler = useCallback(() => {
-    console.log('⬅️ [USE_MULTI_STEP_FORM_STATE] goToPrevStep 호출됨');
-
+  const goToPrevStep = useCallback((): void => {
     const minStep = getMinStep();
+
     if (currentStep > minStep) {
-      // 🔧 타입단언 제거: 안전한 스텝 번호 생성 함수 사용
-      const prevStep = createPrevStepNumber(currentStep);
-      console.log(
-        `⬅️ [USE_MULTI_STEP_FORM_STATE] 이전 스텝으로 이동: ${currentStep} → ${prevStep}`
-      );
-      setCurrentStepState(prevStep);
-      setProgressWidthState(calculateProgress(prevStep));
-    } else {
-      console.log('⚠️ [USE_MULTI_STEP_FORM_STATE] 이미 첫 번째 스텝입니다');
+      const prevStep = calculatePrevStepNumber(currentStep);
+      setCurrentStep(prevStep);
+      setProgressWidth(calculateProgressWidth(prevStep));
     }
-  }, [currentStep, calculateProgress]);
+  }, [currentStep, calculateProgressWidth]);
 
-  // 🔧 특정 스텝 이동 함수
-  const enhancedGoToSpecificStepHandler = useCallback(
-    async (targetStep: number) => {
-      console.log('🎯 [USE_MULTI_STEP_FORM_STATE] goToStep 호출됨:', {
-        from: currentStep,
-        to: targetStep,
-      });
-
-      const isTargetStepValid = isValidStepNumber(targetStep);
-      if (!isTargetStepValid) {
-        console.error(
-          `❌ [USE_MULTI_STEP_FORM_STATE] Invalid target step: ${targetStep}`
-        );
+  const goToStep = useCallback(
+    async (targetStep: number): Promise<void> => {
+      if (!isValidStepNumber(targetStep)) {
         return;
       }
 
       if (targetStep === currentStep) {
-        console.log('⚠️ [USE_MULTI_STEP_FORM_STATE] 동일한 스텝으로 이동 시도');
         return;
       }
 
       try {
         const isMovingForward = targetStep > currentStep;
-        if (isMovingForward) {
+
+        if (isMovingForward && validateCurrentStep) {
           const stepValidationResult = await validateCurrentStep(currentStep);
           if (!stepValidationResult) {
-            console.log('❌ [USE_MULTI_STEP_FORM_STATE] 현재 스텝 검증 실패');
             return;
           }
         }
 
-        console.log(
-          `🎯 [USE_MULTI_STEP_FORM_STATE] 스텝 이동: ${currentStep} → ${targetStep}`
-        );
-        setCurrentStepState(targetStep);
-        setProgressWidthState(calculateProgress(targetStep));
+        setCurrentStep(targetStep);
+        setProgressWidth(calculateProgressWidth(targetStep));
       } catch (navigationError) {
-        console.error(
-          '❌ [USE_MULTI_STEP_FORM_STATE] 스텝 이동 에러:',
-          navigationError
-        );
+        console.error('❌ 스텝 이동 에러:', navigationError);
         safeAddToast('스텝 이동 중 오류가 발생했습니다.', 'danger');
       }
     },
-    [currentStep, validateCurrentStep, safeAddToast, calculateProgress]
+    [currentStep, validateCurrentStep, safeAddToast, calculateProgressWidth]
   );
 
-  // 🔧 에디터 관련 함수들 (updateFormValue 사용)
-  const updateEditorContentHandler = useCallback(
-    (content: string) => {
-      console.log('📝 [USE_MULTI_STEP_FORM_STATE] updateEditorContent:', {
-        contentLength: content?.length || 0,
-      });
+  // 🔧 Bridge 호환 에디터 관련 함수들
+  const updateEditorContent = useCallback(
+    (content: string): void => {
+      const bridgeResult = executeUpdateEditorContent(storeData, content);
 
-      if (typeof updateFormValue === 'function') {
-        updateFormValue('editorCompletedContent', content);
+      if (!bridgeResult.success) {
+        const fallbackResult = executeUpdateFormValue(
+          storeData,
+          'editorCompletedContent',
+          content
+        );
+        if (!fallbackResult.success) {
+          console.warn('⚠️ 에디터 내용 업데이트 실패');
+        }
       }
     },
-    [updateFormValue]
+    [storeData]
   );
 
-  const setEditorCompletedHandler = useCallback(
-    (completed: boolean) => {
-      console.log(
-        '✅ [USE_MULTI_STEP_FORM_STATE] setEditorCompleted:',
-        completed
-      );
+  const setEditorCompleted = useCallback(
+    (completed: boolean): void => {
+      const bridgeResult = executeSetEditorCompleted(storeData, completed);
 
-      if (typeof updateFormValue === 'function') {
-        updateFormValue('isEditorCompleted', completed);
+      if (!bridgeResult.success) {
+        const fallbackResult = executeUpdateFormValue(
+          storeData,
+          'isEditorCompleted',
+          completed
+        );
+        if (!fallbackResult.success) {
+          console.warn('⚠️ 에디터 완료 상태 설정 실패');
+        }
       }
     },
-    [updateFormValue]
+    [storeData]
   );
 
-  const getFormAnalyticsData = useCallback(() => {
-    const formAnalyticsInfo = {
+  const setFormValues = useCallback(
+    (formValues: FormValues): void => {
+      if (!isValidFormValues(formValues)) {
+        return;
+      }
+
+      const bridgeFormValues: BridgeFormValues = {
+        userImage: formValues.userImage,
+        nickname: formValues.nickname,
+        emailPrefix: formValues.emailPrefix,
+        emailDomain: formValues.emailDomain,
+        bio: formValues.bio,
+        title: formValues.title,
+        description: formValues.description,
+        tags: formValues.tags,
+        content: formValues.content,
+        media: formValues.media,
+        mainImage: formValues.mainImage,
+        sliderImages: formValues.sliderImages,
+        editorCompletedContent: formValues.editorCompletedContent,
+        isEditorCompleted: formValues.isEditorCompleted,
+      };
+
+      const bridgeResult = executeSetFormValues(storeData, bridgeFormValues);
+
+      if (!bridgeResult.success) {
+        const compatibleFormData =
+          convertFormValuesToCompatibleFormData(formValues);
+        const safeFormDataMap = new Map(Object.entries(compatibleFormData));
+        const safeFormData: Record<string, string | string[] | boolean | null> =
+          {};
+
+        safeFormDataMap.forEach((value, key) => {
+          if (value !== undefined) {
+            safeFormData[key] = value;
+          }
+        });
+
+        executeUpdateFormValues(storeData, safeFormData);
+      }
+    },
+    [storeData]
+  );
+
+  const updateFormValue = useCallback(
+    (fieldName: string, value: string | string[] | boolean | null): void => {
+      executeUpdateFormValue(storeData, fieldName, value);
+    },
+    [storeData]
+  );
+
+  const getFormAnalytics = useCallback(() => {
+    const errorEntries = Object.entries(errors);
+    return {
       currentStep,
       totalSteps: stepInformation.totalSteps,
-      errorCount: Object.keys(errors).length,
+      errorCount: errorEntries.length,
       hasUnsavedChanges: false,
-      isFormValid: Object.keys(errors).length === 0,
+      isFormValid: errorEntries.length === 0,
     };
-
-    console.log(
-      '📈 [USE_MULTI_STEP_FORM_STATE] 폼 분석 정보:',
-      formAnalyticsInfo
-    );
-    return formAnalyticsInfo;
   }, [currentStep, errors, stepInformation.totalSteps]);
 
   // 편의 상태 계산
-  const isFirstStepActive = currentStep === getMinStep();
-  const isLastStepActive = currentStep === stepInformation.maxStep;
-  const canNavigateToNextStep = currentStep < stepInformation.maxStep;
-  const canNavigateToPreviousStep = currentStep > getMinStep();
+  const isFirstStep = currentStep === getMinStep();
+  const isLastStep = currentStep === stepInformation.maxStep;
+  const canGoNext = currentStep < stepInformation.maxStep;
+  const canGoPrev = currentStep > getMinStep();
 
-  console.log('🔍 [USE_MULTI_STEP_FORM_STATE] 편의 상태 계산 완료:', {
-    isFirstStepActive,
-    isLastStepActive,
-    canNavigateToNextStep,
-    canNavigateToPreviousStep,
-    safeCurrentStep: currentStep,
-  });
-
-  // 🔧 훅 초기화 완료 상태
+  // 🔧 훅 초기화 상태
   const isHookInitialized = useMemo(() => {
     const hasValidCurrentStep = isValidStepNumber(currentStep);
-    const hasValidMethods = !!methods && !!handleSubmit;
-    const hasValidStoreConnection = !!getFormValues && !!updateFormValue;
+    const hasValidStoreConnection = storeData !== null;
+    const hasValidMethods = methods && handleSubmit;
 
-    const isInitialized =
-      hasValidCurrentStep && hasValidMethods && hasValidStoreConnection;
+    return hasValidCurrentStep && hasValidStoreConnection && hasValidMethods;
+  }, [currentStep, storeData, methods, handleSubmit]);
 
-    console.log('🔧 [USE_MULTI_STEP_FORM_STATE] 훅 초기화 상태:', {
-      hasValidCurrentStep,
-      hasValidMethods,
-      hasValidStoreConnection,
-      isInitialized,
-      currentStep,
-    });
-
-    return isInitialized;
-  }, [currentStep, methods, handleSubmit, getFormValues, updateFormValue]);
-
-  const returnedStateAndActions = {
+  return {
     // 폼 메서드들
     methods,
     handleSubmit,
     onSubmit,
 
-    // 폼 데이터 (구조분해할당 적용)
+    // 폼 데이터
     formValues: formData,
     updateFormValue,
 
-    // 스텝 관련 (로컬 상태 기반)
+    // Bridge 호환 메서드들
+    updateEditorContent,
+    setEditorCompleted,
+    setFormValues,
+
+    // 스텝 관련
     currentStep,
-    progressWidth: progressWidthState,
-    goToNextStep: enhancedGoToNextStepHandler,
-    goToPrevStep: enhancedGoToPrevStepHandler,
-    goToStep: enhancedGoToSpecificStepHandler,
+    progressWidth,
+    goToNextStep,
+    goToPrevStep,
+    goToStep,
 
     // 검증 관련
     validateCurrentStep,
@@ -562,30 +653,19 @@ export const useMultiStepFormState = () => {
     // 토스트
     addToast: safeAddToast,
 
-    // 에디터 관련 (updateFormValue 기반)
-    updateEditorContent: updateEditorContentHandler,
-    setEditorCompleted: setEditorCompletedHandler,
-
     // 분석 관련
-    getFormAnalytics: getFormAnalyticsData,
+    getFormAnalytics,
 
     // 스텝 정보
     stepInfo: stepInformation,
 
     // 편의 상태들
-    isFirstStep: isFirstStepActive,
-    isLastStep: isLastStepActive,
-    canGoNext: canNavigateToNextStep,
-    canGoPrev: canNavigateToPreviousStep,
+    isFirstStep,
+    isLastStep,
+    canGoNext,
+    canGoPrev,
 
     // 훅 초기화 상태
     isHookInitialized,
   };
-
-  console.log('✅ [USE_MULTI_STEP_FORM_STATE] 반환값 준비 완료:', {
-    currentStep: returnedStateAndActions.currentStep,
-    isHookInitialized: returnedStateAndActions.isHookInitialized,
-  });
-
-  return returnedStateAndActions;
 };
