@@ -1,671 +1,1060 @@
 // src/components/multiStepForm/reactHookForm/useMultiStepFormState.ts
 
-import { useCallback, useMemo, useState } from 'react';
-import { useFormMethods } from './formMethods/useFormMethods';
-import { useValidation } from './validation/useValidation';
-import { useFormSubmit } from './actions/useFormSubmit';
-import { useMultiStepFormStore } from '../store/multiStepForm/multiStepFormStore';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { formSchema } from '../schema/formSchema';
+import type { FormSchemaValues } from '../types/formTypes';
 import {
-  getTotalSteps,
-  getMaxStep,
-  getMinStep,
-  isValidStepNumber,
-} from '../types/stepTypes';
-import type { StepNumber } from '../types/stepTypes';
-import {
-  convertCompatibleFormDataToFormValues,
-  convertFormValuesToCompatibleFormData,
-  isValidFormValues,
-  isValidCompatibleFormData,
-} from '../../../store/shared/commonTypes';
-import type {
-  FormValues,
-  BridgeFormValues,
-  CompatibleFormData,
-} from '../../../store/shared/commonTypes';
+  getDefaultFormSchemaValues,
+  getAllFieldNames,
+  getFieldType,
+  getStringFields,
+  getArrayFields,
+  getBooleanFields,
+} from '../utils/formFieldsLoader';
 
-// 🔧 토스트 옵션 타입
-interface ValidationToastOptions {
-  readonly title: string;
-  readonly description?: string;
-  readonly color: string;
-}
+// 🔧 구체적 타입 검증을 위한 FormSchemaValues 키 검증기
+const createFormSchemaKeysValidator = () => {
+  console.log('🔍 [KEYS_VALIDATOR] FormSchemaValues 키 검증기 생성');
 
-interface FormSubmitToastOptions {
-  readonly title?: string;
-  readonly color?: string;
-  readonly message?: string;
-}
+  const formSchemaKeysSet = new Set<string>();
+  const defaultFormValues = getDefaultFormSchemaValues();
 
-// 🔧 스토어 데이터 타입 (mutable)
-interface MultiStepFormStoreData {
-  getFormValues?: () => CompatibleFormData;
-  updateFormValue?: (
-    fieldName: string,
-    value: string | string[] | boolean | null
-  ) => void;
-  updateFormValues?: (
-    values: Record<string, string | string[] | boolean | null>
-  ) => void;
-  addToast?: (toast: {
-    title: string;
-    description: string;
-    color: string;
-  }) => void;
-  updateEditorContent?: (content: string) => void;
-  setEditorCompleted?: (completed: boolean) => void;
-  setFormValues?: (values: BridgeFormValues) => void;
-}
+  // 실제 FormSchemaValues 키들을 Set에 저장
+  Object.keys(defaultFormValues).forEach((fieldKey) => {
+    formSchemaKeysSet.add(fieldKey);
+  });
 
-// 🔧 실행 결과 타입
-interface ExecutionResult<DataType = void> {
-  success: boolean;
-  data?: DataType;
-  error?: string;
-}
+  const isValidFormSchemaKey = (
+    fieldKey: string
+  ): fieldKey is keyof FormSchemaValues => {
+    return formSchemaKeysSet.has(fieldKey);
+  };
 
-// 🔧 기본 폼 데이터
-const DEFAULT_FORM_DATA: FormValues = {
-  nickname: '',
-  emailPrefix: '',
-  emailDomain: '',
-  bio: '',
-  title: '',
-  description: '',
-  tags: '',
-  content: '',
-  userImage: '',
-  mainImage: null,
-  media: [],
-  sliderImages: [],
-  editorCompletedContent: '',
-  isEditorCompleted: false,
-};
+  const validateAndConvertToFormSchemaKeys = (
+    rawFieldNames: string[]
+  ): (keyof FormSchemaValues)[] => {
+    console.log(
+      '🔍 [VALIDATE_KEYS] 필드명 검증 및 변환:',
+      rawFieldNames.length
+    );
 
-// 🔧 스텝 번호 계산
-const calculateNextStepNumber = (currentStep: StepNumber): StepNumber => {
-  const nextStep = currentStep + 1;
-  return isValidStepNumber(nextStep) ? nextStep : currentStep;
-};
+    const validatedFormSchemaKeys: (keyof FormSchemaValues)[] = [];
 
-const calculatePrevStepNumber = (currentStep: StepNumber): StepNumber => {
-  const prevStep = currentStep - 1;
-  return isValidStepNumber(prevStep) ? prevStep : currentStep;
-};
-
-// 🔧 안전 실행 유틸리티
-const executeGetFormValues = (
-  storeData: MultiStepFormStoreData | null
-): ExecutionResult<CompatibleFormData> => {
-  try {
-    const { getFormValues } = storeData || {};
-    const result = typeof getFormValues === 'function' ? getFormValues() : {};
-    return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: `getFormValues 실행 실패: ${error}` };
-  }
-};
-
-const executeUpdateFormValue = (
-  storeData: MultiStepFormStoreData | null,
-  fieldName: string,
-  value: string | string[] | boolean | null
-): ExecutionResult => {
-  try {
-    const { updateFormValue } = storeData || {};
-    if (typeof updateFormValue === 'function') {
-      updateFormValue(fieldName, value);
+    for (const currentFieldName of rawFieldNames) {
+      if (isValidFormSchemaKey(currentFieldName)) {
+        validatedFormSchemaKeys.push(currentFieldName);
+        console.log('✅ [VALIDATE_KEYS] 유효한 키:', currentFieldName);
+      } else {
+        console.warn(
+          '⚠️ [VALIDATE_KEYS] 유효하지 않은 키 제외:',
+          currentFieldName
+        );
+      }
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `updateFormValue 실행 실패: ${error}` };
-  }
+
+    console.log('✅ [VALIDATE_KEYS] 검증 완료:', {
+      원본: rawFieldNames.length,
+      검증통과: validatedFormSchemaKeys.length,
+    });
+
+    return validatedFormSchemaKeys;
+  };
+
+  console.log('✅ [KEYS_VALIDATOR] FormSchemaValues 키 검증기 생성 완료');
+
+  return {
+    isValidFormSchemaKey,
+    validateAndConvertToFormSchemaKeys,
+    formSchemaKeysSet,
+  };
 };
 
-const executeUpdateFormValues = (
-  storeData: MultiStepFormStoreData | null,
-  values: Record<string, string | string[] | boolean | null>
-): ExecutionResult => {
-  try {
-    const { updateFormValues } = storeData || {};
-    if (typeof updateFormValues === 'function') {
-      updateFormValues(values);
+// 🔧 완전 동적 타입 맵 생성 (타입단언 완전 제거)
+const createDynamicFormSchemaFieldTypeMap = () => {
+  console.log('🗺️ [DYNAMIC_TYPE_MAP] 동적 FormSchema 필드 타입 맵 생성 시작');
+
+  const keysValidator = createFormSchemaKeysValidator();
+
+  // 동적으로 각 타입별 필드 집합 생성 (타입단언 제거)
+  const rawStringFieldNames = getStringFields();
+  const rawArrayFieldNames = getArrayFields();
+  const rawBooleanFieldNames = getBooleanFields();
+
+  const validatedStringFields =
+    keysValidator.validateAndConvertToFormSchemaKeys(rawStringFieldNames);
+  const validatedArrayFields =
+    keysValidator.validateAndConvertToFormSchemaKeys(rawArrayFieldNames);
+  const validatedBooleanFields =
+    keysValidator.validateAndConvertToFormSchemaKeys(rawBooleanFieldNames);
+
+  // nullable 필드는 fieldTypes에서 'string|null' 타입 찾기 (타입단언 제거)
+  const rawAllFieldNames = getAllFieldNames();
+  const rawNullableStringFieldNames: string[] = [];
+
+  for (const currentFieldName of rawAllFieldNames) {
+    const fieldType = getFieldType(currentFieldName);
+    if (fieldType === 'string|null') {
+      rawNullableStringFieldNames.push(currentFieldName);
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `updateFormValues 실행 실패: ${error}` };
   }
-};
 
-const executeAddToast = (
-  storeData: MultiStepFormStoreData | null,
-  toast: { title: string; description: string; color: string }
-): ExecutionResult => {
-  try {
-    const { addToast } = storeData || {};
-    if (typeof addToast === 'function') {
-      addToast(toast);
+  const validatedNullableStringFields =
+    keysValidator.validateAndConvertToFormSchemaKeys(
+      rawNullableStringFieldNames
+    );
+
+  // Set 생성 (구체적 검증된 키들로만)
+  const stringFieldsSet = new Set<keyof FormSchemaValues>(
+    validatedStringFields
+  );
+  const arrayFieldsSet = new Set<keyof FormSchemaValues>(validatedArrayFields);
+  const nullableStringFieldsSet = new Set<keyof FormSchemaValues>(
+    validatedNullableStringFields
+  );
+  const booleanFieldsSet = new Set<keyof FormSchemaValues>(
+    validatedBooleanFields
+  );
+
+  console.log(
+    '✅ [DYNAMIC_TYPE_MAP] 동적 필드 타입 맵 생성 완료 (타입단언 제거):',
+    {
+      stringFields: stringFieldsSet.size,
+      arrayFields: arrayFieldsSet.size,
+      nullableFields: nullableStringFieldsSet.size,
+      booleanFields: booleanFieldsSet.size,
+      totalValidated:
+        validatedStringFields.length +
+        validatedArrayFields.length +
+        validatedNullableStringFields.length +
+        validatedBooleanFields.length,
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `addToast 실행 실패: ${error}` };
-  }
+  );
+
+  return {
+    stringFieldsSet,
+    arrayFieldsSet,
+    nullableStringFieldsSet,
+    booleanFieldsSet,
+    keysValidator,
+  };
 };
 
-const executeUpdateEditorContent = (
-  storeData: MultiStepFormStoreData | null,
-  content: string
-): ExecutionResult => {
-  try {
-    const { updateEditorContent } = storeData || {};
-    if (typeof updateEditorContent === 'function') {
-      updateEditorContent(content);
+// 🔧 구체적 타입 가드 함수들 생성
+const createConcreteTypeGuards = () => {
+  console.log('🏭 [TYPE_GUARDS] 구체적 타입 가드 생성 시작');
+
+  const isValidString = (value: unknown): value is string => {
+    return typeof value === 'string';
+  };
+
+  const isValidStringArray = (value: unknown): value is string[] => {
+    if (!Array.isArray(value)) {
+      return false;
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `updateEditorContent 실행 실패: ${error}` };
-  }
-};
+    return value.every((item): item is string => typeof item === 'string');
+  };
 
-const executeSetEditorCompleted = (
-  storeData: MultiStepFormStoreData | null,
-  completed: boolean
-): ExecutionResult => {
-  try {
-    const { setEditorCompleted } = storeData || {};
-    if (typeof setEditorCompleted === 'function') {
-      setEditorCompleted(completed);
+  const isValidNullableString = (value: unknown): value is string | null => {
+    return value === null || typeof value === 'string';
+  };
+
+  const isValidBoolean = (value: unknown): value is boolean => {
+    return typeof value === 'boolean';
+  };
+
+  const extractSafeString = (rawValue: unknown, fallback: unknown): string => {
+    if (isValidString(rawValue)) {
+      return rawValue;
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `setEditorCompleted 실행 실패: ${error}` };
-  }
-};
-
-const executeSetFormValues = (
-  storeData: MultiStepFormStoreData | null,
-  values: BridgeFormValues
-): ExecutionResult => {
-  try {
-    const { setFormValues } = storeData || {};
-    if (typeof setFormValues === 'function') {
-      setFormValues(values);
+    if (isValidString(fallback)) {
+      return fallback;
     }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: `setFormValues 실행 실패: ${error}` };
-  }
+    return '';
+  };
+
+  const extractSafeStringArray = (
+    rawValue: unknown,
+    fallback: unknown
+  ): string[] => {
+    if (isValidStringArray(rawValue)) {
+      return rawValue;
+    }
+    if (isValidStringArray(fallback)) {
+      return fallback;
+    }
+    return [];
+  };
+
+  const extractSafeNullableString = (
+    rawValue: unknown,
+    fallback: unknown
+  ): string | null => {
+    if (isValidNullableString(rawValue)) {
+      return rawValue;
+    }
+    if (isValidNullableString(fallback)) {
+      return fallback;
+    }
+    return null;
+  };
+
+  const extractSafeBoolean = (
+    rawValue: unknown,
+    fallback: unknown
+  ): boolean => {
+    if (isValidBoolean(rawValue)) {
+      return rawValue;
+    }
+    if (isValidBoolean(fallback)) {
+      return fallback;
+    }
+    return false;
+  };
+
+  console.log('✅ [TYPE_GUARDS] 구체적 타입 가드 생성 완료');
+
+  return {
+    isValidString,
+    isValidStringArray,
+    isValidNullableString,
+    isValidBoolean,
+    extractSafeString,
+    extractSafeStringArray,
+    extractSafeNullableString,
+    extractSafeBoolean,
+  };
 };
 
-export const useMultiStepFormState = () => {
-  const { methods, handleSubmit, errors, trigger } = useFormMethods();
-  const rawStoreData = useMultiStepFormStore();
+// 🔧 안전한 타입 변환 유틸리티 팩토리 (실무형 변환)
+const createSafeTypeConverterFactory = () => {
+  console.log('🏭 [CONVERTER_FACTORY] 실무형 타입 변환 팩토리 생성 시작');
 
-  // 🔧 스토어 데이터 변환
-  const storeData = useMemo<MultiStepFormStoreData | null>(() => {
-    if (!rawStoreData) {
+  const convertToFormSchemaString = (
+    rawValue: unknown,
+    fallbackValue: string
+  ): string => {
+    console.log('🔄 [CONVERT_STRING] 실무형 문자열 변환:', typeof rawValue);
+
+    if (typeof rawValue === 'string') {
+      return rawValue;
+    }
+
+    if (typeof rawValue === 'number') {
+      const numberToString = String(rawValue);
+      return numberToString;
+    }
+
+    if (
+      rawValue !== null &&
+      rawValue !== undefined &&
+      typeof rawValue === 'object'
+    ) {
+      const objectToJsonString = JSON.stringify(rawValue);
+      return objectToJsonString;
+    }
+
+    console.log('⚠️ [CONVERT_STRING] fallback 사용:', fallbackValue);
+    return fallbackValue;
+  };
+
+  const convertToFormSchemaBoolean = (
+    rawValue: unknown,
+    fallbackValue: boolean
+  ): boolean => {
+    console.log('🔄 [CONVERT_BOOLEAN] 실무형 불린 변환:', typeof rawValue);
+
+    if (typeof rawValue === 'boolean') {
+      return rawValue;
+    }
+
+    if (typeof rawValue === 'number') {
+      return rawValue !== 0;
+    }
+
+    if (typeof rawValue === 'string') {
+      const normalizedString = rawValue.toLowerCase().trim();
+
+      // 실무에서 자주 사용되는 불린 변환 패턴
+      const truthyValues = new Set(['true', '1', 'yes', 'on', 'enabled']);
+      const falsyValues = new Set(['false', '0', 'no', 'off', 'disabled']);
+
+      if (truthyValues.has(normalizedString)) return true;
+      if (falsyValues.has(normalizedString)) return false;
+    }
+
+    console.log('⚠️ [CONVERT_BOOLEAN] fallback 사용:', fallbackValue);
+    return fallbackValue;
+  };
+
+  const convertToFormSchemaStringArray = (
+    rawValue: unknown,
+    fallbackValue: string[]
+  ): string[] => {
+    console.log(
+      '🔄 [CONVERT_ARRAY] 실무형 배열 변환:',
+      Array.isArray(rawValue)
+    );
+
+    if (!Array.isArray(rawValue)) {
+      console.log('⚠️ [CONVERT_ARRAY] fallback 사용:', fallbackValue.length);
+      return fallbackValue;
+    }
+
+    const validatedStringItems: string[] = [];
+
+    for (const currentItem of rawValue) {
+      if (typeof currentItem === 'string') {
+        validatedStringItems.push(currentItem);
+      } else if (currentItem !== null && currentItem !== undefined) {
+        // 실무형 변환: null/undefined가 아닌 값들을 문자열로 변환
+        const convertedString = String(currentItem);
+        validatedStringItems.push(convertedString);
+      }
+    }
+
+    console.log(
+      '✅ [CONVERT_ARRAY] 유효한 문자열 항목:',
+      validatedStringItems.length
+    );
+    return validatedStringItems;
+  };
+
+  const convertToFormSchemaNullableString = (
+    rawValue: unknown,
+    fallbackValue: string | null
+  ): string | null => {
+    console.log(
+      '🔄 [CONVERT_NULLABLE] 실무형 nullable 변환:',
+      rawValue === null ? 'null' : typeof rawValue
+    );
+
+    if (rawValue === null) {
       return null;
     }
 
-    const storeMap = new Map(Object.entries(rawStoreData));
-    const typedStoreData: MultiStepFormStoreData = {};
-
-    // Map을 사용하여 안전하게 변환
-    const getFormValues = storeMap.get('getFormValues');
-    if (typeof getFormValues === 'function') {
-      typedStoreData.getFormValues = getFormValues;
+    if (typeof rawValue === 'string') {
+      return rawValue;
     }
 
-    const updateFormValue = storeMap.get('updateFormValue');
-    if (typeof updateFormValue === 'function') {
-      typedStoreData.updateFormValue = updateFormValue;
+    if (typeof rawValue === 'undefined') {
+      return null;
     }
 
-    const updateFormValues = storeMap.get('updateFormValues');
-    if (typeof updateFormValues === 'function') {
-      typedStoreData.updateFormValues = updateFormValues;
+    // 실무형 변환: 다른 타입들을 문자열로 변환
+    if (rawValue !== null && rawValue !== undefined) {
+      const convertedString = String(rawValue);
+      return convertedString;
     }
 
-    const addToast = storeMap.get('addToast');
-    if (typeof addToast === 'function') {
-      typedStoreData.addToast = addToast;
-    }
+    console.log('⚠️ [CONVERT_NULLABLE] fallback 사용:', fallbackValue);
+    return fallbackValue;
+  };
 
-    const updateEditorContent = storeMap.get('updateEditorContent');
-    if (typeof updateEditorContent === 'function') {
-      typedStoreData.updateEditorContent = updateEditorContent;
-    }
-
-    const setEditorCompleted = storeMap.get('setEditorCompleted');
-    if (typeof setEditorCompleted === 'function') {
-      typedStoreData.setEditorCompleted = setEditorCompleted;
-    }
-
-    const setFormValues = storeMap.get('setFormValues');
-    if (typeof setFormValues === 'function') {
-      typedStoreData.setFormValues = setFormValues;
-    }
-
-    return typedStoreData;
-  }, [rawStoreData]);
-
-  // 🔧 로컬 상태로 스텝 관리
-  const [currentStep, setCurrentStep] = useState<StepNumber>(() =>
-    getMinStep()
-  );
-  const [progressWidth, setProgressWidth] = useState<number>(0);
-
-  // 🔧 폼 데이터 조회
-  const formData = useMemo<FormValues>(() => {
-    const result = executeGetFormValues(storeData);
-
-    if (!result.success || !result.data) {
-      return DEFAULT_FORM_DATA;
-    }
-
-    try {
-      const { data: rawFormData } = result;
-
-      if (!isValidCompatibleFormData(rawFormData)) {
-        return DEFAULT_FORM_DATA;
-      }
-
-      const convertedFormValues =
-        convertCompatibleFormDataToFormValues(rawFormData);
-      const formDataMap = new Map(Object.entries(convertedFormValues));
-
-      const extractedFormData: FormValues = {
-        nickname:
-          typeof formDataMap.get('nickname') === 'string'
-            ? formDataMap.get('nickname')
-            : '',
-        emailPrefix:
-          typeof formDataMap.get('emailPrefix') === 'string'
-            ? formDataMap.get('emailPrefix')
-            : '',
-        emailDomain:
-          typeof formDataMap.get('emailDomain') === 'string'
-            ? formDataMap.get('emailDomain')
-            : '',
-        bio:
-          typeof formDataMap.get('bio') === 'string'
-            ? formDataMap.get('bio')
-            : '',
-        title:
-          typeof formDataMap.get('title') === 'string'
-            ? formDataMap.get('title')
-            : '',
-        description:
-          typeof formDataMap.get('description') === 'string'
-            ? formDataMap.get('description')
-            : '',
-        tags:
-          typeof formDataMap.get('tags') === 'string'
-            ? formDataMap.get('tags')
-            : '',
-        content:
-          typeof formDataMap.get('content') === 'string'
-            ? formDataMap.get('content')
-            : '',
-        userImage:
-          typeof formDataMap.get('userImage') === 'string'
-            ? formDataMap.get('userImage')
-            : '',
-        mainImage:
-          formDataMap.get('mainImage') !== undefined
-            ? formDataMap.get('mainImage')
-            : null,
-        media: Array.isArray(formDataMap.get('media'))
-          ? formDataMap.get('media')
-          : [],
-        sliderImages: Array.isArray(formDataMap.get('sliderImages'))
-          ? formDataMap.get('sliderImages')
-          : [],
-        editorCompletedContent:
-          typeof formDataMap.get('editorCompletedContent') === 'string'
-            ? formDataMap.get('editorCompletedContent')
-            : '',
-        isEditorCompleted:
-          typeof formDataMap.get('isEditorCompleted') === 'boolean'
-            ? formDataMap.get('isEditorCompleted')
-            : false,
-      };
-
-      return extractedFormData;
-    } catch (error) {
-      console.error('❌ 폼 데이터 변환 실패:', error);
-      return DEFAULT_FORM_DATA;
-    }
-  }, [storeData]);
-
-  const { editorCompletedContent = '', isEditorCompleted = false } = formData;
-
-  const stepInformation = useMemo(
-    () => ({
-      totalSteps: getTotalSteps(),
-      maxStep: getMaxStep(),
-    }),
-    []
-  );
-
-  // 🔧 진행률 계산
-  const calculateProgressWidth = useCallback((step: StepNumber): number => {
-    const minStep = getMinStep();
-    const totalSteps = getTotalSteps();
-
-    if (totalSteps <= 1) {
-      return 100;
-    }
-
-    const progress = ((step - minStep) / (totalSteps - 1)) * 100;
-    return Math.max(0, Math.min(100, progress));
-  }, []);
-
-  // 🔧 색상 검증 - 타입 단언 제거
-  const validateToastColor = useCallback(
-    (color: string): 'success' | 'danger' | 'warning' | 'info' => {
-      // Set을 사용하여 안전한 타입 체크
-      const validColorSet = new Set<string>([
-        'success',
-        'danger',
-        'warning',
-        'info',
-      ]);
-
-      if (validColorSet.has(color)) {
-        // 이미 검증된 색상이므로 안전하게 반환
-        return color === 'success'
-          ? 'success'
-          : color === 'danger'
-          ? 'danger'
-          : color === 'warning'
-          ? 'warning'
-          : 'info';
-      }
-
-      return 'info';
-    },
-    []
-  );
-
-  // 🔧 토스트 함수
-  const safeAddToast = useCallback(
-    (
-      message: string,
-      color: 'success' | 'danger' | 'warning' | 'info'
-    ): void => {
-      const toastMessage = { title: message, description: '', color };
-      executeAddToast(storeData, toastMessage);
-    },
-    [storeData]
-  );
-
-  // 🔧 검증용 토스트 래퍼
-  const validationAddToast = useCallback(
-    (options: ValidationToastOptions): void => {
-      const { title, color } = options;
-      const validColor = validateToastColor(color);
-      safeAddToast(title, validColor);
-    },
-    [safeAddToast, validateToastColor]
-  );
-
-  const { validateCurrentStep } = useValidation({
-    trigger,
-    errors,
-    editorState: {
-      containers: [],
-      paragraphs: [],
-      completedContent: editorCompletedContent,
-      isCompleted: isEditorCompleted,
-    },
-    addToast: validationAddToast,
-  });
-
-  // 🔧 폼 제출용 토스트 래퍼
-  const formSubmitAddToast = useCallback(
-    (options: FormSubmitToastOptions): void => {
-      const { title = '', message = '', color = 'info' } = options;
-      const finalMessage =
-        title.length > 0 ? title : message.length > 0 ? message : '알림';
-      const validColor = validateToastColor(color);
-      safeAddToast(finalMessage, validColor);
-    },
-    [safeAddToast, validateToastColor]
-  );
-
-  const { onSubmit } = useFormSubmit({ addToast: formSubmitAddToast });
-
-  // 🔧 스텝 이동 함수들
-  const goToNextStep = useCallback(async (): Promise<void> => {
-    if (!isValidStepNumber(currentStep)) {
-      const recoveryStep = getMinStep();
-      setCurrentStep(recoveryStep);
-      setProgressWidth(calculateProgressWidth(recoveryStep));
-      return;
-    }
-
-    if (currentStep >= stepInformation.maxStep) {
-      return;
-    }
-
-    try {
-      const stepValidationResult = validateCurrentStep
-        ? await validateCurrentStep(currentStep)
-        : true;
-
-      if (stepValidationResult && currentStep < stepInformation.maxStep) {
-        const nextStep = calculateNextStepNumber(currentStep);
-        setCurrentStep(nextStep);
-        setProgressWidth(calculateProgressWidth(nextStep));
-      }
-    } catch (validationError) {
-      console.error('❌ 스텝 검증 중 에러:', validationError);
-      safeAddToast('스텝 이동 중 오류가 발생했습니다.', 'danger');
-    }
-  }, [
-    validateCurrentStep,
-    currentStep,
-    stepInformation.maxStep,
-    safeAddToast,
-    calculateProgressWidth,
-  ]);
-
-  const goToPrevStep = useCallback((): void => {
-    const minStep = getMinStep();
-
-    if (currentStep > minStep) {
-      const prevStep = calculatePrevStepNumber(currentStep);
-      setCurrentStep(prevStep);
-      setProgressWidth(calculateProgressWidth(prevStep));
-    }
-  }, [currentStep, calculateProgressWidth]);
-
-  const goToStep = useCallback(
-    async (targetStep: number): Promise<void> => {
-      if (!isValidStepNumber(targetStep)) {
-        return;
-      }
-
-      if (targetStep === currentStep) {
-        return;
-      }
-
-      try {
-        const isMovingForward = targetStep > currentStep;
-
-        if (isMovingForward && validateCurrentStep) {
-          const stepValidationResult = await validateCurrentStep(currentStep);
-          if (!stepValidationResult) {
-            return;
-          }
-        }
-
-        setCurrentStep(targetStep);
-        setProgressWidth(calculateProgressWidth(targetStep));
-      } catch (navigationError) {
-        console.error('❌ 스텝 이동 에러:', navigationError);
-        safeAddToast('스텝 이동 중 오류가 발생했습니다.', 'danger');
-      }
-    },
-    [currentStep, validateCurrentStep, safeAddToast, calculateProgressWidth]
-  );
-
-  // 🔧 Bridge 호환 에디터 관련 함수들
-  const updateEditorContent = useCallback(
-    (content: string): void => {
-      const bridgeResult = executeUpdateEditorContent(storeData, content);
-
-      if (!bridgeResult.success) {
-        const fallbackResult = executeUpdateFormValue(
-          storeData,
-          'editorCompletedContent',
-          content
-        );
-        if (!fallbackResult.success) {
-          console.warn('⚠️ 에디터 내용 업데이트 실패');
-        }
-      }
-    },
-    [storeData]
-  );
-
-  const setEditorCompleted = useCallback(
-    (completed: boolean): void => {
-      const bridgeResult = executeSetEditorCompleted(storeData, completed);
-
-      if (!bridgeResult.success) {
-        const fallbackResult = executeUpdateFormValue(
-          storeData,
-          'isEditorCompleted',
-          completed
-        );
-        if (!fallbackResult.success) {
-          console.warn('⚠️ 에디터 완료 상태 설정 실패');
-        }
-      }
-    },
-    [storeData]
-  );
-
-  const setFormValues = useCallback(
-    (formValues: FormValues): void => {
-      if (!isValidFormValues(formValues)) {
-        return;
-      }
-
-      const bridgeFormValues: BridgeFormValues = {
-        userImage: formValues.userImage,
-        nickname: formValues.nickname,
-        emailPrefix: formValues.emailPrefix,
-        emailDomain: formValues.emailDomain,
-        bio: formValues.bio,
-        title: formValues.title,
-        description: formValues.description,
-        tags: formValues.tags,
-        content: formValues.content,
-        media: formValues.media,
-        mainImage: formValues.mainImage,
-        sliderImages: formValues.sliderImages,
-        editorCompletedContent: formValues.editorCompletedContent,
-        isEditorCompleted: formValues.isEditorCompleted,
-      };
-
-      const bridgeResult = executeSetFormValues(storeData, bridgeFormValues);
-
-      if (!bridgeResult.success) {
-        const compatibleFormData =
-          convertFormValuesToCompatibleFormData(formValues);
-        const safeFormDataMap = new Map(Object.entries(compatibleFormData));
-        const safeFormData: Record<string, string | string[] | boolean | null> =
-          {};
-
-        safeFormDataMap.forEach((value, key) => {
-          if (value !== undefined) {
-            safeFormData[key] = value;
-          }
-        });
-
-        executeUpdateFormValues(storeData, safeFormData);
-      }
-    },
-    [storeData]
-  );
-
-  const updateFormValue = useCallback(
-    (fieldName: string, value: string | string[] | boolean | null): void => {
-      executeUpdateFormValue(storeData, fieldName, value);
-    },
-    [storeData]
-  );
-
-  const getFormAnalytics = useCallback(() => {
-    const errorEntries = Object.entries(errors);
-    return {
-      currentStep,
-      totalSteps: stepInformation.totalSteps,
-      errorCount: errorEntries.length,
-      hasUnsavedChanges: false,
-      isFormValid: errorEntries.length === 0,
-    };
-  }, [currentStep, errors, stepInformation.totalSteps]);
-
-  // 편의 상태 계산
-  const isFirstStep = currentStep === getMinStep();
-  const isLastStep = currentStep === stepInformation.maxStep;
-  const canGoNext = currentStep < stepInformation.maxStep;
-  const canGoPrev = currentStep > getMinStep();
-
-  // 🔧 훅 초기화 상태
-  const isHookInitialized = useMemo(() => {
-    const hasValidCurrentStep = isValidStepNumber(currentStep);
-    const hasValidStoreConnection = storeData !== null;
-    const hasValidMethods = methods && handleSubmit;
-
-    return hasValidCurrentStep && hasValidStoreConnection && hasValidMethods;
-  }, [currentStep, storeData, methods, handleSubmit]);
+  console.log('✅ [CONVERTER_FACTORY] 실무형 타입 변환 팩토리 생성 완료');
 
   return {
-    // 폼 메서드들
-    methods,
-    handleSubmit,
-    onSubmit,
-
-    // 폼 데이터
-    formValues: formData,
-    updateFormValue,
-
-    // Bridge 호환 메서드들
-    updateEditorContent,
-    setEditorCompleted,
-    setFormValues,
-
-    // 스텝 관련
-    currentStep,
-    progressWidth,
-    goToNextStep,
-    goToPrevStep,
-    goToStep,
-
-    // 검증 관련
-    validateCurrentStep,
-
-    // 토스트
-    addToast: safeAddToast,
-
-    // 분석 관련
-    getFormAnalytics,
-
-    // 스텝 정보
-    stepInfo: stepInformation,
-
-    // 편의 상태들
-    isFirstStep,
-    isLastStep,
-    canGoNext,
-    canGoPrev,
-
-    // 훅 초기화 상태
-    isHookInitialized,
+    convertToFormSchemaString,
+    convertToFormSchemaBoolean,
+    convertToFormSchemaStringArray,
+    convertToFormSchemaNullableString,
   };
 };
+
+// 🔧 동적 FormSchemaValues 구조체 생성 (하드코딩 완전 제거)
+const createDynamicFormSchemaStructure = (): FormSchemaValues => {
+  console.log('🏗️ [DYNAMIC_STRUCTURE] 동적 FormSchemaValues 구조 생성');
+
+  const defaultValues = getDefaultFormSchemaValues();
+
+  // 기본값을 그대로 FormSchemaValues 타입으로 반환
+  console.log('✅ [DYNAMIC_STRUCTURE] 동적 구조 생성 완료:', {
+    fieldsCount: Object.keys(defaultValues).length,
+  });
+
+  return defaultValues;
+};
+
+// 🔧 동적 필드 값 추출 함수 (타입단언 완전 제거)
+const extractFormSchemaValuesSafely = (
+  rawFormData: unknown
+): FormSchemaValues => {
+  console.log(
+    '🔧 [EXTRACT_VALUES] 안전한 FormSchema 값 추출 시작 (타입단언 제거)'
+  );
+
+  // Early Return: 유효하지 않은 입력
+  const isValidObject = rawFormData !== null && typeof rawFormData === 'object';
+  if (!isValidObject) {
+    console.log('❌ [EXTRACT_VALUES] 유효하지 않은 객체, 기본값 반환');
+    return getDefaultFormSchemaValues();
+  }
+
+  const typeConverters = createSafeTypeConverterFactory();
+  const fieldTypeMap = createDynamicFormSchemaFieldTypeMap();
+  const typeGuards = createConcreteTypeGuards();
+  const defaultValues = getDefaultFormSchemaValues();
+
+  // 동적으로 FormSchemaValues 구조체 생성
+  const extractedFormSchemaValues = createDynamicFormSchemaStructure();
+
+  // 동적으로 모든 필드명 가져오기 (타입단언 제거)
+  const rawAllFieldNames = getAllFieldNames();
+  const validatedFieldNames =
+    fieldTypeMap.keysValidator.validateAndConvertToFormSchemaKeys(
+      rawAllFieldNames
+    );
+
+  console.log(
+    '🔄 [EXTRACT_VALUES] 각 필드별 타입 안전 변환 시작 (타입단언 제거)'
+  );
+
+  for (const currentFieldName of validatedFieldNames) {
+    console.log('🔄 [FIELD_EXTRACT] 동적 필드 추출:', currentFieldName);
+
+    const rawFieldValue = Reflect.get(rawFormData, currentFieldName);
+    const defaultFieldValue = Reflect.get(defaultValues, currentFieldName);
+
+    const isStringField = fieldTypeMap.stringFieldsSet.has(currentFieldName);
+    const isArrayField = fieldTypeMap.arrayFieldsSet.has(currentFieldName);
+    const isNullableField =
+      fieldTypeMap.nullableStringFieldsSet.has(currentFieldName);
+    const isBooleanField = fieldTypeMap.booleanFieldsSet.has(currentFieldName);
+
+    if (isStringField) {
+      const safeDefaultString = typeGuards.extractSafeString(
+        defaultFieldValue,
+        ''
+      );
+      const convertedStringValue = typeConverters.convertToFormSchemaString(
+        rawFieldValue,
+        safeDefaultString
+      );
+      Reflect.set(
+        extractedFormSchemaValues,
+        currentFieldName,
+        convertedStringValue
+      );
+      console.log(
+        '✅ [FIELD_EXTRACT] 문자열 필드 처리 완료:',
+        currentFieldName
+      );
+      continue;
+    }
+
+    if (isArrayField) {
+      const safeDefaultArray = typeGuards.extractSafeStringArray(
+        defaultFieldValue,
+        []
+      );
+      const convertedArrayValue = typeConverters.convertToFormSchemaStringArray(
+        rawFieldValue,
+        safeDefaultArray
+      );
+      Reflect.set(
+        extractedFormSchemaValues,
+        currentFieldName,
+        convertedArrayValue
+      );
+      console.log('✅ [FIELD_EXTRACT] 배열 필드 처리 완료:', currentFieldName);
+      continue;
+    }
+
+    if (isNullableField) {
+      const safeDefaultNullable = typeGuards.extractSafeNullableString(
+        defaultFieldValue,
+        null
+      );
+      const convertedNullableValue =
+        typeConverters.convertToFormSchemaNullableString(
+          rawFieldValue,
+          safeDefaultNullable
+        );
+      Reflect.set(
+        extractedFormSchemaValues,
+        currentFieldName,
+        convertedNullableValue
+      );
+      console.log(
+        '✅ [FIELD_EXTRACT] nullable 필드 처리 완료:',
+        currentFieldName
+      );
+      continue;
+    }
+
+    if (isBooleanField) {
+      const safeDefaultBoolean = typeGuards.extractSafeBoolean(
+        defaultFieldValue,
+        false
+      );
+      const convertedBooleanValue = typeConverters.convertToFormSchemaBoolean(
+        rawFieldValue,
+        safeDefaultBoolean
+      );
+      Reflect.set(
+        extractedFormSchemaValues,
+        currentFieldName,
+        convertedBooleanValue
+      );
+      console.log('✅ [FIELD_EXTRACT] 불린 필드 처리 완료:', currentFieldName);
+      continue;
+    }
+
+    console.log('⚠️ [FIELD_EXTRACT] 알 수 없는 필드 타입:', currentFieldName);
+  }
+
+  console.log(
+    '✅ [EXTRACT_VALUES] 안전한 FormSchema 값 추출 완료 (타입단언 제거):',
+    {
+      fieldsCount: Object.keys(extractedFormSchemaValues).length,
+    }
+  );
+
+  return extractedFormSchemaValues;
+};
+
+// 🔧 구체적 타입별 필드 값 반환 함수들 (타입 단언 완전 제거)
+const createTypedFieldValueReturners = () => {
+  console.log('🏭 [FIELD_RETURNERS] 타입별 필드 값 반환기 생성');
+
+  const returnStringFieldValue = (fieldValue: unknown): string => {
+    console.log('🔄 [RETURN_STRING] 문자열 반환 처리');
+
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+
+    console.log('⚠️ [RETURN_STRING] 빈 문자열 반환');
+    return '';
+  };
+
+  const returnArrayFieldValue = (fieldValue: unknown): string[] => {
+    console.log('🔄 [RETURN_ARRAY] 배열 반환 처리');
+
+    if (Array.isArray(fieldValue)) {
+      const validStringArray: string[] = [];
+
+      for (const currentItem of fieldValue) {
+        if (typeof currentItem === 'string') {
+          validStringArray.push(currentItem);
+        }
+      }
+
+      return validStringArray;
+    }
+
+    console.log('⚠️ [RETURN_ARRAY] 빈 배열 반환');
+    return [];
+  };
+
+  const returnNullableStringFieldValue = (
+    fieldValue: unknown
+  ): string | null => {
+    console.log('🔄 [RETURN_NULLABLE] nullable 반환 처리');
+
+    if (fieldValue === null) {
+      return null;
+    }
+
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+
+    console.log('⚠️ [RETURN_NULLABLE] null 반환');
+    return null;
+  };
+
+  const returnBooleanFieldValue = (fieldValue: unknown): boolean => {
+    console.log('🔄 [RETURN_BOOLEAN] 불린 반환 처리');
+
+    if (typeof fieldValue === 'boolean') {
+      return fieldValue;
+    }
+
+    console.log('⚠️ [RETURN_BOOLEAN] false 반환');
+    return false;
+  };
+
+  console.log('✅ [FIELD_RETURNERS] 타입별 필드 값 반환기 생성 완료');
+
+  return {
+    returnStringFieldValue,
+    returnArrayFieldValue,
+    returnNullableStringFieldValue,
+    returnBooleanFieldValue,
+  };
+};
+
+// 🔧 동적 setValue를 위한 구체적 타입별 설정 함수들 (타입단언 완전 제거)
+const createDynamicTypedFieldValueSetters = (
+  formMethods: ReturnType<typeof useForm<FormSchemaValues>>
+) => {
+  console.log(
+    '🏭 [DYNAMIC_FIELD_SETTERS] 동적 타입별 필드 설정기 생성 (타입단언 제거)'
+  );
+
+  // 동적으로 필드 타입별로 분류
+  const fieldTypeMap = createDynamicFormSchemaFieldTypeMap();
+
+  const setStringFieldValues = new Map<
+    keyof FormSchemaValues,
+    (value: string) => void
+  >();
+  const setArrayFieldValues = new Map<
+    keyof FormSchemaValues,
+    (value: string[]) => void
+  >();
+  const setNullableStringFieldValues = new Map<
+    keyof FormSchemaValues,
+    (value: string | null) => void
+  >();
+  const setBooleanFieldValues = new Map<
+    keyof FormSchemaValues,
+    (value: boolean) => void
+  >();
+
+  // 동적으로 문자열 필드 setter들 생성
+  for (const stringFieldName of fieldTypeMap.stringFieldsSet) {
+    const stringSetterFunction = (value: string) => {
+      formMethods.setValue(stringFieldName, value, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    };
+    setStringFieldValues.set(stringFieldName, stringSetterFunction);
+  }
+
+  // 동적으로 배열 필드 setter들 생성
+  for (const arrayFieldName of fieldTypeMap.arrayFieldsSet) {
+    const arraySetterFunction = (value: string[]) => {
+      formMethods.setValue(arrayFieldName, value, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    };
+    setArrayFieldValues.set(arrayFieldName, arraySetterFunction);
+  }
+
+  // 동적으로 nullable 필드 setter들 생성
+  for (const nullableFieldName of fieldTypeMap.nullableStringFieldsSet) {
+    const nullableSetterFunction = (value: string | null) => {
+      formMethods.setValue(nullableFieldName, value, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    };
+    setNullableStringFieldValues.set(nullableFieldName, nullableSetterFunction);
+  }
+
+  // 동적으로 불린 필드 setter들 생성
+  for (const booleanFieldName of fieldTypeMap.booleanFieldsSet) {
+    const booleanSetterFunction = (value: boolean) => {
+      formMethods.setValue(booleanFieldName, value, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    };
+    setBooleanFieldValues.set(booleanFieldName, booleanSetterFunction);
+  }
+
+  console.log(
+    '✅ [DYNAMIC_FIELD_SETTERS] 동적 타입별 필드 설정기 생성 완료 (타입단언 제거):',
+    {
+      stringSetters: setStringFieldValues.size,
+      arraySetters: setArrayFieldValues.size,
+      nullableSetters: setNullableStringFieldValues.size,
+      booleanSetters: setBooleanFieldValues.size,
+    }
+  );
+
+  return {
+    setStringFieldValues,
+    setArrayFieldValues,
+    setNullableStringFieldValues,
+    setBooleanFieldValues,
+  };
+};
+
+// 🔧 폼 상태 훅 생성 함수
+export const createMultiStepFormStateHook = () => {
+  console.log('🔧 [HOOK_FACTORY] MultiStepFormState 훅 팩토리 시작');
+
+  const useMultiStepFormState = () => {
+    console.log('🔧 [USE_FORM_STATE] useMultiStepFormState 훅 시작');
+
+    // 동적으로 FormSchemaValues 타입 기본값 로드
+    const defaultFormSchemaValues = getDefaultFormSchemaValues();
+    console.log(
+      '🔧 [USE_FORM_STATE] 동적 FormSchemaValues 타입 기본값 로드 완료:',
+      {
+        fieldsCount: Object.keys(defaultFormSchemaValues).length,
+      }
+    );
+
+    // React Hook Form 설정
+    const formMethods = useForm<FormSchemaValues>({
+      resolver: zodResolver(formSchema),
+      defaultValues: defaultFormSchemaValues,
+      mode: 'onChange',
+    });
+
+    console.log('🔧 [USE_FORM_STATE] React Hook Form 초기화 완료');
+
+    // 동적 유틸리티 생성
+    const fieldTypeMap = createDynamicFormSchemaFieldTypeMap();
+    const fieldReturners = createTypedFieldValueReturners();
+    const fieldSetters = createDynamicTypedFieldValueSetters(formMethods);
+
+    // 현재 폼 값들을 안전하게 가져오는 함수
+    const getCurrentFormValuesSafely = (): FormSchemaValues => {
+      console.log('🔧 [GET_CURRENT_VALUES] 현재 폼 값 안전 추출 시작');
+
+      try {
+        const currentRawValues = formMethods.getValues();
+        console.log('🔧 [GET_CURRENT_VALUES] getValues() 호출 성공');
+
+        const safelyExtractedValues =
+          extractFormSchemaValuesSafely(currentRawValues);
+
+        console.log('✅ [GET_CURRENT_VALUES] 현재 폼 값 안전 추출 완료');
+        return safelyExtractedValues;
+      } catch (getCurrentValuesError) {
+        console.error(
+          '❌ [GET_CURRENT_VALUES] getValues() 호출 실패:',
+          getCurrentValuesError
+        );
+        return defaultFormSchemaValues;
+      }
+    };
+
+    // 타입 단언 완전 제거된 특정 필드 값 추출 함수
+    const getFieldValueSafely = <K extends keyof FormSchemaValues>(
+      fieldName: K
+    ) => {
+      console.log('🔧 [GET_FIELD_VALUE] 필드 값 안전 추출:', fieldName);
+
+      try {
+        const allCurrentValues = formMethods.getValues();
+        console.log('🔧 [GET_FIELD_VALUE] getValues() 호출 성공');
+
+        const safeExtractedValues =
+          extractFormSchemaValuesSafely(allCurrentValues);
+        const extractedFieldValue = Reflect.get(safeExtractedValues, fieldName);
+
+        // 구체적 타입별 분기 처리 (타입 단언 완전 제거)
+        const isStringField = fieldTypeMap.stringFieldsSet.has(fieldName);
+        const isArrayField = fieldTypeMap.arrayFieldsSet.has(fieldName);
+        const isNullableField =
+          fieldTypeMap.nullableStringFieldsSet.has(fieldName);
+        const isBooleanField = fieldTypeMap.booleanFieldsSet.has(fieldName);
+
+        if (isStringField) {
+          const stringValue =
+            fieldReturners.returnStringFieldValue(extractedFieldValue);
+          console.log(
+            '✅ [GET_FIELD_VALUE] 문자열 필드 값 추출 완료:',
+            fieldName
+          );
+          return stringValue;
+        }
+
+        if (isArrayField) {
+          const arrayValue =
+            fieldReturners.returnArrayFieldValue(extractedFieldValue);
+          console.log(
+            '✅ [GET_FIELD_VALUE] 배열 필드 값 추출 완료:',
+            fieldName
+          );
+          return arrayValue;
+        }
+
+        if (isNullableField) {
+          const nullableValue =
+            fieldReturners.returnNullableStringFieldValue(extractedFieldValue);
+          console.log(
+            '✅ [GET_FIELD_VALUE] nullable 필드 값 추출 완료:',
+            fieldName
+          );
+          return nullableValue;
+        }
+
+        if (isBooleanField) {
+          const booleanValue =
+            fieldReturners.returnBooleanFieldValue(extractedFieldValue);
+          console.log(
+            '✅ [GET_FIELD_VALUE] 불린 필드 값 추출 완료:',
+            fieldName
+          );
+          return booleanValue;
+        }
+
+        // fallback: 직접 반환 (타입 단언 없이)
+        console.log(
+          '⚠️ [GET_FIELD_VALUE] 알 수 없는 필드 타입, 직접 반환:',
+          fieldName
+        );
+        return extractedFieldValue;
+      } catch (getFieldError) {
+        console.error(
+          '❌ [GET_FIELD_VALUE] 필드 값 추출 실패:',
+          fieldName,
+          getFieldError
+        );
+
+        const fallbackValue = Reflect.get(defaultFormSchemaValues, fieldName);
+        return fallbackValue;
+      }
+    };
+
+    // 타입 단언 완전 제거된 필드 값 설정 함수
+    const setFieldValueSafely = <K extends keyof FormSchemaValues>(
+      fieldName: K,
+      newFieldValue: FormSchemaValues[K]
+    ): void => {
+      console.log('🔧 [SET_FIELD_VALUE] 필드 값 안전 설정:', fieldName);
+
+      try {
+        // Map 기반 구체적 타입별 분기 처리 (타입 단언 없이)
+        const isStringField = fieldTypeMap.stringFieldsSet.has(fieldName);
+        const isArrayField = fieldTypeMap.arrayFieldsSet.has(fieldName);
+        const isNullableField =
+          fieldTypeMap.nullableStringFieldsSet.has(fieldName);
+        const isBooleanField = fieldTypeMap.booleanFieldsSet.has(fieldName);
+
+        if (isStringField && typeof newFieldValue === 'string') {
+          const stringFieldSetter =
+            fieldSetters.setStringFieldValues.get(fieldName);
+          const isValidSetter = stringFieldSetter !== undefined;
+
+          if (isValidSetter) {
+            stringFieldSetter(newFieldValue);
+            console.log(
+              '✅ [SET_FIELD_VALUE] 문자열 필드 값 설정 완료:',
+              fieldName
+            );
+          }
+          return;
+        }
+
+        if (isArrayField && Array.isArray(newFieldValue)) {
+          const arrayFieldSetter =
+            fieldSetters.setArrayFieldValues.get(fieldName);
+          const isValidSetter = arrayFieldSetter !== undefined;
+
+          if (isValidSetter) {
+            arrayFieldSetter(newFieldValue);
+            console.log(
+              '✅ [SET_FIELD_VALUE] 배열 필드 값 설정 완료:',
+              fieldName
+            );
+          }
+          return;
+        }
+
+        if (
+          isNullableField &&
+          (newFieldValue === null || typeof newFieldValue === 'string')
+        ) {
+          const nullableFieldSetter =
+            fieldSetters.setNullableStringFieldValues.get(fieldName);
+          const isValidSetter = nullableFieldSetter !== undefined;
+
+          if (isValidSetter) {
+            nullableFieldSetter(newFieldValue);
+            console.log(
+              '✅ [SET_FIELD_VALUE] nullable 필드 값 설정 완료:',
+              fieldName
+            );
+          }
+          return;
+        }
+
+        if (isBooleanField && typeof newFieldValue === 'boolean') {
+          const booleanFieldSetter =
+            fieldSetters.setBooleanFieldValues.get(fieldName);
+          const isValidSetter = booleanFieldSetter !== undefined;
+
+          if (isValidSetter) {
+            booleanFieldSetter(newFieldValue);
+            console.log(
+              '✅ [SET_FIELD_VALUE] 불린 필드 값 설정 완료:',
+              fieldName
+            );
+          }
+          return;
+        }
+
+        console.log(
+          '⚠️ [SET_FIELD_VALUE] 알 수 없는 필드 타입 또는 값:',
+          fieldName
+        );
+      } catch (setFieldError) {
+        console.error(
+          '❌ [SET_FIELD_VALUE] 필드 값 설정 실패:',
+          fieldName,
+          setFieldError
+        );
+      }
+    };
+
+    // 폼을 기본값으로 초기화하는 함수
+    const resetFormSafely = (): void => {
+      console.log('🔄 [RESET_FORM] 폼 안전 초기화 시작');
+
+      try {
+        const currentDefaultValues = getDefaultFormSchemaValues();
+        formMethods.reset(currentDefaultValues);
+        console.log('✅ [RESET_FORM] 폼 안전 초기화 완료');
+      } catch (resetFormError) {
+        console.error('❌ [RESET_FORM] 폼 초기화 실패:', resetFormError);
+      }
+    };
+
+    // 폼 유효성 검사를 안전하게 수행하는 함수
+    const validateFormSafely = async (): Promise<boolean> => {
+      console.log('🔍 [VALIDATE_FORM] 폼 안전 검증 시작');
+
+      try {
+        const isFormValid = await formMethods.trigger();
+        console.log('✅ [VALIDATE_FORM] 폼 안전 검증 완료:', isFormValid);
+        return isFormValid;
+      } catch (validateFormError) {
+        console.error('❌ [VALIDATE_FORM] 폼 검증 실패:', validateFormError);
+        return false;
+      }
+    };
+
+    // 특정 필드들만 검증하는 함수
+    const validateSpecificFieldsSafely = async (
+      fieldNames: (keyof FormSchemaValues)[]
+    ): Promise<boolean> => {
+      console.log(
+        '🔍 [VALIDATE_FIELDS] 특정 필드 검증 시작:',
+        fieldNames.length
+      );
+
+      try {
+        const validationPromises: Promise<boolean>[] = [];
+
+        for (const currentFieldName of fieldNames) {
+          const validationPromise = formMethods.trigger(currentFieldName);
+          validationPromises.push(validationPromise);
+        }
+
+        const validationResults = await Promise.all(validationPromises);
+
+        let areAllFieldsValid = true;
+        for (
+          let resultIndex = 0;
+          resultIndex < validationResults.length;
+          resultIndex++
+        ) {
+          const currentResult = validationResults[resultIndex];
+          const currentFieldName = fieldNames[resultIndex];
+
+          console.log(
+            '🔍 [VALIDATE_FIELDS] 필드 검증 결과:',
+            currentFieldName,
+            currentResult
+          );
+
+          if (!currentResult) {
+            areAllFieldsValid = false;
+          }
+        }
+
+        console.log(
+          '✅ [VALIDATE_FIELDS] 특정 필드 검증 완료:',
+          areAllFieldsValid
+        );
+        return areAllFieldsValid;
+      } catch (validateFieldsError) {
+        console.error(
+          '❌ [VALIDATE_FIELDS] 특정 필드 검증 실패:',
+          validateFieldsError
+        );
+        return false;
+      }
+    };
+
+    // 동적 폼 에러 상태 확인 함수 (타입단언 완전 제거)
+    const getFormErrorsSafely = (): Partial<
+      Record<keyof FormSchemaValues, string>
+    > => {
+      console.log(
+        '🔧 [GET_ERRORS] 동적 폼 에러 안전 추출 시작 (타입단언 제거)'
+      );
+
+      try {
+        const currentFormErrors = formMethods.formState.errors;
+        const processedErrors: Partial<Record<keyof FormSchemaValues, string>> =
+          {};
+
+        // 동적으로 모든 필드명 가져오기 (타입단언 제거)
+        const rawAllFieldNames = getAllFieldNames();
+        const validatedFormFieldNames =
+          fieldTypeMap.keysValidator.validateAndConvertToFormSchemaKeys(
+            rawAllFieldNames
+          );
+
+        for (const currentFieldName of validatedFormFieldNames) {
+          const fieldError = Reflect.get(currentFormErrors, currentFieldName);
+          const hasFieldError = fieldError && typeof fieldError === 'object';
+
+          if (hasFieldError) {
+            const errorMessage = Reflect.get(fieldError, 'message');
+            const isValidErrorMessage = typeof errorMessage === 'string';
+
+            if (isValidErrorMessage) {
+              Reflect.set(processedErrors, currentFieldName, errorMessage);
+            }
+          }
+        }
+
+        console.log(
+          '✅ [GET_ERRORS] 동적 폼 에러 안전 추출 완료 (타입단언 제거):',
+          {
+            errorCount: Object.keys(processedErrors).length,
+            totalFields: validatedFormFieldNames.length,
+          }
+        );
+
+        return processedErrors;
+      } catch (getErrorsException) {
+        console.error('❌ [GET_ERRORS] 폼 에러 추출 실패:', getErrorsException);
+        return {};
+      }
+    };
+
+    console.log(
+      '🔧 [USE_FORM_STATE] useMultiStepFormState 훅 완료 (타입단언 완전 제거)'
+    );
+
+    return {
+      // React Hook Form 메서드들
+      ...formMethods,
+
+      // 커스텀 안전 메서드들 (타입단언 완전 제거)
+      getCurrentFormValuesSafely,
+      getFieldValueSafely,
+      setFieldValueSafely,
+      resetFormSafely,
+      validateFormSafely,
+      validateSpecificFieldsSafely,
+      getFormErrorsSafely,
+    };
+  };
+
+  console.log(
+    '✅ [HOOK_FACTORY] MultiStepFormState 훅 팩토리 완료 (타입단언 완전 제거)'
+  );
+  return useMultiStepFormState;
+};
+
+// 실제 훅 생성
+const useMultiStepFormState = createMultiStepFormStateHook();
+
+export { useMultiStepFormState };
+
+// 기본 내보내기
+export default useMultiStepFormState;

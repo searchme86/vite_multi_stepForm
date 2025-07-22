@@ -1,21 +1,25 @@
-// src/components/multiStepForm/reactHookForm/hooks/useFormConfiguration.ts
+// src/components/multiStepForm/reactHookForm/formMethods/useFormConfiguration.ts
 
 import React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { UseFormProps, Resolver } from 'react-hook-form';
 import type { FormSchemaValues } from '../../types/formTypes';
 import { formSchema } from '../../schema/formSchema';
+import {
+  getDefaultFormSchemaValues,
+  getAllFieldNames,
+} from '../../utils/formFieldsLoader';
 
-// 🚀 타입 안전한 폼 설정 인터페이스 - 타입 유연성 개선
+// 🚀 타입 안전한 폼 설정 인터페이스
 interface OptimizedFormConfiguration
   extends Partial<UseFormProps<FormSchemaValues>> {
   readonly resolver: Resolver<FormSchemaValues>;
   readonly defaultValues: Readonly<FormSchemaValues>;
   readonly mode: 'onChange';
   readonly reValidateMode: 'onChange';
-  readonly shouldFocusError: boolean; // boolean 타입으로 변경
+  readonly shouldFocusError: boolean;
   readonly shouldUnregister: false;
-  readonly criteriaMode: 'firstError' | 'all'; // 유니온 타입으로 변경
+  readonly criteriaMode: 'firstError' | 'all';
   readonly delayError: number;
 }
 
@@ -45,42 +49,132 @@ interface OptimizedConfigurationResult {
 
 // 🚀 구체 타입: 빈 배열 생성 함수들
 const createEmptyStringArray = (): string[] => {
+  console.log('🔧 [DYNAMIC_CONFIG] 빈 문자열 배열 생성');
   const emptyArray: string[] = [];
   return emptyArray;
 };
 
 const createNullableImageField = (): string | null => {
+  console.log('🔧 [DYNAMIC_CONFIG] nullable 이미지 필드 생성');
   return null;
 };
 
-// 🚀 구체 타입: 불변 기본값 생성 함수
-const createImmutableDefaultFormValues = (): Readonly<FormSchemaValues> => {
-  const mediaArray = createEmptyStringArray();
-  const sliderImagesArray = createEmptyStringArray();
-  const mainImageValue = createNullableImageField();
+// 🚀 동적 기본값 생성 함수 - 12개 필드만 (content, tags 제거)
+const createDynamicImmutableDefaultFormValues =
+  (): Readonly<FormSchemaValues> => {
+    console.log(
+      '🔧 [DYNAMIC_CONFIG] 동적 불변 FormValues 생성 시작 (12개 필드)'
+    );
 
-  const formValues: FormSchemaValues = {
-    userImage: '',
-    nickname: '',
-    emailPrefix: '',
-    emailDomain: '',
-    bio: '',
-    title: '',
-    description: '',
-    tags: '',
-    content: '',
-    media: mediaArray,
-    mainImage: mainImageValue,
-    sliderImages: sliderImagesArray,
-    editorCompletedContent: '',
-    isEditorCompleted: false,
+    const dynamicDefaultValues = getDefaultFormSchemaValues();
+    const allFieldNames = getAllFieldNames();
+
+    console.log('🔧 [DYNAMIC_CONFIG] 동적 필드 목록 (12개):', allFieldNames);
+    console.log('🔧 [DYNAMIC_CONFIG] 동적 기본값:', dynamicDefaultValues);
+
+    // Map을 사용하여 타입 안전성 확보
+    const dynamicValuesMap = new Map(Object.entries(dynamicDefaultValues));
+
+    console.log(
+      '🔧 [DYNAMIC_CONFIG] 각 필드별 타입 안전 처리 시작 (12개 필드)'
+    );
+
+    // 각 필드별로 정확한 타입 처리 (타입단언 제거) - 12개 필드만
+    const safeUserImage = (): string => {
+      const rawValue = dynamicValuesMap.get('userImage');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeNickname = (): string => {
+      const rawValue = dynamicValuesMap.get('nickname');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeEmailPrefix = (): string => {
+      const rawValue = dynamicValuesMap.get('emailPrefix');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeEmailDomain = (): string => {
+      const rawValue = dynamicValuesMap.get('emailDomain');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeBio = (): string => {
+      const rawValue = dynamicValuesMap.get('bio');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeTitle = (): string => {
+      const rawValue = dynamicValuesMap.get('title');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeDescription = (): string => {
+      const rawValue = dynamicValuesMap.get('description');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeMedia = (): string[] => {
+      const rawValue = dynamicValuesMap.get('media');
+      return Array.isArray(rawValue)
+        ? rawValue.filter((item) => typeof item === 'string')
+        : createEmptyStringArray();
+    };
+
+    const safeMainImage = (): string | null => {
+      const rawValue = dynamicValuesMap.get('mainImage');
+      if (rawValue === null) {
+        return null;
+      }
+      if (typeof rawValue === 'string') {
+        return rawValue;
+      }
+      return createNullableImageField();
+    };
+
+    const safeSliderImages = (): string[] => {
+      const rawValue = dynamicValuesMap.get('sliderImages');
+      return Array.isArray(rawValue)
+        ? rawValue.filter((item) => typeof item === 'string')
+        : createEmptyStringArray();
+    };
+
+    const safeEditorCompletedContent = (): string => {
+      const rawValue = dynamicValuesMap.get('editorCompletedContent');
+      return typeof rawValue === 'string' ? rawValue : '';
+    };
+
+    const safeIsEditorCompleted = (): boolean => {
+      const rawValue = dynamicValuesMap.get('isEditorCompleted');
+      return typeof rawValue === 'boolean' ? rawValue : false;
+    };
+
+    // FormSchemaValues 타입으로 안전하게 변환 (12개 필드만, content/tags 제거)
+    const formValuesWithTypeSafety: FormSchemaValues = {
+      userImage: safeUserImage(),
+      nickname: safeNickname(),
+      emailPrefix: safeEmailPrefix(),
+      emailDomain: safeEmailDomain(),
+      bio: safeBio(),
+      title: safeTitle(),
+      description: safeDescription(),
+      media: safeMedia(),
+      mainImage: safeMainImage(),
+      sliderImages: safeSliderImages(),
+      editorCompletedContent: safeEditorCompletedContent(),
+      isEditorCompleted: safeIsEditorCompleted(),
+    };
+
+    console.log(
+      '✅ [DYNAMIC_CONFIG] 동적 불변 FormValues 생성 완료 (12개 필드)'
+    );
+    return Object.freeze(formValuesWithTypeSafety);
   };
-
-  return Object.freeze(formValues);
-};
 
 // 🚀 구체 타입: Resolver 생성 함수
 const createFormResolver = (): Resolver<FormSchemaValues> => {
+  console.log('🔧 [DYNAMIC_CONFIG] Resolver 생성');
   const resolverFunction = zodResolver(formSchema);
 
   // 타입 검증을 통한 안전한 반환
@@ -90,23 +184,26 @@ const createFormResolver = (): Resolver<FormSchemaValues> => {
     return typeof resolver === 'function';
   };
 
-  if (isValidResolver(resolverFunction)) {
+  const resolverValidationResult = isValidResolver(resolverFunction);
+
+  if (resolverValidationResult) {
+    console.log('✅ [DYNAMIC_CONFIG] Resolver 생성 완료');
     return resolverFunction;
   }
 
   throw new Error('Invalid resolver created');
 };
 
-// 🚀 메모리 최적화: 불변 기본값
-const IMMUTABLE_DEFAULT_FORM_VALUES: Readonly<FormSchemaValues> =
-  createImmutableDefaultFormValues();
+// 🚀 메모리 최적화: 동적 불변 기본값 (12개 필드)
+const DYNAMIC_IMMUTABLE_DEFAULT_FORM_VALUES: Readonly<FormSchemaValues> =
+  createDynamicImmutableDefaultFormValues();
 
 // 🚀 메모리 최적화: 불변 해결자
 const IMMUTABLE_FORM_RESOLVER: Resolver<FormSchemaValues> = Object.freeze(
   createFormResolver()
 );
 
-// 🚀 메모리 최적화: 사전 정의된 설정 변형들 - 타입 안전성 개선
+// 🚀 메모리 최적화: 사전 정의된 설정 변형들
 const CONFIGURATION_VARIANTS_MAP = new Map<string, FormConfigurationVariant>([
   [
     'default',
@@ -153,16 +250,21 @@ const optimizedConfigurationCache = new Map<
   }
 >();
 
-// 🚀 구체 타입: 설정 객체 생성 함수 - 타입 호환성 개선
+// 🚀 구체 타입: 설정 객체 생성 함수
 const buildOptimizedConfiguration = (
   variant: FormConfigurationVariant
 ): OptimizedFormConfiguration => {
+  console.log(
+    '🔧 [DYNAMIC_CONFIG] 최적화된 설정 빌드:',
+    variant.configurationId
+  );
+
   const { delayError, shouldFocusError, criteriaMode } = variant;
 
   // 각 속성을 명시적으로 구성
   const configResolver: Resolver<FormSchemaValues> = IMMUTABLE_FORM_RESOLVER;
   const configDefaultValues: Readonly<FormSchemaValues> =
-    IMMUTABLE_DEFAULT_FORM_VALUES;
+    DYNAMIC_IMMUTABLE_DEFAULT_FORM_VALUES;
   const configMode: 'onChange' = 'onChange';
   const configReValidateMode: 'onChange' = 'onChange';
   const configShouldUnregister: false = false;
@@ -173,12 +275,13 @@ const buildOptimizedConfiguration = (
     defaultValues: configDefaultValues,
     mode: configMode,
     reValidateMode: configReValidateMode,
-    shouldFocusError: shouldFocusError, // 변수 직접 사용으로 타입 호환성 확보
+    shouldFocusError: shouldFocusError,
     shouldUnregister: configShouldUnregister,
-    criteriaMode: criteriaMode, // 변수 직접 사용으로 타입 호환성 확보
+    criteriaMode: criteriaMode,
     delayError,
   };
 
+  console.log('✅ [DYNAMIC_CONFIG] 최적화된 설정 빌드 완료');
   return Object.freeze(optimizedConfig);
 };
 
@@ -186,7 +289,10 @@ const buildOptimizedConfiguration = (
 const createOptimizedFormConfiguration = (
   variant: FormConfigurationVariant
 ): OptimizedFormConfiguration => {
-  console.log('🔧 메모리 최적화된 폼 설정 생성:', variant.configurationId);
+  console.log(
+    '🔧 [DYNAMIC_CONFIG] 메모리 최적화된 폼 설정 생성:',
+    variant.configurationId
+  );
 
   const optimizedConfiguration = buildOptimizedConfiguration(variant);
 
@@ -199,7 +305,7 @@ const createOptimizedFormConfiguration = (
     variantId: variant.configurationId,
   });
 
-  console.log('✅ 메모리 최적화된 폼 설정 생성 완료');
+  console.log('✅ [DYNAMIC_CONFIG] 메모리 최적화된 폼 설정 생성 완료');
   return optimizedConfiguration;
 };
 
@@ -210,7 +316,9 @@ const updateConfigurationMetadata = (
 ): void => {
   const existingMetadata = configurationMetadataWeakMap.get(configuration);
 
-  if (existingMetadata) {
+  const hasExistingMetadata = existingMetadata !== undefined;
+
+  if (hasExistingMetadata) {
     const updatedMetadata: ConfigurationMetadata = {
       ...existingMetadata,
       ...updateFn(existingMetadata),
@@ -224,18 +332,22 @@ const updateConfigurationMetadata = (
 const getOrCreateOptimizedConfiguration = (
   variantId: string = 'default'
 ): OptimizedFormConfiguration => {
+  console.log('🔧 [DYNAMIC_CONFIG] 설정 조회 또는 생성:', variantId);
+
   // 사전 정의된 변형 확인
   const predefinedVariant = CONFIGURATION_VARIANTS_MAP.get(variantId);
+  const defaultVariant = CONFIGURATION_VARIANTS_MAP.get('default');
   const variant =
-    predefinedVariant || CONFIGURATION_VARIANTS_MAP.get('default');
+    predefinedVariant !== undefined ? predefinedVariant : defaultVariant;
 
-  if (!variant) {
+  if (variant === undefined) {
     throw new Error(`유효하지 않은 설정 변형: ${variantId}`);
   }
 
   // 새로운 설정 생성
   const newConfiguration = createOptimizedFormConfiguration(variant);
 
+  console.log('✅ [DYNAMIC_CONFIG] 설정 조회 또는 생성 완료');
   return newConfiguration;
 };
 
@@ -243,18 +355,24 @@ const getOrCreateOptimizedConfiguration = (
 export const useFormConfiguration = (
   variantId: string = 'default'
 ): OptimizedConfigurationResult => {
-  console.log('📝 useFormConfiguration: 메모리 최적화된 폼 설정 초기화');
+  console.log(
+    '📝 [DYNAMIC_CONFIG] useFormConfiguration: 메모리 최적화된 폼 설정 초기화 (12개 필드)'
+  );
 
   // 최적화된 설정 조회 (메모이제이션)
   const formConfig = React.useMemo(() => {
+    console.log('🔧 [DYNAMIC_CONFIG] useMemo: 폼 설정 생성');
     return getOrCreateOptimizedConfiguration(variantId);
   }, [variantId]);
 
   // 메타데이터 조회 (메모이제이션)
   const metadata = React.useMemo(() => {
+    console.log('🔧 [DYNAMIC_CONFIG] useMemo: 메타데이터 조회');
     const configMetadata = configurationMetadataWeakMap.get(formConfig);
 
-    if (configMetadata) {
+    const hasConfigMetadata = configMetadata !== undefined;
+
+    if (hasConfigMetadata) {
       return configMetadata;
     }
 
@@ -272,6 +390,7 @@ export const useFormConfiguration = (
 
   // 메모리 통계 계산 (메모이제이션)
   const memoryStats = React.useMemo(() => {
+    console.log('🔧 [DYNAMIC_CONFIG] useMemo: 메모리 통계 계산');
     const statsObject = {
       cacheHitCount: 0,
       configurationCount: optimizedConfigurationCache.size,
@@ -283,12 +402,15 @@ export const useFormConfiguration = (
 
   // 접근 시간 업데이트
   React.useEffect(() => {
+    console.log('🔧 [DYNAMIC_CONFIG] useEffect: 접근 시간 업데이트');
     updateConfigurationMetadata(formConfig, () => ({
       lastUsedTime: Date.now(),
     }));
   }, [formConfig]);
 
-  console.log('📝 useFormConfiguration: 메모리 최적화 초기화 완료');
+  console.log(
+    '📝 [DYNAMIC_CONFIG] useFormConfiguration: 메모리 최적화 초기화 완료 (12개 필드)'
+  );
 
   const resultObject: OptimizedConfigurationResult = {
     formConfig,
@@ -309,9 +431,14 @@ export const addCustomConfigurationVariant = (
   variantId: string,
   variant: Omit<FormConfigurationVariant, 'configurationId'>
 ): boolean => {
+  console.log(
+    '🔧 [DYNAMIC_CONFIG] 사용자 정의 설정 변형 추가 시도:',
+    variantId
+  );
+
   const hasExistingVariant = CONFIGURATION_VARIANTS_MAP.has(variantId);
   if (hasExistingVariant) {
-    console.warn('⚠️ 이미 존재하는 설정 변형:', variantId);
+    console.warn('⚠️ [DYNAMIC_CONFIG] 이미 존재하는 설정 변형:', variantId);
     return false;
   }
 
@@ -325,7 +452,10 @@ export const addCustomConfigurationVariant = (
   // 원본 Map에 직접 추가 (타입 안전성 유지)
   CONFIGURATION_VARIANTS_MAP.set(variantId, Object.freeze(customVariant));
 
-  console.log('✅ 사용자 정의 설정 변형 추가:', variantId);
+  console.log(
+    '✅ [DYNAMIC_CONFIG] 사용자 정의 설정 변형 추가 완료:',
+    variantId
+  );
   return true;
 };
 
@@ -334,5 +464,6 @@ export const getFormConfigurationMetadata = (
   configuration: OptimizedFormConfiguration
 ): ConfigurationMetadata | null => {
   const metadata = configurationMetadataWeakMap.get(configuration);
-  return metadata || null;
+  const hasMetadata = metadata !== undefined;
+  return hasMetadata ? metadata : null;
 };

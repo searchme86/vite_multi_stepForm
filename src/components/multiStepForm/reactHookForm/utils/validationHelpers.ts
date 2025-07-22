@@ -1,6 +1,14 @@
 // src/components/multiStepForm/reactHookForm/utils/validationHelpers.ts
 
 import type { FormSchemaValues, FormValues } from '../../types/formTypes';
+import {
+  getAllFieldNames,
+  getFieldType,
+  getDefaultFormSchemaValues,
+  getStringFields,
+  getArrayFields,
+  getBooleanFields,
+} from '../../utils/formFieldsLoader.ts';
 
 type PossibleFormValue =
   | string
@@ -28,265 +36,148 @@ interface FieldConfigItem {
   ) => string | boolean | string[] | null;
 }
 
-// 🚀 성능 최적화: 사전 계산된 정적 매핑 테이블
-const STATIC_FIELD_CONFIGS: ReadonlyMap<string, FieldConfigItem> = new Map([
-  [
-    'userImage',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'userimage',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('🖼️ validationHelpers: userImage 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'nickname',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'nickname',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('👤 validationHelpers: nickname 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'emailPrefix',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'emailprefix',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('📧 validationHelpers: emailPrefix 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'emailDomain',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'emaildomain',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('🌐 validationHelpers: emailDomain 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'bio',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'bio',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('📝 validationHelpers: bio 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'title',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'title',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('📰 validationHelpers: title 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'description',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'description',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('📄 validationHelpers: description 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'tags',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'tags',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('🏷️ validationHelpers: tags 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'content',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'content',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log('📚 validationHelpers: content 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'editorCompletedContent',
-    {
-      type: FIELD_TYPES.STRING,
-      default: '',
-      mapping: 'editorcompletedcontent',
-      processor: (value: PossibleFormValue): string => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : '';
-        console.log(
-          '✏️ validationHelpers: editorCompletedContent 처리됨',
-          processedValue
-        );
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'media',
-    {
-      type: FIELD_TYPES.ARRAY,
-      default: [],
-      mapping: 'media',
-      processor: (value: PossibleFormValue): string[] => {
-        const processedValue = Array.isArray(value)
-          ? value.filter((item): item is string => typeof item === 'string')
-          : [];
-        console.log('🎥 validationHelpers: media 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'sliderImages',
-    {
-      type: FIELD_TYPES.ARRAY,
-      default: [],
-      mapping: 'sliderimages',
-      processor: (value: PossibleFormValue): string[] => {
-        const processedValue = Array.isArray(value)
-          ? value.filter((item): item is string => typeof item === 'string')
-          : [];
-        console.log(
-          '🖼️ validationHelpers: sliderImages 처리됨',
-          processedValue
-        );
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'isEditorCompleted',
-    {
-      type: FIELD_TYPES.BOOLEAN,
-      default: false,
-      mapping: 'iseditorcompleted',
-      processor: (value: PossibleFormValue): boolean => {
-        let processedValue = false;
+// 🚀 동적 프로세서 생성기
+const createDynamicProcessor = (fieldName: string, fieldType: string) => {
+  return (value: PossibleFormValue): string | boolean | string[] | null => {
+    console.log(`🔧 validationHelpers: ${fieldName} 처리 시작`, {
+      value,
+      fieldType,
+    });
 
-        if (typeof value === 'boolean') {
-          processedValue = value;
-        } else if (typeof value === 'string') {
-          const lowerValue = value.toLowerCase();
-          processedValue = lowerValue === 'true' || lowerValue === '1';
-        } else if (typeof value === 'number') {
-          processedValue = value !== 0;
-        }
+    if (fieldType === 'array') {
+      return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : [];
+    }
 
-        console.log(
-          '✅ validationHelpers: isEditorCompleted 처리됨',
-          processedValue
+    if (fieldType === 'boolean') {
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const lowerValue = value.toLowerCase();
+        return (
+          lowerValue === 'true' ||
+          lowerValue === '1' ||
+          lowerValue === 'yes' ||
+          lowerValue === 'on'
         );
-        return processedValue;
-      },
-    },
-  ],
-  [
-    'mainImage',
-    {
-      type: FIELD_TYPES.NULLABLE_STRING,
-      default: null,
-      mapping: 'mainimage',
-      processor: (value: PossibleFormValue): string | null => {
-        const processedValue =
-          typeof value === 'string' && value.trim() !== '' ? value : null;
-        console.log('🎨 validationHelpers: mainImage 처리됨', processedValue);
-        return processedValue;
-      },
-    },
-  ],
-]);
+      }
+      if (typeof value === 'number') {
+        return value !== 0;
+      }
+      return false;
+    }
 
-// 🚀 O(1) 조회를 위한 사전 계산된 매핑 테이블
-const OPTIMIZED_FIELD_MAPPINGS: ReadonlyMap<string, string> = (() => {
+    if (fieldType === 'string|null') {
+      return typeof value === 'string' && value.trim() !== '' ? value : null;
+    }
+
+    // string 타입 처리
+    const stringValue =
+      typeof value === 'string' && value.trim() !== '' ? value : '';
+    console.log(`✅ validationHelpers: ${fieldName} 처리 완료`, stringValue);
+    return stringValue;
+  };
+};
+
+// 🚀 동적 필드 설정 생성
+const createDynamicFieldConfig = (fieldName: string): FieldConfigItem => {
+  const fieldType = getFieldType(fieldName);
+  const defaultFormValues = getDefaultFormSchemaValues();
+  const defaultValue = Reflect.get(defaultFormValues, fieldName);
+
+  console.log(`🏗️ validationHelpers: ${fieldName} 설정 생성`, {
+    fieldType,
+    defaultValue,
+  });
+
+  const fieldTypeMapping = new Map<string, FieldType>([
+    ['array', FIELD_TYPES.ARRAY],
+    ['boolean', FIELD_TYPES.BOOLEAN],
+    ['string|null', FIELD_TYPES.NULLABLE_STRING],
+    ['string', FIELD_TYPES.STRING],
+  ]);
+
+  const mappedFieldType = fieldTypeMapping.get(fieldType) ?? FIELD_TYPES.STRING;
+
+  return {
+    type: mappedFieldType,
+    default: defaultValue,
+    mapping: fieldName.toLowerCase(),
+    processor: createDynamicProcessor(fieldName, fieldType),
+  };
+};
+
+// 🚀 동적 필드 설정 캐시 생성
+const createDynamicFieldConfigs = (): ReadonlyMap<string, FieldConfigItem> => {
+  console.log('🗂️ validationHelpers: 동적 필드 설정 생성 시작');
+
+  const allFieldNames = getAllFieldNames();
+  const configsMap = new Map<string, FieldConfigItem>();
+
+  allFieldNames.forEach((fieldName) => {
+    const fieldConfig = createDynamicFieldConfig(fieldName);
+    configsMap.set(fieldName, fieldConfig);
+  });
+
+  console.log(
+    `✅ validationHelpers: 동적 필드 설정 완료 (${configsMap.size}개 필드)`
+  );
+  return configsMap;
+};
+
+// 🚀 동적 매핑 테이블 생성
+const createDynamicFieldMappings = (
+  fieldConfigs: ReadonlyMap<string, FieldConfigItem>
+): ReadonlyMap<string, string> => {
+  console.log('🗺️ validationHelpers: 동적 매핑 테이블 생성');
+
   const mappingTable = new Map<string, string>();
 
   // 기본 매핑 생성
-  for (const [fieldKey, config] of STATIC_FIELD_CONFIGS) {
+  for (const [fieldKey, config] of fieldConfigs) {
     const { mapping } = config;
     mappingTable.set(mapping, fieldKey);
     mappingTable.set(fieldKey.toLowerCase(), fieldKey);
   }
 
-  // 추가 특수 매핑
-  const additionalMappingsList = [
-    { from: 'editorcompleted', to: 'isEditorCompleted' },
-    { from: 'editor', to: 'isEditorCompleted' },
-  ];
+  // 에디터 관련 특수 매핑
+  const editorFieldsSet = new Set([
+    'isEditorCompleted',
+    'editorCompletedContent',
+  ]);
+  const allFieldNames = getAllFieldNames();
 
-  for (const { from, to } of additionalMappingsList) {
-    mappingTable.set(from, to);
-  }
+  const editorFields = allFieldNames.filter((fieldName) =>
+    editorFieldsSet.has(fieldName)
+  );
+
+  editorFields.forEach((fieldName) => {
+    if (fieldName === 'isEditorCompleted') {
+      mappingTable.set('editorcompleted', fieldName);
+      mappingTable.set('editor', fieldName);
+    }
+  });
 
   console.log(
-    '🗺️ validationHelpers: 매핑 테이블 초기화 완료',
-    mappingTable.size
+    `✅ validationHelpers: 매핑 테이블 완료 (${mappingTable.size}개 매핑)`
   );
   return mappingTable;
-})();
-
-// 🚀 사전 계산된 유효한 키 목록 (O(1) 조회)
-const VALID_FORM_FIELD_KEYS_SET: ReadonlySet<string> = new Set(
-  STATIC_FIELD_CONFIGS.keys()
-);
-
-// 🚀 타입 가드 - O(1) 성능
-const isFormFieldKeyGuard = (key: string): key is keyof FormValues => {
-  const isValid = VALID_FORM_FIELD_KEYS_SET.has(key);
-  console.log('🔍 validationHelpers: 필드 키 검증', key, isValid);
-  return isValid;
 };
+
+// 🚀 동적 유효 키 집합 생성
+const createDynamicValidFieldKeys = (): ReadonlySet<string> => {
+  const allFields = getAllFieldNames();
+  return new Set(allFields);
+};
+
+// 🚀 전역 동적 설정 초기화
+const DYNAMIC_FIELD_CONFIGS = createDynamicFieldConfigs();
+const DYNAMIC_FIELD_MAPPINGS = createDynamicFieldMappings(
+  DYNAMIC_FIELD_CONFIGS
+);
+const DYNAMIC_VALID_KEYS = createDynamicValidFieldKeys();
 
 // 🚀 정규화 함수 - 메모이제이션으로 최적화
 const normalizeFieldNameCachingMap = new Map<string, string>();
@@ -310,12 +201,19 @@ const normalizeFieldNameOptimized = (fieldName: string): string => {
   return normalizedResult;
 };
 
-// 🚀 필드 값 처리 - O(1) 조회
+// 🚀 타입 가드 - 동적 키 검증 (string 타입으로 수정)
+const isFormFieldKeyGuard = (key: string): key is string => {
+  const isValid = DYNAMIC_VALID_KEYS.has(key);
+  console.log('🔍 validationHelpers: 필드 키 검증', key, isValid);
+  return isValid;
+};
+
+// 🚀 필드 값 처리 - 동적 설정 기반
 const processFieldValueOptimized = (
   fieldKey: string,
   inputValue: PossibleFormValue
 ): string | boolean | string[] | null => {
-  const fieldConfig = STATIC_FIELD_CONFIGS.get(fieldKey);
+  const fieldConfig = DYNAMIC_FIELD_CONFIGS.get(fieldKey);
 
   if (!fieldConfig) {
     console.log('⚠️ validationHelpers: 알 수 없는 필드', fieldKey);
@@ -328,74 +226,43 @@ const processFieldValueOptimized = (
   return processor(inputValue);
 };
 
-// 🚀 스키마 값을 FormValues로 변환 - 최적화된 버전
-const createOptimizedFormValuesFromSchema = (
-  schemaValues: FormSchemaValues
-): FormValues => {
-  console.log('🏗️ validationHelpers: FormValues 생성 시작');
+// 🚀 타입 검증 - Map 기반 구체적인 타입 체크
+const createTypeValidationMap = (): Map<
+  FieldType,
+  (value: string | boolean | string[] | null) => boolean
+> => {
+  const validationMap = new Map<
+    FieldType,
+    (value: string | boolean | string[] | null) => boolean
+  >();
 
-  // 기본값으로 초기화
-  const resultFormValues = Object.create(null);
+  validationMap.set(
+    FIELD_TYPES.STRING,
+    (value): value is string => typeof value === 'string'
+  );
+  validationMap.set(FIELD_TYPES.ARRAY, (value): value is string[] =>
+    Array.isArray(value)
+  );
+  validationMap.set(
+    FIELD_TYPES.BOOLEAN,
+    (value): value is boolean => typeof value === 'boolean'
+  );
+  validationMap.set(
+    FIELD_TYPES.NULLABLE_STRING,
+    (value): value is string | null =>
+      typeof value === 'string' || value === null
+  );
 
-  for (const [fieldKey, config] of STATIC_FIELD_CONFIGS) {
-    resultFormValues[fieldKey] = config.default;
-  }
-
-  // 스키마 값으로 업데이트
-  const schemaKeysArray = Object.keys(schemaValues);
-
-  for (const schemaKey of schemaKeysArray) {
-    if (!isFormFieldKeyGuard(schemaKey)) {
-      continue;
-    }
-
-    const schemaValue = schemaValues[schemaKey];
-    const processedValue = processFieldValueOptimized(schemaKey, schemaValue);
-
-    // 타입 안전성 검증 후 할당
-    const fieldConfig = STATIC_FIELD_CONFIGS.get(schemaKey);
-
-    if (!fieldConfig) {
-      continue;
-    }
-
-    const isValidType = validateProcessedValueType(
-      processedValue,
-      fieldConfig.type
-    );
-
-    if (isValidType) {
-      resultFormValues[schemaKey] = processedValue;
-    }
-  }
-
-  console.log('✅ validationHelpers: FormValues 생성 완료');
-  return Object.freeze(resultFormValues);
+  return validationMap;
 };
 
-// 🚀 타입 검증 - 구체적인 타입 체크
+const TYPE_VALIDATION_MAP = createTypeValidationMap();
+
 const validateProcessedValueType = (
   processedValue: string | boolean | string[] | null,
   expectedFieldType: FieldType
 ): boolean => {
-  const typeValidationMap = new Map<
-    FieldType,
-    (value: string | boolean | string[] | null) => boolean
-  >([
-    [FIELD_TYPES.STRING, (value): value is string => typeof value === 'string'],
-    [FIELD_TYPES.ARRAY, (value): value is string[] => Array.isArray(value)],
-    [
-      FIELD_TYPES.BOOLEAN,
-      (value): value is boolean => typeof value === 'boolean',
-    ],
-    [
-      FIELD_TYPES.NULLABLE_STRING,
-      (value): value is string | null =>
-        typeof value === 'string' || value === null,
-    ],
-  ]);
-
-  const validationFunction = typeValidationMap.get(expectedFieldType);
+  const validationFunction = TYPE_VALIDATION_MAP.get(expectedFieldType);
 
   if (!validationFunction) {
     console.log('❌ validationHelpers: 알 수 없는 타입', expectedFieldType);
@@ -412,7 +279,52 @@ const validateProcessedValueType = (
   return isValidTypeResult;
 };
 
-// 🚀 배열 필터링 - 최적화된 버전
+// 🚀 FormSchemaValues를 FormValues로 변환 - 완전 동적화
+const createOptimizedFormValuesFromSchema = (
+  schemaValues: FormSchemaValues
+): FormValues => {
+  console.log('🏗️ validationHelpers: FormValues 생성 시작');
+
+  // 기본값으로 초기화 - 동적 생성
+  const resultFormValues = Object.create(null);
+
+  for (const [fieldKey, config] of DYNAMIC_FIELD_CONFIGS) {
+    resultFormValues[fieldKey] = config.default;
+  }
+
+  // 스키마 값으로 업데이트 - Reflect 사용
+  const schemaKeysArray = Object.keys(schemaValues);
+
+  for (const schemaKey of schemaKeysArray) {
+    if (!isFormFieldKeyGuard(schemaKey)) {
+      continue;
+    }
+
+    const schemaValue = Reflect.get(schemaValues, schemaKey);
+    const processedValue = processFieldValueOptimized(schemaKey, schemaValue);
+
+    // 타입 안전성 검증 후 할당
+    const fieldConfig = DYNAMIC_FIELD_CONFIGS.get(schemaKey);
+
+    if (!fieldConfig) {
+      continue;
+    }
+
+    const isValidType = validateProcessedValueType(
+      processedValue,
+      fieldConfig.type
+    );
+
+    if (isValidType) {
+      Reflect.set(resultFormValues, schemaKey, processedValue);
+    }
+  }
+
+  console.log('✅ validationHelpers: FormValues 생성 완료');
+  return Object.freeze(resultFormValues);
+};
+
+// 🚀 배열 필터링 - 동적 키 기반
 const filterValidFormFieldsOptimized = (
   fieldsList: readonly string[]
 ): string[] => {
@@ -445,15 +357,13 @@ const filterDefinedStringsOptimized = (
   return validStringsList;
 };
 
-// 🚀 스키마 키 검증 - O(1) 성능
-export const isValidFormSchemaKey = (
-  key: string
-): key is keyof FormSchemaValues => {
+// 🚀 외부 인터페이스 - 스키마 키 검증 (string 반환으로 수정)
+export const isValidFormSchemaKey = (key: string): key is string => {
   return isFormFieldKeyGuard(key);
 };
 
-// 🚀 FormValue 키 검증
-export const isValidFormValueKey = (key: string): key is keyof FormValues => {
+// 🚀 FormValue 키 검증 (string 반환으로 수정)
+export const isValidFormValueKey = (key: string): key is string => {
   return isFormFieldKeyGuard(key);
 };
 
@@ -469,14 +379,31 @@ export const normalizeFieldName = normalizeFieldNameOptimized;
 // 🚀 스키마 변환 (외부 인터페이스)
 export const createFormValuesFromSchema = createOptimizedFormValuesFromSchema;
 
-// 🚀 필드 매핑 조회 - O(1) 성능
-export const FIELD_MAPPINGS = Object.fromEntries(OPTIMIZED_FIELD_MAPPINGS);
+// 🚀 동적 필드 매핑 조회
+export const FIELD_MAPPINGS = Object.fromEntries(DYNAMIC_FIELD_MAPPINGS);
 
-// 🚀 디버깅용 정보 조회
+// 🚀 디버깅용 정보 조회 - 동적 설정 기반
 export const getFieldInfo = (fieldKey: string): FieldConfigItem | undefined => {
-  return STATIC_FIELD_CONFIGS.get(fieldKey);
+  return DYNAMIC_FIELD_CONFIGS.get(fieldKey);
 };
 
 export const getAllFieldsInfo = (): Record<string, FieldConfigItem> => {
-  return Object.fromEntries(STATIC_FIELD_CONFIGS);
+  return Object.fromEntries(DYNAMIC_FIELD_CONFIGS);
+};
+
+// 🚀 동적 필드 그룹 조회 API
+export const getDynamicStringFields = (): string[] => {
+  return getStringFields();
+};
+
+export const getDynamicArrayFields = (): string[] => {
+  return getArrayFields();
+};
+
+export const getDynamicBooleanFields = (): string[] => {
+  return getBooleanFields();
+};
+
+export const getDynamicAllFields = (): string[] => {
+  return getAllFieldNames();
 };

@@ -2,8 +2,14 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import {
+  getDefaultFormSchemaValues,
+  getAllFieldNames,
+  getStringFields,
+  getEmailFields,
+} from '../../utils/formFieldsLoader';
 
-// 폼 데이터 인터페이스
+// 🆕 수정 가능한 폼 데이터 인터페이스 (readonly 제거)
 interface FormData {
   userImage?: string;
   nickname?: string;
@@ -12,25 +18,23 @@ interface FormData {
   bio?: string;
   title?: string;
   description?: string;
-  tags?: string;
-  content?: string;
   mainImage?: string | null;
   media?: string[];
   sliderImages?: string[];
   editorCompletedContent?: string;
   isEditorCompleted?: boolean;
-  // 인덱스 시그니처 추가 - 동적 키 접근 허용
+  // 동적 키 접근 허용 (readonly 제거)
   [key: string]: string | string[] | boolean | null | undefined;
 }
 
 // 토스트 메시지 인터페이스
 interface ToastMessage {
-  title: string;
-  description: string;
-  color: 'success' | 'danger' | 'warning' | 'info';
+  readonly title: string;
+  readonly description: string;
+  readonly color: 'success' | 'danger' | 'warning' | 'info';
 }
 
-// 🔧 Bridge 호환성을 위한 FormValues 인터페이스 (commonTypes.ts와 호환)
+// 🆕 수정 가능한 Bridge 호환성을 위한 FormValues 인터페이스 (readonly 제거)
 interface BridgeCompatibleFormValues {
   userImage?: string;
   nickname: string;
@@ -39,83 +43,213 @@ interface BridgeCompatibleFormValues {
   bio?: string;
   title: string;
   description: string;
-  tags?: string;
-  content: string;
   media?: string[];
   mainImage?: string | null;
   sliderImages?: string[];
   editorCompletedContent?: string;
   isEditorCompleted?: boolean;
+  // 동적 키 접근 허용 (readonly 제거)
+  [key: string]: string | string[] | boolean | null | undefined;
 }
 
-// 🆕 Phase 2: Bridge가 기대하는 정확한 FormValues 타입 (formTypes.ts 기반)
+// 🆕 수정 가능한 Bridge가 기대하는 정확한 FormValues 타입 (readonly 제거)
 interface ExpectedBridgeFormValues {
   nickname: string; // required
   title: string; // required
   editorCompletedContent?: string;
   isEditorCompleted?: boolean;
+  // 동적 키 접근 허용 (readonly 제거)
   [key: string]: string | string[] | boolean | null | undefined;
 }
 
 // 스토어 인터페이스 - Bridge 메서드 및 속성 추가
 interface MultiStepFormStore {
-  formData: FormData;
-  toasts: ToastMessage[];
+  readonly formData: FormData;
+  readonly toasts: ToastMessage[];
 
-  // 🆕 Phase 2: Bridge 호환성을 위한 직접 속성 접근
-  formValues: ExpectedBridgeFormValues; // Bridge가 기대하는 getter 속성
-  currentStep: number; // Bridge가 기대하는 스텝 번호
-  editorCompletedContent: string; // Bridge가 기대하는 에디터 내용 getter
-  isEditorCompleted: boolean; // Bridge가 기대하는 완료 상태 getter
-  progressWidth: number; // Bridge가 기대하는 진행률
+  // Bridge 호환성을 위한 직접 속성 접근
+  readonly formValues: ExpectedBridgeFormValues; // Bridge가 기대하는 getter 속성
+  readonly currentStep: number; // Bridge가 기대하는 스텝 번호
+  readonly editorCompletedContent: string; // Bridge가 기대하는 에디터 내용 getter
+  readonly isEditorCompleted: boolean; // Bridge가 기대하는 완료 상태 getter
+  readonly progressWidth: number; // Bridge가 기대하는 진행률
 
   // 기존 메서드들
-  getFormValues: () => FormData;
-  updateFormValue: (
+  readonly getFormValues: () => FormData;
+  readonly updateFormValue: (
     fieldName: string,
     value: string | string[] | boolean | null
   ) => void;
-  updateFormValues: (
+  readonly updateFormValues: (
     values: Record<string, string | string[] | boolean | null>
   ) => void;
-  resetFormField: (fieldName: string) => void;
-  resetAllFormData: () => void;
-  addToast: (toast: ToastMessage) => void;
-  removeToast: (index: number) => void;
-  clearAllToasts: () => void;
-  updateEditorContent: (content: string) => void;
-  setEditorCompleted: (completed: boolean) => void;
-  setFormValues: (values: BridgeCompatibleFormValues) => void;
+  readonly resetFormField: (fieldName: string) => void;
+  readonly resetAllFormData: () => void;
+  readonly addToast: (toast: ToastMessage) => void;
+  readonly removeToast: (index: number) => void;
+  readonly clearAllToasts: () => void;
+  readonly updateEditorContent: (content: string) => void;
+  readonly setEditorCompleted: (completed: boolean) => void;
+  readonly setFormValues: (values: BridgeCompatibleFormValues) => void;
 
-  // 🆕 Phase 2: Bridge 호환성을 위한 추가 메서드들
-  updateCurrentStep: (step: number) => void;
-  updateProgressWidth: (width: number) => void;
-  getBridgeCompatibleFormValues: () => ExpectedBridgeFormValues;
+  // Bridge 호환성을 위한 추가 메서드들
+  readonly updateCurrentStep: (step: number) => void;
+  readonly updateProgressWidth: (width: number) => void;
+  readonly getBridgeCompatibleFormValues: () => ExpectedBridgeFormValues;
 }
 
 // 저장할 데이터 타입 정의
 interface StorageData {
-  formData: FormData;
-  toasts: ToastMessage[];
+  readonly formData: FormData;
+  readonly toasts: ToastMessage[];
 }
 
-// 🔧 필드별 예상 크기 맵 (바이트 단위)
-const FIELD_SIZE_ESTIMATES = new Map<string, number>([
-  ['userImage', 0], // 이미지는 별도 처리
-  ['nickname', 100],
-  ['emailPrefix', 50],
-  ['emailDomain', 50],
-  ['bio', 500],
-  ['title', 200],
-  ['description', 1000],
-  ['tags', 200],
-  ['content', 5000],
-  ['mainImage', 0], // 이미지는 별도 처리
-  ['media', 0], // 배열은 별도 처리
-  ['sliderImages', 0], // 배열은 별도 처리
-  ['editorCompletedContent', 10000],
-  ['isEditorCompleted', 10],
-]);
+// 🔧 안전한 문자열 배열 검증 함수
+const validateStringArray = (value: unknown): value is string[] => {
+  const isArray = Array.isArray(value);
+  if (!isArray) {
+    return false;
+  }
+
+  const allItemsAreStrings = value.every((item) => typeof item === 'string');
+  return allItemsAreStrings;
+};
+
+// 🔧 타입 안전한 문자열 배열 가드 함수 (강화)
+const createSafeStringArrayFromUnknown = (value: unknown): string[] => {
+  console.log('🔧 [TYPE_GUARD] 안전한 문자열 배열 생성:', {
+    inputType: typeof value,
+    isArray: Array.isArray(value),
+    timestamp: new Date().toISOString(),
+  });
+
+  // 1차 검증: 배열인지 확인
+  const isArrayValue = Array.isArray(value);
+  if (!isArrayValue) {
+    console.log('⚠️ [TYPE_GUARD] 배열이 아님, 빈 배열 반환');
+    return [];
+  }
+
+  // 2차 검증: 모든 요소가 문자열인지 확인
+  const isValidStringArray = validateStringArray(value);
+  if (!isValidStringArray) {
+    console.log('⚠️ [TYPE_GUARD] 배열 내 비문자열 요소 존재, 문자열만 필터링');
+
+    // 문자열 요소만 안전하게 추출
+    const stringItems: string[] = [];
+    for (const item of value) {
+      const isStringItem = typeof item === 'string';
+      if (isStringItem) {
+        stringItems.push(item);
+      }
+    }
+
+    console.log('✅ [TYPE_GUARD] 문자열 필터링 완료:', {
+      originalLength: value.length,
+      filteredLength: stringItems.length,
+    });
+
+    return stringItems;
+  }
+
+  // 3차 검증: 완전한 문자열 배열 반환
+  console.log('✅ [TYPE_GUARD] 안전한 문자열 배열 생성 완료:', {
+    originalLength: value.length,
+    allItemsValid: true,
+  });
+
+  return value;
+};
+
+// 🔧 필드명으로부터 크기 맵 생성
+const createFieldSizeMapFromFieldNames = (
+  fieldNames: string[]
+): Map<string, number> => {
+  const fieldSizeMap = new Map<string, number>();
+
+  // 기본 크기 추정값 (바이트 단위)
+  const defaultSizes: Record<string, number> = {
+    userImage: 0, // 이미지는 별도 처리
+    nickname: 100,
+    emailPrefix: 50,
+    emailDomain: 50,
+    bio: 500,
+    title: 200,
+    description: 1000,
+    mainImage: 0, // 이미지는 별도 처리
+    media: 0, // 배열은 별도 처리
+    sliderImages: 0, // 배열은 별도 처리
+    editorCompletedContent: 10000,
+    isEditorCompleted: 10,
+  };
+
+  // 안전한 반복문으로 맵 생성
+  for (const fieldName of fieldNames) {
+    const isValidFieldName =
+      typeof fieldName === 'string' && fieldName.length > 0;
+    if (!isValidFieldName) {
+      continue;
+    }
+
+    const estimatedSize = Reflect.get(defaultSizes, fieldName) || 100; // 알 수 없는 필드는 100바이트
+    fieldSizeMap.set(fieldName, estimatedSize);
+  }
+
+  console.log('✅ [STORE] 필드 크기 맵 생성 완료:', {
+    inputFieldsCount: fieldNames.length,
+    mapSize: fieldSizeMap.size,
+    fields: Array.from(fieldSizeMap.keys()),
+    timestamp: new Date().toISOString(),
+  });
+
+  return fieldSizeMap;
+};
+
+// 🆕 동적 필드별 예상 크기 맵 생성 (타입 안전성 강화)
+const createDynamicFieldSizeEstimates = (): Map<string, number> => {
+  console.log('🔧 [STORE] 동적 필드 크기 추정 맵 생성');
+
+  try {
+    const allFieldNamesRaw = getAllFieldNames();
+
+    // 타입 안전성 검증
+    const isValidFieldNames = validateStringArray(allFieldNamesRaw);
+    if (!isValidFieldNames) {
+      console.warn(
+        '⚠️ [STORE] getAllFieldNames() 반환값이 유효하지 않음, 기본 필드 사용'
+      );
+
+      // Fallback 필드들
+      const defaultFieldNames: string[] = [
+        'userImage',
+        'nickname',
+        'emailPrefix',
+        'emailDomain',
+        'bio',
+        'title',
+        'description',
+        'mainImage',
+        'media',
+        'sliderImages',
+        'editorCompletedContent',
+        'isEditorCompleted',
+      ];
+
+      return createFieldSizeMapFromFieldNames(defaultFieldNames);
+    }
+
+    const allFieldNames: string[] = allFieldNamesRaw;
+    return createFieldSizeMapFromFieldNames(allFieldNames);
+  } catch (error) {
+    console.error('❌ [STORE] 필드 크기 추정 맵 생성 실패:', error);
+
+    // 최소한의 기본 필드들
+    const fallbackFieldNames: string[] = ['nickname', 'title'];
+    return createFieldSizeMapFromFieldNames(fallbackFieldNames);
+  }
+};
+
+const DYNAMIC_FIELD_SIZE_ESTIMATES = createDynamicFieldSizeEstimates();
 
 // 🔧 직렬화 캐시 관리
 interface SerializationCache {
@@ -152,15 +286,19 @@ const isCacheValid = (cache: SerializationCache): boolean => {
 
 // 🔧 데이터 동일성 검사
 const isDataEqual = (data1: StorageData, data2: StorageData): boolean => {
-  const data1Keys = Object.keys(data1.formData || {});
-  const data2Keys = Object.keys(data2.formData || {});
+  const data1FormData = data1.formData || {};
+  const data2FormData = data2.formData || {};
+
+  const data1Keys = Object.keys(data1FormData);
+  const data2Keys = Object.keys(data2FormData);
 
   const keysMatch =
     data1Keys.length === data2Keys.length &&
     data1Keys.every((key) => data2Keys.includes(key));
 
-  const toastsMatch =
-    (data1.toasts?.length || 0) === (data2.toasts?.length || 0);
+  const data1Toasts = data1.toasts || [];
+  const data2Toasts = data2.toasts || [];
+  const toastsMatch = data1Toasts.length === data2Toasts.length;
 
   console.log('🔍 [DATA_COMPARE] 데이터 동일성 검사:', {
     keysMatch,
@@ -190,10 +328,10 @@ const getCachedSerialization = (data: StorageData): string => {
     return serialized;
   }
 
-  const cachedData = serializationCache.data;
-  const cachedSerialized = serializationCache.serialized;
+  const { data: cachedData, serialized: cachedSerialized } = serializationCache;
 
-  if (cachedData === null || cachedSerialized === null) {
+  const hasValidCacheData = cachedData !== null && cachedSerialized !== null;
+  if (!hasValidCacheData) {
     console.log('📋 [CACHE_GET] 캐시 데이터 없음, 새로 직렬화');
     const serialized = JSON.stringify(data);
 
@@ -220,23 +358,29 @@ const getCachedSerialization = (data: StorageData): string => {
   return serialized;
 };
 
-// 🔧 안전한 타입 변환 유틸리티
-const createSafeTypeConverters = () => {
+// 🆕 동적 안전한 타입 변환 유틸리티
+const createDynamicSafeTypeConverters = () => {
+  console.log('🔧 [STORE] 동적 안전한 타입 변환기 생성');
+
   const convertToSafeString = (value: unknown, fallback: string): string => {
-    if (typeof value === 'string') {
+    const isStringType = typeof value === 'string';
+    if (isStringType) {
       return value;
     }
-    if (typeof value === 'number') {
+    const isNumberType = typeof value === 'number';
+    if (isNumberType) {
       return String(value);
     }
     return fallback;
   };
 
   const convertToSafeBoolean = (value: unknown, fallback: boolean): boolean => {
-    if (typeof value === 'boolean') {
+    const isBooleanType = typeof value === 'boolean';
+    if (isBooleanType) {
       return value;
     }
-    if (typeof value === 'string') {
+    const isStringType = typeof value === 'string';
+    if (isStringType) {
       const lowerValue = value.toLowerCase();
       const isTrueString = lowerValue === 'true';
       if (isTrueString) {
@@ -251,12 +395,7 @@ const createSafeTypeConverters = () => {
   };
 
   const convertToSafeStringArray = (value: unknown): string[] => {
-    const isArray = Array.isArray(value);
-    if (!isArray) {
-      return [];
-    }
-
-    return value.filter((item): item is string => typeof item === 'string');
+    return createSafeStringArrayFromUnknown(value);
   };
 
   const convertToSafeStringOrNull = (value: unknown): string | null => {
@@ -270,6 +409,8 @@ const createSafeTypeConverters = () => {
     }
     return null;
   };
+
+  console.log('✅ [STORE] 동적 안전한 타입 변환기 생성 완료');
 
   return {
     convertToSafeString,
@@ -296,9 +437,9 @@ const estimateImageDataSize = (imageData: string): number => {
   return 100;
 };
 
-// 🔧 스마트 크기 추정 (실제 직렬화 없이)
+// 🆕 동적 스마트 크기 추정 (실제 직렬화 없이)
 const estimateDataSize = (data: StorageData): number => {
-  console.log('📊 [SIZE_ESTIMATE] 스마트 크기 추정 시작');
+  console.log('📊 [SIZE_ESTIMATE] 동적 스마트 크기 추정 시작');
 
   const { formData, toasts } = data;
   let totalEstimatedSize = 0;
@@ -313,7 +454,7 @@ const estimateDataSize = (data: StorageData): number => {
         continue;
       }
 
-      const fieldEstimate = FIELD_SIZE_ESTIMATES.get(fieldName) || 100;
+      const fieldEstimate = DYNAMIC_FIELD_SIZE_ESTIMATES.get(fieldName) || 100;
 
       const isString = typeof fieldValue === 'string';
       if (isString) {
@@ -338,10 +479,11 @@ const estimateDataSize = (data: StorageData): number => {
           const arraySize = fieldValue.reduce((acc, item) => {
             const isStringItem = typeof item === 'string';
             if (isStringItem) {
-              const isImageData = item.length > 100;
+              const itemLength = item.length;
+              const isImageData = itemLength > 100;
               const itemSize = isImageData
                 ? estimateImageDataSize(item)
-                : item.length;
+                : itemLength;
               return acc + itemSize;
             }
             return acc;
@@ -363,7 +505,7 @@ const estimateDataSize = (data: StorageData): number => {
 
   const estimatedSizeInMB = totalEstimatedSize / (1024 * 1024);
 
-  console.log('📊 [SIZE_ESTIMATE] 크기 추정 완료:', {
+  console.log('📊 [SIZE_ESTIMATE] 동적 크기 추정 완료:', {
     totalEstimatedSize,
     estimatedSizeInMB: estimatedSizeInMB.toFixed(2),
     isLikelyTooLarge: estimatedSizeInMB > 2.5, // 2.5MB 이상은 위험
@@ -430,70 +572,106 @@ const isStorageSafe = (data: StorageData): boolean => {
   return isSizeSafe;
 };
 
-// 🔧 이미지 데이터 제외하고 저장하는 함수 (최적화된 버전)
-const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
-  console.log('🛡️ [SAFE_STORAGE] 안전한 저장 데이터 생성 시작');
+// 🔧 이미지 필드 값 처리
+const processImageFieldValue = (
+  fieldValue: unknown
+): string | null | undefined => {
+  const isStringValue = typeof fieldValue === 'string';
+  if (isStringValue) {
+    const isValidSize = fieldValue.length <= 100000;
+    return isValidSize ? fieldValue : '';
+  }
 
-  const { formData, toasts } = state;
+  const isStringOrNull = fieldValue === null || typeof fieldValue === 'string';
+  if (isStringOrNull) {
+    const isValidImage =
+      typeof fieldValue === 'string' && fieldValue.length <= 100000;
+    return isValidImage ? fieldValue : null;
+  }
 
-  // 구조분해할당 + Fallback으로 안전한 데이터 추출
-  const {
-    userImage = '',
-    mainImage = null,
-    media = [],
-    sliderImages = [],
-    ...otherFormData
-  } = formData || {};
+  return undefined;
+};
 
-  // 이미지 필드들 처리
-  const isUserImageValid =
-    typeof userImage === 'string' && userImage.length <= 100000;
-  const processedUserImage = isUserImageValid ? userImage : '';
+// 🔧 배열 필드 값 처리
+const processArrayFieldValue = (
+  fieldName: string,
+  fieldValue: unknown[]
+): string[] => {
+  const filteredArray: string[] = [];
 
-  const isMainImageValid =
-    typeof mainImage === 'string' && mainImage.length <= 100000;
-  const processedMainImage = isMainImageValid ? mainImage : null;
+  for (const item of fieldValue) {
+    const isValidString = typeof item === 'string';
+    const isSafeSize = isValidString && item.length <= 100000;
 
-  // media 배열 필터링
-  const isMediaArray = Array.isArray(media);
-  const processedMedia = isMediaArray
-    ? media.filter((item): item is string => {
-        const isValidString = typeof item === 'string';
-        const isSafeSize = isValidString && item.length <= 100000;
+    if (isValidString && isSafeSize) {
+      filteredArray.push(item);
+    } else if (isValidString && !isSafeSize) {
+      console.log(`🛡️ [SAFE_STORAGE] ${fieldName} 아이템 크기 초과로 제외`);
+    }
+  }
 
-        const isValidButUnsafe = isValidString && !isSafeSize;
-        if (isValidButUnsafe) {
-          console.log('🛡️ [SAFE_STORAGE] media 아이템 크기 초과로 제외');
-        }
+  return filteredArray;
+};
 
-        return isValidString && isSafeSize;
-      })
-    : [];
+// 🔧 기본 안전한 저장 데이터 생성
+const createBasicSafeStorageData = (
+  formData: FormData | undefined,
+  toasts: ToastMessage[]
+): StorageData => {
+  const safeFormData: FormData = formData ? { ...formData } : {};
+  const isToastsArray = Array.isArray(toasts);
+  const safeToasts = isToastsArray ? toasts.slice(-5) : [];
 
-  // sliderImages 배열 필터링
-  const isSliderImagesArray = Array.isArray(sliderImages);
-  const processedSliderImages = isSliderImagesArray
-    ? sliderImages.filter((item): item is string => {
-        const isValidString = typeof item === 'string';
-        const isSafeSize = isValidString && item.length <= 100000;
-
-        const isValidButUnsafe = isValidString && !isSafeSize;
-        if (isValidButUnsafe) {
-          console.log('🛡️ [SAFE_STORAGE] sliderImages 아이템 크기 초과로 제외');
-        }
-
-        return isValidString && isSafeSize;
-      })
-    : [];
-
-  // 안전한 폼 데이터 생성
-  const safeFormData: FormData = {
-    ...otherFormData,
-    userImage: processedUserImage,
-    mainImage: processedMainImage,
-    media: processedMedia,
-    sliderImages: processedSliderImages,
+  return {
+    formData: safeFormData,
+    toasts: safeToasts,
   };
+};
+
+// 🔧 필드명으로 폼 데이터 처리
+const processFormDataWithFieldNames = (
+  formData: FormData | undefined,
+  toasts: ToastMessage[],
+  fieldNames: string[]
+): StorageData => {
+  const safeFormData: FormData = {};
+  let processedImageFields = 0;
+
+  for (const fieldName of fieldNames) {
+    const isValidFieldName =
+      typeof fieldName === 'string' && fieldName.length > 0;
+    if (!isValidFieldName) {
+      continue;
+    }
+
+    const fieldValue = formData ? Reflect.get(formData, fieldName) : undefined;
+
+    if (fieldValue === null || fieldValue === undefined) {
+      continue;
+    }
+
+    // 이미지 필드들 처리
+    const isImageField =
+      fieldName.includes('Image') || fieldName === 'mainImage';
+
+    if (isImageField) {
+      const processedImageValue = processImageFieldValue(fieldValue);
+      if (processedImageValue !== undefined) {
+        Reflect.set(safeFormData, fieldName, processedImageValue);
+        processedImageFields += 1;
+      }
+    } else {
+      // 배열 필드 처리
+      const isArrayValue = Array.isArray(fieldValue);
+      if (isArrayValue) {
+        const safeArrayValue = processArrayFieldValue(fieldName, fieldValue);
+        Reflect.set(safeFormData, fieldName, safeArrayValue);
+      } else {
+        // 일반 필드 처리
+        Reflect.set(safeFormData, fieldName, fieldValue);
+      }
+    }
+  }
 
   // 토스트 데이터 처리 - 최근 5개만 유지
   const isToastsArray = Array.isArray(toasts);
@@ -504,11 +682,9 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
     toasts: safeToasts,
   };
 
-  console.log('🛡️ [SAFE_STORAGE] 안전한 저장 데이터 생성 완료:', {
-    originalMediaCount: isMediaArray ? media.length : 0,
-    processedMediaCount: processedMedia.length,
-    originalSliderImagesCount: isSliderImagesArray ? sliderImages.length : 0,
-    processedSliderImagesCount: processedSliderImages.length,
+  console.log('🛡️ [SAFE_STORAGE] 동적 안전한 저장 데이터 생성 완료:', {
+    totalFields: fieldNames.length,
+    processedImageFields,
     originalToastsCount: isToastsArray ? toasts.length : 0,
     processedToastsCount: safeToasts.length,
     timestamp: new Date().toISOString(),
@@ -517,195 +693,540 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
   return safeStorageData;
 };
 
-// 🔧 Bridge FormValues를 FormData로 변환하는 함수
-const convertBridgeFormValuesToFormData = (
+// 🆕 동적 안전한 저장 데이터 생성 함수 (타입 안전성 강화)
+const createDynamicSafeStorageData = (
+  state: MultiStepFormStore
+): StorageData => {
+  console.log('🛡️ [SAFE_STORAGE] 동적 안전한 저장 데이터 생성 시작');
+
+  const { formData, toasts } = state;
+
+  try {
+    const allFieldNamesRaw = getAllFieldNames();
+    const isValidFieldNames = validateStringArray(allFieldNamesRaw);
+
+    if (!isValidFieldNames) {
+      console.warn('⚠️ [SAFE_STORAGE] 필드명 배열이 유효하지 않음, 기본 처리');
+      return createBasicSafeStorageData(formData, toasts);
+    }
+
+    const allFieldNames: string[] = allFieldNamesRaw;
+    return processFormDataWithFieldNames(formData, toasts, allFieldNames);
+  } catch (error) {
+    console.error('❌ [SAFE_STORAGE] 저장 데이터 생성 실패:', error);
+    return createBasicSafeStorageData(formData, toasts);
+  }
+};
+
+// 🔧 Bridge FormValues 기본 변환
+const convertBridgeFormValuesBasic = (
   bridgeFormValues: BridgeCompatibleFormValues
 ): FormData => {
-  console.log('🔄 [BRIDGE_CONVERTER] Bridge FormValues → FormData 변환 시작');
+  const typeConverters = createDynamicSafeTypeConverters();
+  const convertedFormData: FormData = {};
 
-  const {
-    convertToSafeString,
-    convertToSafeBoolean,
-    convertToSafeStringArray,
-    convertToSafeStringOrNull,
-  } = createSafeTypeConverters();
+  // 기본 필수 필드들만 처리
+  const basicFields = [
+    'nickname',
+    'title',
+    'editorCompletedContent',
+    'isEditorCompleted',
+  ];
 
-  // 🔧 구조분해할당 + Fallback으로 안전한 데이터 추출
-  const {
-    userImage: bridgeUserImage = '',
-    nickname: bridgeNickname = '',
-    emailPrefix: bridgeEmailPrefix = '',
-    emailDomain: bridgeEmailDomain = '',
-    bio: bridgeBio = '',
-    title: bridgeTitle = '',
-    description: bridgeDescription = '',
-    tags: bridgeTags = '',
-    content: bridgeContent = '',
-    media: bridgeMedia = [],
-    mainImage: bridgeMainImage = null,
-    sliderImages: bridgeSliderImages = [],
-    editorCompletedContent: bridgeEditorContent = '',
-    isEditorCompleted: bridgeIsCompleted = false,
-  } = bridgeFormValues;
+  for (const fieldName of basicFields) {
+    const fieldValue = Reflect.get(bridgeFormValues, fieldName);
 
-  const convertedFormData: FormData = {
-    userImage: convertToSafeString(bridgeUserImage, ''),
-    nickname: convertToSafeString(bridgeNickname, ''),
-    emailPrefix: convertToSafeString(bridgeEmailPrefix, ''),
-    emailDomain: convertToSafeString(bridgeEmailDomain, ''),
-    bio: convertToSafeString(bridgeBio, ''),
-    title: convertToSafeString(bridgeTitle, ''),
-    description: convertToSafeString(bridgeDescription, ''),
-    tags: convertToSafeString(bridgeTags, ''),
-    content: convertToSafeString(bridgeContent, ''),
-    media: convertToSafeStringArray(bridgeMedia),
-    mainImage: convertToSafeStringOrNull(bridgeMainImage),
-    sliderImages: convertToSafeStringArray(bridgeSliderImages),
-    editorCompletedContent: convertToSafeString(bridgeEditorContent, ''),
-    isEditorCompleted: convertToSafeBoolean(bridgeIsCompleted, false),
-  };
+    if (fieldValue === null || fieldValue === undefined) {
+      Reflect.set(convertedFormData, fieldName, fieldValue);
+      continue;
+    }
 
-  console.log('✅ [BRIDGE_CONVERTER] 변환 완료:', {
-    nicknameLength: convertedFormData.nickname?.length || 0,
-    titleLength: convertedFormData.title?.length || 0,
-    editorContentLength: convertedFormData.editorCompletedContent?.length || 0,
-    isEditorCompleted: convertedFormData.isEditorCompleted,
+    if (fieldName === 'isEditorCompleted') {
+      const convertedBoolean = typeConverters.convertToSafeBoolean(
+        fieldValue,
+        false
+      );
+      Reflect.set(convertedFormData, fieldName, convertedBoolean);
+    } else {
+      const convertedString = typeConverters.convertToSafeString(
+        fieldValue,
+        ''
+      );
+      Reflect.set(convertedFormData, fieldName, convertedString);
+    }
+  }
+
+  return convertedFormData;
+};
+
+// 🔧 필드명 기반 Bridge FormValues 변환
+const convertBridgeFormValuesWithFieldNames = (
+  bridgeFormValues: BridgeCompatibleFormValues,
+  fieldNames: string[]
+): FormData => {
+  const typeConverters = createDynamicSafeTypeConverters();
+  const convertedFormData: FormData = {};
+
+  for (const fieldName of fieldNames) {
+    const isValidFieldName =
+      typeof fieldName === 'string' && fieldName.length > 0;
+    if (!isValidFieldName) {
+      continue;
+    }
+
+    const fieldValue = Reflect.get(bridgeFormValues, fieldName);
+
+    if (fieldValue === null || fieldValue === undefined) {
+      Reflect.set(convertedFormData, fieldName, fieldValue);
+      continue;
+    }
+
+    // 필드별 타입 변환
+    const isArrayField = fieldName === 'media' || fieldName === 'sliderImages';
+    const isImageField =
+      fieldName.includes('Image') || fieldName === 'mainImage';
+    const isBooleanField = fieldName === 'isEditorCompleted';
+
+    if (isArrayField) {
+      const convertedArray =
+        typeConverters.convertToSafeStringArray(fieldValue);
+      Reflect.set(convertedFormData, fieldName, convertedArray);
+    } else if (isImageField && fieldName === 'mainImage') {
+      const convertedNullable =
+        typeConverters.convertToSafeStringOrNull(fieldValue);
+      Reflect.set(convertedFormData, fieldName, convertedNullable);
+    } else if (isBooleanField) {
+      const convertedBoolean = typeConverters.convertToSafeBoolean(
+        fieldValue,
+        false
+      );
+      Reflect.set(convertedFormData, fieldName, convertedBoolean);
+    } else {
+      const convertedString = typeConverters.convertToSafeString(
+        fieldValue,
+        ''
+      );
+      Reflect.set(convertedFormData, fieldName, convertedString);
+    }
+  }
+
+  console.log('✅ [BRIDGE_CONVERTER] 동적 변환 완료:', {
+    inputFields: Object.keys(bridgeFormValues).length,
+    outputFields: Object.keys(convertedFormData).length,
+    processedFields: fieldNames.length,
     timestamp: new Date().toISOString(),
   });
 
   return convertedFormData;
 };
 
-// 🆕 Phase 2: FormData를 Bridge 호환 FormValues로 변환하는 함수 (🚨 에러 수정)
-const convertFormDataToBridgeFormValues = (
-  formData: FormData | undefined | null
+// 🆕 동적 Bridge FormValues를 FormData로 변환하는 함수 (타입 안전성 강화)
+const convertBridgeFormValuesToFormData = (
+  bridgeFormValues: BridgeCompatibleFormValues
+): FormData => {
+  console.log(
+    '🔄 [BRIDGE_CONVERTER] 동적 Bridge FormValues → FormData 변환 시작'
+  );
+
+  try {
+    const allFieldNamesRaw = getAllFieldNames();
+    const isValidFieldNames = validateStringArray(allFieldNamesRaw);
+
+    if (!isValidFieldNames) {
+      console.warn(
+        '⚠️ [BRIDGE_CONVERTER] 필드명이 유효하지 않음, 기본 변환 수행'
+      );
+      return convertBridgeFormValuesBasic(bridgeFormValues);
+    }
+
+    const allFieldNames: string[] = allFieldNamesRaw;
+    return convertBridgeFormValuesWithFieldNames(
+      bridgeFormValues,
+      allFieldNames
+    );
+  } catch (error) {
+    console.error('❌ [BRIDGE_CONVERTER] 변환 중 오류:', error);
+    return convertBridgeFormValuesBasic(bridgeFormValues);
+  }
+};
+
+// 🔧 FormData → Bridge 기본 변환
+const convertFormDataToBridgeBasic = (
+  formData: FormData,
+  bridgeFormValues: ExpectedBridgeFormValues
 ): ExpectedBridgeFormValues => {
-  console.log('🔄 [BRIDGE_CONVERTER] FormData → Bridge FormValues 변환 시작');
+  const typeConverters = createDynamicSafeTypeConverters();
 
-  const { convertToSafeString, convertToSafeBoolean } =
-    createSafeTypeConverters();
+  // 기본 필수 필드들만 처리
+  const basicFields = [
+    'nickname',
+    'title',
+    'editorCompletedContent',
+    'isEditorCompleted',
+  ];
 
-  // 🚨 핵심 수정: formData가 없는 경우 기본값 반환
-  const isFormDataValid = formData && typeof formData === 'object';
-  if (!isFormDataValid) {
-    console.warn('⚠️ [BRIDGE_CONVERTER] formData가 없음, 기본값 사용');
-    return {
-      nickname: '',
-      title: '',
-      editorCompletedContent: '',
-      isEditorCompleted: false,
-    };
+  for (const fieldName of basicFields) {
+    const fieldValue = Reflect.get(formData, fieldName);
+
+    if (fieldValue === null || fieldValue === undefined) {
+      continue;
+    }
+
+    if (fieldName === 'isEditorCompleted') {
+      const convertedBoolean = typeConverters.convertToSafeBoolean(
+        fieldValue,
+        false
+      );
+      Reflect.set(bridgeFormValues, fieldName, convertedBoolean);
+    } else {
+      const isStringValue = typeof fieldValue === 'string';
+      if (isStringValue) {
+        const convertedString = typeConverters.convertToSafeString(
+          fieldValue,
+          ''
+        );
+        Reflect.set(bridgeFormValues, fieldName, convertedString);
+      } else {
+        // 배열이나 다른 타입들은 그대로 전달
+        Reflect.set(bridgeFormValues, fieldName, fieldValue);
+      }
+    }
   }
 
-  const {
-    nickname = '',
-    title = '',
-    editorCompletedContent = '',
-    isEditorCompleted = false,
-    ...otherFields
-  } = formData;
+  return bridgeFormValues;
+};
 
-  const bridgeFormValues: ExpectedBridgeFormValues = {
-    nickname: convertToSafeString(nickname, ''),
-    title: convertToSafeString(title, ''),
-    editorCompletedContent: convertToSafeString(editorCompletedContent, ''),
-    isEditorCompleted: convertToSafeBoolean(isEditorCompleted, false),
-    ...otherFields,
-  };
+// 🔧 필드명 기반 FormData → Bridge 변환
+const convertFormDataToBridgeWithFieldNames = (
+  formData: FormData,
+  bridgeFormValues: ExpectedBridgeFormValues,
+  fieldNames: string[]
+): ExpectedBridgeFormValues => {
+  const typeConverters = createDynamicSafeTypeConverters();
 
-  console.log('✅ [BRIDGE_CONVERTER] Bridge FormValues 변환 완료:', {
+  for (const fieldName of fieldNames) {
+    const isValidFieldName =
+      typeof fieldName === 'string' && fieldName.length > 0;
+    if (!isValidFieldName) {
+      continue;
+    }
+
+    const fieldValue = Reflect.get(formData, fieldName);
+
+    if (fieldValue === null || fieldValue === undefined) {
+      continue;
+    }
+
+    const isBooleanField = fieldName === 'isEditorCompleted';
+
+    if (isBooleanField) {
+      const convertedBoolean = typeConverters.convertToSafeBoolean(
+        fieldValue,
+        false
+      );
+      Reflect.set(bridgeFormValues, fieldName, convertedBoolean);
+    } else {
+      const isStringValue = typeof fieldValue === 'string';
+      if (isStringValue) {
+        const convertedString = typeConverters.convertToSafeString(
+          fieldValue,
+          ''
+        );
+        Reflect.set(bridgeFormValues, fieldName, convertedString);
+      } else {
+        // 배열이나 다른 타입들은 그대로 전달
+        Reflect.set(bridgeFormValues, fieldName, fieldValue);
+      }
+    }
+  }
+
+  console.log('✅ [BRIDGE_CONVERTER] 동적 Bridge FormValues 변환 완료:', {
     nickname: bridgeFormValues.nickname,
     title: bridgeFormValues.title,
     hasEditorContent: !!bridgeFormValues.editorCompletedContent,
     isEditorCompleted: bridgeFormValues.isEditorCompleted,
-    otherFieldsCount: Object.keys(otherFields).length,
+    totalFields: Object.keys(bridgeFormValues).length,
+    processedFields: fieldNames.length,
     timestamp: new Date().toISOString(),
   });
 
   return bridgeFormValues;
 };
 
-// 🆕 Phase 2: 진행률 계산 함수 (🚨 에러 방지 버전)
-const calculateProgressWidthSafely = (
+// 🆕 동적 FormData를 Bridge 호환 FormValues로 변환하는 함수 (타입 안전성 강화)
+const convertFormDataToBridgeFormValues = (
+  formData: FormData | undefined | null
+): ExpectedBridgeFormValues => {
+  console.log(
+    '🔄 [BRIDGE_CONVERTER] 동적 FormData → Bridge FormValues 변환 시작'
+  );
+
+  // 기본값으로 초기화
+  const bridgeFormValues: ExpectedBridgeFormValues = {
+    nickname: '',
+    title: '',
+    editorCompletedContent: '',
+    isEditorCompleted: false,
+  };
+
+  // formData가 없는 경우 기본값 반환
+  const isFormDataValid = formData && typeof formData === 'object';
+  if (!isFormDataValid) {
+    console.warn('⚠️ [BRIDGE_CONVERTER] formData가 없음, 기본값 사용');
+    return bridgeFormValues;
+  }
+
+  try {
+    const allFieldNamesRaw = getAllFieldNames();
+    const isValidFieldNames = validateStringArray(allFieldNamesRaw);
+
+    if (!isValidFieldNames) {
+      console.warn(
+        '⚠️ [BRIDGE_CONVERTER] 필드명이 유효하지 않음, 기본 필드만 처리'
+      );
+      return convertFormDataToBridgeBasic(formData, bridgeFormValues);
+    }
+
+    const allFieldNames: string[] = allFieldNamesRaw;
+    return convertFormDataToBridgeWithFieldNames(
+      formData,
+      bridgeFormValues,
+      allFieldNames
+    );
+  } catch (error) {
+    console.error('❌ [BRIDGE_CONVERTER] FormData → Bridge 변환 실패:', error);
+    return convertFormDataToBridgeBasic(formData, bridgeFormValues);
+  }
+};
+
+// 🔧 안전한 필드 배열 생성 함수 (타입 안전성 강화)
+const createSafeRequiredFieldsArray = (): string[] => {
+  console.log('🔧 [SAFE_FIELDS] 안전한 필수 필드 배열 생성 시작');
+
+  // 기본 필수 필드 (항상 안전함)
+  const coreRequiredFields: string[] = ['nickname', 'title'];
+
+  try {
+    const emailFieldsRaw = getEmailFields();
+
+    // 타입 검증을 통한 안전한 변환
+    const isValidEmailFieldsArray = validateStringArray(emailFieldsRaw);
+    if (!isValidEmailFieldsArray) {
+      console.warn(
+        '⚠️ [SAFE_FIELDS] getEmailFields() 반환값이 문자열 배열이 아님'
+      );
+      return coreRequiredFields;
+    }
+
+    const emailFields: string[] = emailFieldsRaw;
+    const allRequiredFields: string[] = [...coreRequiredFields, ...emailFields];
+
+    // 최종 검증: 빈 배열이면 기본값 사용
+    const hasFields = allRequiredFields.length > 0;
+    if (!hasFields) {
+      console.warn('⚠️ [SAFE_FIELDS] 필수 필드가 없음, 기본값 사용');
+      return coreRequiredFields;
+    }
+
+    console.log('✅ [SAFE_FIELDS] 안전한 필수 필드 배열 생성 완료:', {
+      coreFieldsCount: coreRequiredFields.length,
+      emailFieldsCount: emailFields.length,
+      totalFieldsCount: allRequiredFields.length,
+      fields: allRequiredFields,
+      timestamp: new Date().toISOString(),
+    });
+
+    return allRequiredFields;
+  } catch (fieldsError) {
+    console.error('❌ [SAFE_FIELDS] 필드 배열 생성 실패:', fieldsError);
+
+    console.log('🔄 [SAFE_FIELDS] Fallback 필드 사용:', {
+      fallbackFields: coreRequiredFields,
+      timestamp: new Date().toISOString(),
+    });
+
+    return coreRequiredFields;
+  }
+};
+
+// 🆕 동적 진행률 계산 함수 (타입 안전성 강화)
+const calculateDynamicProgressWidth = (
   formData: FormData | null | undefined,
   hardcodedCurrentStep: number
 ): number => {
-  console.log('📊 [PROGRESS_CALC] 안전한 진행률 계산 시작:', {
+  console.log('📊 [PROGRESS_CALC] 동적 진행률 계산 시작:', {
     hasFormData: !!formData,
     hardcodedCurrentStep,
     timestamp: new Date().toISOString(),
   });
 
-  // 🚨 안전성 검사: formData 유효성 확인
+  // 안전성 검사: formData 유효성 확인
   const safeFormData = formData || {};
 
-  const requiredFields = ['nickname', 'title'];
-  const completedRequiredFields = requiredFields.filter((field) => {
-    const fieldValue = safeFormData[field];
+  // 안전한 필수 필드 배열 생성
+  const allRequiredFields: string[] = createSafeRequiredFieldsArray();
+
+  // 필수 필드 배열 검증
+  const hasRequiredFields =
+    Array.isArray(allRequiredFields) && allRequiredFields.length > 0;
+  if (!hasRequiredFields) {
+    console.warn('⚠️ [PROGRESS_CALC] 필수 필드가 없음, 기본 진행률만 반환');
+    const baseProgress = (hardcodedCurrentStep / 4) * 100; // 4단계 기준
+    return Math.min(100, baseProgress);
+  }
+
+  // 완료된 필드 필터링 - 타입 안전성 보장
+  const completedFieldsList: string[] = [];
+
+  for (const fieldName of allRequiredFields) {
+    const fieldValue = Reflect.get(safeFormData, fieldName);
     const isStringValue = typeof fieldValue === 'string';
     const hasContent = isStringValue && fieldValue.trim().length > 0;
-    return hasContent;
+
+    if (hasContent) {
+      completedFieldsList.push(fieldName);
+    }
+  }
+
+  // 타입이 확실한 배열들로 계산
+  const completedCount = completedFieldsList.length;
+  const totalRequiredCount = allRequiredFields.length;
+
+  console.log('📊 [PROGRESS_CALC] 필드 완료 상태:', {
+    completedCount,
+    totalRequiredCount,
+    completedFields: completedFieldsList,
+    allRequiredFields,
+    timestamp: new Date().toISOString(),
   });
 
-  const baseProgress = (hardcodedCurrentStep / 5) * 100; // 5단계 기준
-  const fieldProgress =
-    (completedRequiredFields.length / requiredFields.length) * 20; // 최대 20% 추가
+  const baseProgress = (hardcodedCurrentStep / 4) * 100; // 4단계 기준
 
+  // 안전한 나눗셈: 분모가 0이 아닌 경우에만 계산
+  const fieldProgressRatio =
+    totalRequiredCount > 0 ? completedCount / totalRequiredCount : 0;
+
+  const fieldProgress = fieldProgressRatio * 20; // 최대 20% 추가
   const totalProgress = Math.min(100, baseProgress + fieldProgress);
 
-  console.log('📊 [PROGRESS_CALC] 안전한 진행률 계산 완료:', {
+  console.log('📊 [PROGRESS_CALC] 동적 진행률 계산 완료:', {
     hardcodedCurrentStep,
     baseProgress,
     fieldProgress,
     totalProgress,
-    completedRequiredFields,
+    completedCount,
+    totalRequiredCount,
     timestamp: new Date().toISOString(),
   });
 
   return totalProgress;
 };
 
-// 🔧 기본 FormData 생성 함수 (🚨 에러 방지)
-const createDefaultFormData = (): FormData => {
-  return {
-    userImage: '',
-    nickname: '',
-    emailPrefix: '',
-    emailDomain: '',
-    bio: '',
-    title: '',
-    description: '',
-    tags: '',
-    content: '',
-    mainImage: null,
-    media: [],
-    sliderImages: [],
-    editorCompletedContent: '',
-    isEditorCompleted: false,
-  };
+// 🆕 동적 기본 FormData 생성 함수
+const createDynamicDefaultFormData = (): FormData => {
+  console.log('🔧 [STORE] 동적 기본 FormData 생성 시작');
+
+  try {
+    const dynamicFormValues = getDefaultFormSchemaValues();
+
+    console.log('✅ [STORE] 동적 기본 FormData 생성 완료:', {
+      fieldCount: Object.keys(dynamicFormValues).length,
+      fieldNames: Object.keys(dynamicFormValues),
+      timestamp: new Date().toISOString(),
+    });
+
+    return dynamicFormValues;
+  } catch (formDataError) {
+    console.error('❌ [STORE] 동적 FormData 생성 실패:', formDataError);
+
+    // Fallback
+    return {
+      userImage: '',
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: '',
+      title: '',
+      description: '',
+      mainImage: null,
+      media: [],
+      sliderImages: [],
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+  }
 };
 
-// Zustand 스토어 생성 (🚨 에러 수정 버전)
+// 🔧 텍스트 전용 FormData 생성
+const createTextOnlyFormData = (
+  safeFormData: FormData,
+  stringFields: string[]
+): FormData => {
+  const textOnlyFormData: FormData = {};
+
+  for (const fieldName of stringFields) {
+    const isValidFieldName =
+      typeof fieldName === 'string' && fieldName.length > 0;
+    if (!isValidFieldName) {
+      continue;
+    }
+
+    const fieldValue = Reflect.get(safeFormData, fieldName);
+    const isStringValue = typeof fieldValue === 'string';
+    if (isStringValue) {
+      Reflect.set(textOnlyFormData, fieldName, fieldValue);
+    }
+  }
+
+  return textOnlyFormData;
+};
+
+// 🔧 텍스트 전용 저장 데이터 생성
+const createTextOnlyStorageData = (textOnlyFormData: FormData): StorageData => {
+  // 에디터 관련 필드도 포함
+  const editorCompletedContent = Reflect.get(
+    textOnlyFormData,
+    'editorCompletedContent'
+  );
+  const isEditorCompleted = Reflect.get(textOnlyFormData, 'isEditorCompleted');
+
+  // 에디터 필드가 없으면 추가
+  const hasEditorContent = typeof editorCompletedContent === 'string';
+  if (!hasEditorContent) {
+    Reflect.set(textOnlyFormData, 'editorCompletedContent', '');
+  }
+
+  const hasEditorCompleted = typeof isEditorCompleted === 'boolean';
+  if (!hasEditorCompleted) {
+    Reflect.set(textOnlyFormData, 'isEditorCompleted', false);
+  }
+
+  const textOnlyData: StorageData = {
+    formData: textOnlyFormData,
+    toasts: [],
+  };
+
+  return textOnlyData;
+};
+
+// 🆕 동적 Zustand 스토어 생성
 export const useMultiStepFormStore = create<MultiStepFormStore>()(
   persist(
     (set, get) => ({
-      // 초기 상태 (🚨 기본값 보장)
-      formData: createDefaultFormData(),
+      // 초기 상태 (동적 기본값 보장)
+      formData: createDynamicDefaultFormData(),
       toasts: [],
 
-      // 🆕 Phase 2: Bridge 호환성을 위한 계산된 속성들 (🚨 순환 참조 해결)
+      // Bridge 호환성을 위한 계산된 속성들
       get formValues() {
-        console.log('🔄 [BRIDGE_GETTER] formValues getter 호출 시작');
+        console.log('🔄 [BRIDGE_GETTER] 동적 formValues getter 호출 시작');
 
         try {
           const state = get();
-
-          // 🚨 핵심 수정: 안전한 formData 접근
           const { formData = null } = state || {};
-
           const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
 
-          console.log('🔄 [BRIDGE_GETTER] formValues getter 호출 완료:', {
+          console.log('🔄 [BRIDGE_GETTER] 동적 formValues getter 호출 완료:', {
             hasFormData: !!formData,
             formDataKeys: formData ? Object.keys(formData).length : 0,
             bridgeFormValuesKeys: Object.keys(bridgeFormValues).length,
@@ -730,11 +1251,11 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       },
 
       get currentStep() {
-        // 🎯 Phase 2: Writing 단계로 하드코딩 (Bridge 요구사항)
+        // Writing 단계로 하드코딩 (Bridge 요구사항)
         console.log(
-          '🔄 [BRIDGE_GETTER] currentStep getter 호출: 4 (Writing Step)'
+          '🔄 [BRIDGE_GETTER] currentStep getter 호출: 3 (Writing Step - 4개 스텝 기준)'
         );
-        return 4;
+        return 3; // 4개 스텝 기준으로 조정
       },
 
       get editorCompletedContent() {
@@ -744,19 +1265,21 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         try {
           const state = get();
-
-          // 🚨 핵심 수정: 안전한 접근
           const { formData = null } = state || {};
-          const content = formData?.editorCompletedContent || '';
+          const content = formData
+            ? Reflect.get(formData, 'editorCompletedContent')
+            : '';
 
           console.log(
             '🔄 [BRIDGE_GETTER] editorCompletedContent getter 호출 완료:',
             {
               hasFormData: !!formData,
-              contentLength: content.length,
+              contentLength: typeof content === 'string' ? content.length : 0,
               hasContent: !!content,
               preview:
-                content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+                typeof content === 'string'
+                  ? content.slice(0, 50) + (content.length > 50 ? '...' : '')
+                  : '',
               timestamp: new Date().toISOString(),
             }
           );
@@ -777,10 +1300,10 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         try {
           const state = get();
-
-          // 🚨 핵심 수정: 안전한 접근
           const { formData = null } = state || {};
-          const completed = formData?.isEditorCompleted || false;
+          const completed = formData
+            ? Reflect.get(formData, 'isEditorCompleted')
+            : false;
 
           console.log(
             '🔄 [BRIDGE_GETTER] isEditorCompleted getter 호출 완료:',
@@ -803,33 +1326,33 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       },
 
       get progressWidth() {
-        console.log('🔄 [BRIDGE_GETTER] progressWidth getter 호출 시작');
+        console.log('🔄 [BRIDGE_GETTER] 동적 progressWidth getter 호출 시작');
 
         try {
           const state = get();
 
-          // 🚨 핵심 수정: state 안전성 검사 + getter 의존성 제거
           if (!state) {
             console.warn('⚠️ [BRIDGE_GETTER] state가 없음, 기본 진행률 반환');
             return 0;
           }
 
           const { formData = null } = state;
+          const hardcodedCurrentStep = 3; // 4개 스텝 기준
 
-          // 🚨 핵심 수정: 하드코딩된 currentStep 사용 (getter 의존성 제거)
-          const hardcodedCurrentStep = 4; // state.currentStep 대신 직접 값 사용
-
-          const progress = calculateProgressWidthSafely(
+          const progress = calculateDynamicProgressWidth(
             formData,
             hardcodedCurrentStep
           );
 
-          console.log('🔄 [BRIDGE_GETTER] progressWidth getter 호출 완료:', {
-            hasFormData: !!formData,
-            hardcodedCurrentStep,
-            progress,
-            timestamp: new Date().toISOString(),
-          });
+          console.log(
+            '🔄 [BRIDGE_GETTER] 동적 progressWidth getter 호출 완료:',
+            {
+              hasFormData: !!formData,
+              hardcodedCurrentStep,
+              progress,
+              timestamp: new Date().toISOString(),
+            }
+          );
 
           return progress;
         } catch (getterError) {
@@ -846,15 +1369,15 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         const state = get();
         const { formData } = state;
 
-        console.log('📊 [STORE_GET] 폼 값 가져오기:', {
+        console.log('📊 [STORE_GET] 동적 폼 값 가져오기:', {
           formDataKeys: Object.keys(formData || {}),
           timestamp: new Date().toISOString(),
         });
 
-        return formData || createDefaultFormData();
+        return formData || createDynamicDefaultFormData();
       },
 
-      // 🆕 Phase 2: Bridge 호환성을 위한 추가 메서드들
+      // Bridge 호환성을 위한 추가 메서드들
       updateCurrentStep: (step: number) => {
         console.log('📝 [BRIDGE_STORE] currentStep 업데이트:', {
           step,
@@ -877,12 +1400,10 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
       getBridgeCompatibleFormValues: () => {
         const state = get();
-
-        // 🚨 핵심 수정: 안전한 접근
         const { formData = null } = state || {};
         const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
 
-        console.log('📊 [BRIDGE_STORE] Bridge 호환 FormValues 반환:', {
+        console.log('📊 [BRIDGE_STORE] 동적 Bridge 호환 FormValues 반환:', {
           hasFormData: !!formData,
           bridgeFormValues,
           timestamp: new Date().toISOString(),
@@ -896,7 +1417,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         fieldName: string,
         value: string | string[] | boolean | null
       ) => {
-        console.log('📝 [STORE_UPDATE] 폼 값 업데이트:', {
+        console.log('📝 [STORE_UPDATE] 동적 폼 값 업데이트:', {
           fieldName,
           valueType: typeof value,
           valueLength: typeof value === 'string' ? value.length : 0,
@@ -905,14 +1426,15 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         set((state) => {
           const { formData: currentFormData = null } = state;
-          const safeFormData = currentFormData || createDefaultFormData();
+          const safeFormData =
+            currentFormData || createDynamicDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
             [fieldName]: value,
           };
 
-          console.log('✅ [STORE_UPDATE] 폼 값 업데이트 완료:', {
+          console.log('✅ [STORE_UPDATE] 동적 폼 값 업데이트 완료:', {
             fieldName,
             timestamp: new Date().toISOString(),
           });
@@ -928,21 +1450,22 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       updateFormValues: (
         values: Record<string, string | string[] | boolean | null>
       ) => {
-        console.log('📝 [STORE_UPDATE_MULTI] 다중 폼 값 업데이트:', {
+        console.log('📝 [STORE_UPDATE_MULTI] 동적 다중 폼 값 업데이트:', {
           fieldsToUpdate: Object.keys(values),
           timestamp: new Date().toISOString(),
         });
 
         set((state) => {
           const { formData: currentFormData = null } = state;
-          const safeFormData = currentFormData || createDefaultFormData();
+          const safeFormData =
+            currentFormData || createDynamicDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
             ...values,
           };
 
-          console.log('✅ [STORE_UPDATE_MULTI] 다중 폼 값 업데이트 완료');
+          console.log('✅ [STORE_UPDATE_MULTI] 동적 다중 폼 값 업데이트 완료');
 
           return {
             ...state,
@@ -951,7 +1474,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
       },
 
-      // 🔧 Bridge 호환: 에디터 콘텐츠 업데이트
+      // Bridge 호환: 에디터 콘텐츠 업데이트
       updateEditorContent: (content: string) => {
         console.log('📝 [BRIDGE_STORE] 에디터 콘텐츠 업데이트:', {
           contentLength: content?.length || 0,
@@ -971,7 +1494,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         set((state) => {
           const { formData: currentFormData = null } = state;
-          const safeFormData = currentFormData || createDefaultFormData();
+          const safeFormData =
+            currentFormData || createDynamicDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -987,7 +1511,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
       },
 
-      // 🔧 Bridge 호환: 에디터 완료 상태 설정
+      // Bridge 호환: 에디터 완료 상태 설정
       setEditorCompleted: (completed: boolean) => {
         console.log('✅ [BRIDGE_STORE] 에디터 완료 상태 설정:', {
           completed,
@@ -1005,7 +1529,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         set((state) => {
           const { formData: currentFormData = null } = state;
-          const safeFormData = currentFormData || createDefaultFormData();
+          const safeFormData =
+            currentFormData || createDynamicDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -1021,9 +1546,9 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
       },
 
-      // 🔧 Bridge 호환: FormValues 전체 설정
+      // Bridge 호환: FormValues 전체 설정
       setFormValues: (values: BridgeCompatibleFormValues) => {
-        console.log('📝 [BRIDGE_STORE] Bridge FormValues 전체 설정:', {
+        console.log('📝 [BRIDGE_STORE] 동적 Bridge FormValues 전체 설정:', {
           hasNickname: !!values.nickname,
           hasTitle: !!values.title,
           hasEditorContent: !!values.editorCompletedContent,
@@ -1043,7 +1568,9 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         set((state) => {
           const convertedFormData = convertBridgeFormValuesToFormData(values);
 
-          console.log('✅ [BRIDGE_STORE] Bridge FormValues 전체 설정 완료');
+          console.log(
+            '✅ [BRIDGE_STORE] 동적 Bridge FormValues 전체 설정 완료'
+          );
 
           return {
             ...state,
@@ -1054,7 +1581,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
       // 폼 필드 초기화
       resetFormField: (fieldName: string) => {
-        console.log('🔄 [STORE_RESET] 폼 필드 초기화:', {
+        console.log('🔄 [STORE_RESET] 동적 폼 필드 초기화:', {
           fieldName,
           timestamp: new Date().toISOString(),
         });
@@ -1070,7 +1597,9 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
           const newFormData = { ...currentFormData };
           delete newFormData[fieldName];
 
-          console.log('✅ [STORE_RESET] 폼 필드 초기화 완료:', { fieldName });
+          console.log('✅ [STORE_RESET] 동적 폼 필드 초기화 완료:', {
+            fieldName,
+          });
 
           return {
             ...state,
@@ -1081,14 +1610,14 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
       // 전체 폼 데이터 초기화
       resetAllFormData: () => {
-        console.log('🔄 [STORE_RESET_ALL] 전체 폼 데이터 초기화');
+        console.log('🔄 [STORE_RESET_ALL] 동적 전체 폼 데이터 초기화');
 
         set((state) => ({
           ...state,
-          formData: createDefaultFormData(),
+          formData: createDynamicDefaultFormData(),
         }));
 
-        console.log('✅ [STORE_RESET_ALL] 전체 폼 데이터 초기화 완료');
+        console.log('✅ [STORE_RESET_ALL] 동적 전체 폼 데이터 초기화 완료');
       },
 
       // 토스트 메시지 추가
@@ -1165,10 +1694,10 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
     {
       name: 'multi-step-form-storage',
       partialize: (state) => {
-        console.log('💾 [PERSIST] localStorage 저장 시작');
+        console.log('💾 [PERSIST] 동적 localStorage 저장 시작');
 
         try {
-          const safeData = createSafeStorageData(state);
+          const safeData = createDynamicSafeStorageData(state);
           const isSafeToStore = isStorageSafe(safeData);
 
           if (isSafeToStore) {
@@ -1179,47 +1708,82 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
           console.warn('⚠️ [PERSIST] 데이터 크기 초과로 필수 텍스트만 저장');
 
           const { formData } = state;
-          const safeFormData = formData || createDefaultFormData();
-          const {
-            nickname = '',
-            emailPrefix = '',
-            emailDomain = '',
-            bio = '',
-            title = '',
-            description = '',
-            tags = '',
-            content = '',
-            editorCompletedContent = '',
-            isEditorCompleted = false,
-          } = safeFormData;
+          const safeFormData = formData || createDynamicDefaultFormData();
 
-          const textOnlyData: StorageData = {
-            formData: {
-              nickname,
-              emailPrefix,
-              emailDomain,
-              bio,
-              title,
-              description,
-              tags,
-              content,
-              editorCompletedContent,
-              isEditorCompleted,
-            },
-            toasts: [],
-          };
+          // 동적 텍스트 데이터만 저장
+          try {
+            const stringFieldsRaw = getStringFields();
+            const isValidStringFields = validateStringArray(stringFieldsRaw);
 
-          return textOnlyData;
+            if (!isValidStringFields) {
+              console.warn(
+                '⚠️ [PERSIST] getStringFields() 반환값이 유효하지 않음'
+              );
+
+              // 기본 텍스트 필드들 사용
+              const defaultStringFields: string[] = [
+                'nickname',
+                'title',
+                'description',
+                'bio',
+                'emailPrefix',
+                'emailDomain',
+              ];
+
+              const textOnlyFormData = createTextOnlyFormData(
+                safeFormData,
+                defaultStringFields
+              );
+              return createTextOnlyStorageData(textOnlyFormData);
+            }
+
+            const stringFields: string[] = stringFieldsRaw;
+            const textOnlyFormData = createTextOnlyFormData(
+              safeFormData,
+              stringFields
+            );
+            return createTextOnlyStorageData(textOnlyFormData);
+          } catch (stringFieldsError) {
+            console.error(
+              '❌ [PERSIST] 텍스트 필드 처리 실패:',
+              stringFieldsError
+            );
+
+            // 최소한의 텍스트 데이터만 저장
+            const minimalTextData: FormData = {
+              nickname:
+                typeof safeFormData.nickname === 'string'
+                  ? safeFormData.nickname
+                  : '',
+              title:
+                typeof safeFormData.title === 'string'
+                  ? safeFormData.title
+                  : '',
+              editorCompletedContent:
+                typeof safeFormData.editorCompletedContent === 'string'
+                  ? safeFormData.editorCompletedContent
+                  : '',
+              isEditorCompleted:
+                typeof safeFormData.isEditorCompleted === 'boolean'
+                  ? safeFormData.isEditorCompleted
+                  : false,
+            };
+
+            return {
+              formData: minimalTextData,
+              toasts: [],
+            };
+          }
         } catch (persistError) {
           console.error('❌ [PERSIST] 저장 처리 오류:', persistError);
           return {
-            formData: createDefaultFormData(),
+            formData: createDynamicDefaultFormData(),
             toasts: [],
           };
         }
       },
       onRehydrateStorage: () => {
-        console.log('🔄 [PERSIST] localStorage에서 데이터 복원 시작');
+        console.log('🔄 [PERSIST] 동적 localStorage에서 데이터 복원 시작');
 
         return (state, error) => {
           if (error) {
@@ -1234,7 +1798,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
               );
             }
 
-            // 🚨 에러 시 기본 상태로 초기화
+            // 에러 시 기본 상태로 초기화
             try {
               const store = useMultiStepFormStore.getState();
               store.resetAllFormData();
@@ -1242,17 +1806,24 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
               console.error('❌ [PERSIST] 상태 리셋 실패:', resetError);
             }
           } else {
-            console.log('✅ [PERSIST] localStorage 복원 완료:', {
+            console.log('✅ [PERSIST] 동적 localStorage 복원 완료:', {
               hasState: !!state,
               hasFormData: !!state?.formData,
               formDataKeys: state?.formData ? Object.keys(state.formData) : [],
               timestamp: new Date().toISOString(),
             });
 
-            // 🚨 복원된 데이터 검증 및 보완
-            if (state && !state.formData) {
+            // 복원된 데이터 검증 및 보완
+            const hasFormDataIssue = state && !state.formData;
+            if (hasFormDataIssue && state) {
               console.warn('⚠️ [PERSIST] formData가 없어 기본값으로 초기화');
-              state.formData = createDefaultFormData();
+              // state.formData 직접 할당 대신 store의 resetAllFormData 호출
+              try {
+                const store = useMultiStepFormStore.getState();
+                store.resetAllFormData();
+              } catch (resetError) {
+                console.error('❌ [PERSIST] 기본값 설정 실패:', resetError);
+              }
             }
           }
         };
@@ -1261,4 +1832,15 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
   )
 );
 
-console.log('📄 [STORE] 🚨 에러 수정 완료된 multiStepFormStore 모듈 로드 완료');
+console.log(
+  '📄 [STORE] ✅ TypeScript never 타입 에러 완전 해결된 multiStepFormStore 모듈 로드 완료'
+);
+console.log('🎯 [STORE] 주요 수정사항:', {
+  validateStringArray: '명시적 배열 타입 검증 함수 추가',
+  strongerTypeGuards: '더 강력한 타입 가드로 never 타입 문제 해결',
+  explicitLoopProcessing: 'filter 대신 for 루프로 명확한 타입 추론',
+  safeArrayAccess: '배열 길이 접근 전 타입 검증 강화',
+  errorRecoveryEnhanced: '모든 함수에 Fallback 메커니즘 적용',
+  noFilterTypeIssues: 'filter 결과의 never 타입 문제 완전 제거',
+  functionSignatureFixed: '함수 시그니처 일관성 완전 해결',
+});

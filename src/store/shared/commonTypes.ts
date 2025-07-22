@@ -61,7 +61,7 @@ export interface ToastItem extends ToastOptions {
   createdAt: Date;
 }
 
-// 🔧 **통합된 단일 FormValues 인터페이스** (4개 타입을 1개로 통일)
+// 🔧 **통합된 단일 FormValues 인터페이스** (12개 필드, content/tags 제거)
 export interface FormValues {
   // 사용자 정보 필드들
   userImage?: string;
@@ -73,8 +73,6 @@ export interface FormValues {
   // 블로그 기본 정보 필드들
   title: string;
   description: string;
-  tags?: string;
-  content: string;
 
   // 미디어 관련 필드들
   media?: string[];
@@ -98,7 +96,7 @@ export interface FormValues {
     | ParagraphBlock[];
 }
 
-// 🆕 **하위 호환성을 위한 타입들** (기존 코드에서 사용 중)
+// 🆕 **하위 호환성을 위한 타입들** (기존 코드에서 사용 중, 12개 필드)
 export interface CompatibleFormData {
   userImage?: string;
   nickname?: string;
@@ -107,8 +105,6 @@ export interface CompatibleFormData {
   bio?: string;
   title?: string;
   description?: string;
-  tags?: string;
-  content?: string;
   mainImage?: string | null;
   media?: string[];
   sliderImages?: string[];
@@ -118,7 +114,7 @@ export interface CompatibleFormData {
   [key: string]: string | string[] | boolean | null | undefined;
 }
 
-// 🆕 **Bridge 전용 FormValues** (기존 Bridge 시스템 호환성)
+// 🆕 **Bridge 전용 FormValues** (기존 Bridge 시스템 호환성, 12개 필드)
 export interface BridgeFormValues {
   userImage?: string;
   nickname: string;
@@ -127,8 +123,6 @@ export interface BridgeFormValues {
   bio?: string;
   title: string;
   description: string;
-  tags?: string;
-  content: string;
   media?: string[];
   mainImage?: string | null;
   sliderImages?: string[];
@@ -234,7 +228,7 @@ export const createFormValuesTypeGuards = () => {
   };
 };
 
-// 🔧 FormValues 전체 검증 함수
+// 🔧 FormValues 전체 검증 함수 (12개 필드, content/tags 제거)
 export const isValidFormValues = (
   candidate: unknown
 ): candidate is FormValues => {
@@ -248,14 +242,13 @@ export const isValidFormValues = (
 
   const formValuesCandidate = candidate;
 
-  // 필수 필드들 검증
+  // 필수 필드들 검증 (content, tags 제거)
   const requiredFields = new Map<string, string>([
     ['nickname', 'string'],
     ['emailPrefix', 'string'],
     ['emailDomain', 'string'],
     ['title', 'string'],
     ['description', 'string'],
-    ['content', 'string'],
   ]);
 
   let hasAllRequiredFields = true;
@@ -371,7 +364,7 @@ export const createFormValuesConverters = () => {
   };
 };
 
-// 🔧 FormValues 생성 및 변환 유틸리티들
+// 🔧 FormValues 생성 및 변환 유틸리티들 (12개 필드, content/tags 제거)
 export const createFormValuesUtilities = () => {
   console.log('🔧 [UTILITIES] FormValues 유틸리티 생성');
 
@@ -386,7 +379,9 @@ export const createFormValuesUtilities = () => {
   } = converters;
 
   const createDefaultFormValues = (): FormValues => {
-    console.log('🔧 [UTILITIES] 기본 FormValues 생성');
+    console.log(
+      '🔧 [UTILITIES] 기본 FormValues 생성 (12개 필드, content/tags 제거)'
+    );
 
     const defaultFormValues: FormValues = {
       userImage: '',
@@ -396,8 +391,6 @@ export const createFormValuesUtilities = () => {
       bio: '',
       title: '',
       description: '',
-      tags: '',
-      content: '',
       media: [],
       mainImage: null,
       sliderImages: [],
@@ -407,7 +400,9 @@ export const createFormValuesUtilities = () => {
       isEditorCompleted: false,
     };
 
-    console.log('✅ [UTILITIES] 기본 FormValues 생성 완료');
+    console.log(
+      '✅ [UTILITIES] 기본 FormValues 생성 완료 (12개 필드, content/tags 제거)'
+    );
     return defaultFormValues;
   };
 
@@ -423,7 +418,7 @@ export const createFormValuesUtilities = () => {
 
     const rawFormValuesObject = rawFormValues;
 
-    // 구조분해할당으로 각 필드 안전하게 추출
+    // 구조분해할당으로 각 필드 안전하게 추출 (12개 필드, content/tags 제거)
     const userImageValue = Reflect.get(rawFormValuesObject, 'userImage');
     const nicknameValue = Reflect.get(rawFormValuesObject, 'nickname');
     const emailPrefixValue = Reflect.get(rawFormValuesObject, 'emailPrefix');
@@ -431,8 +426,6 @@ export const createFormValuesUtilities = () => {
     const bioValue = Reflect.get(rawFormValuesObject, 'bio');
     const titleValue = Reflect.get(rawFormValuesObject, 'title');
     const descriptionValue = Reflect.get(rawFormValuesObject, 'description');
-    const tagsValue = Reflect.get(rawFormValuesObject, 'tags');
-    const contentValue = Reflect.get(rawFormValuesObject, 'content');
     const mediaValue = Reflect.get(rawFormValuesObject, 'media');
     const mainImageValue = Reflect.get(rawFormValuesObject, 'mainImage');
     const sliderImagesValue = Reflect.get(rawFormValuesObject, 'sliderImages');
@@ -461,8 +454,6 @@ export const createFormValuesUtilities = () => {
       bio: convertToSafeString(bioValue, ''),
       title: convertToSafeString(titleValue, ''),
       description: convertToSafeString(descriptionValue, ''),
-      tags: convertToSafeString(tagsValue, ''),
-      content: convertToSafeString(contentValue, ''),
       media: convertToSafeStringArray(mediaValue),
       mainImage: convertToSafeStringOrNull(mainImageValue),
       sliderImages: convertToSafeStringArray(sliderImagesValue),
@@ -492,7 +483,7 @@ export const createFormValuesUtilities = () => {
   ): FormValues => {
     console.log('🔄 [UTILITIES] FormValues 병합 시작');
 
-    // 기본 FormValues 구조분해할당
+    // 기본 FormValues 구조분해할당 (12개 필드, content/tags 제거)
     const {
       userImage: baseUserImage = '',
       nickname: baseNickname = '',
@@ -501,8 +492,6 @@ export const createFormValuesUtilities = () => {
       bio: baseBio = '',
       title: baseTitle = '',
       description: baseDescription = '',
-      tags: baseTags = '',
-      content: baseContent = '',
       media: baseMedia = [],
       mainImage: baseMainImage = null,
       sliderImages: baseSliderImages = [],
@@ -512,7 +501,7 @@ export const createFormValuesUtilities = () => {
       isEditorCompleted: baseIsCompleted = false,
     } = baseFormValues;
 
-    // 업데이트 FormValues 구조분해할당
+    // 업데이트 FormValues 구조분해할당 (12개 필드, content/tags 제거)
     const {
       userImage: updateUserImage,
       nickname: updateNickname,
@@ -521,8 +510,6 @@ export const createFormValuesUtilities = () => {
       bio: updateBio,
       title: updateTitle,
       description: updateDescription,
-      tags: updateTags,
-      content: updateContent,
       media: updateMedia,
       mainImage: updateMainImage,
       sliderImages: updateSliderImages,
@@ -544,8 +531,6 @@ export const createFormValuesUtilities = () => {
       title: updateTitle !== undefined ? updateTitle : baseTitle,
       description:
         updateDescription !== undefined ? updateDescription : baseDescription,
-      tags: updateTags !== undefined ? updateTags : baseTags,
-      content: updateContent !== undefined ? updateContent : baseContent,
       media: updateMedia !== undefined ? updateMedia : baseMedia,
       mainImage:
         updateMainImage !== undefined ? updateMainImage : baseMainImage,
@@ -585,7 +570,7 @@ export const createFormValuesUtilities = () => {
   };
 };
 
-// 🆕 **하위 호환성을 위한 변환 함수들** (기존 코드에서 사용 중)
+// 🆕 **하위 호환성을 위한 변환 함수들** (12개 필드, content/tags 제거)
 export const convertFormValuesToCompatibleFormData = (
   formValues: FormValues
 ): CompatibleFormData => {
@@ -599,7 +584,7 @@ export const convertFormValuesToCompatibleFormData = (
     convertToSafeStringOrNull,
   } = typeConverters;
 
-  // 구조분해할당으로 안전한 데이터 추출
+  // 구조분해할당으로 안전한 데이터 추출 (12개 필드, content/tags 제거)
   const {
     userImage,
     nickname,
@@ -608,8 +593,6 @@ export const convertFormValuesToCompatibleFormData = (
     bio,
     title,
     description,
-    tags,
-    content,
     media,
     mainImage,
     sliderImages,
@@ -625,8 +608,6 @@ export const convertFormValuesToCompatibleFormData = (
     bio: convertToSafeString(bio, ''),
     title: convertToSafeString(title, ''),
     description: convertToSafeString(description, ''),
-    tags: convertToSafeString(tags, ''),
-    content: convertToSafeString(content, ''),
     media: convertToSafeStringArray(media),
     mainImage: convertToSafeStringOrNull(mainImage),
     sliderImages: convertToSafeStringArray(sliderImages),
@@ -657,7 +638,7 @@ export const convertCompatibleFormDataToFormValues = (
     convertToSafeStringOrNull,
   } = typeConverters;
 
-  // 구조분해할당으로 안전한 데이터 추출
+  // 구조분해할당으로 안전한 데이터 추출 (12개 필드, content/tags 제거)
   const {
     userImage = '',
     nickname = '',
@@ -666,8 +647,6 @@ export const convertCompatibleFormDataToFormValues = (
     bio = '',
     title = '',
     description = '',
-    tags = '',
-    content = '',
     media = [],
     mainImage = null,
     sliderImages = [],
@@ -683,8 +662,6 @@ export const convertCompatibleFormDataToFormValues = (
     bio: convertToSafeString(bio, ''),
     title: convertToSafeString(title, ''),
     description: convertToSafeString(description, ''),
-    tags: convertToSafeString(tags, ''),
-    content: convertToSafeString(content, ''),
     media: convertToSafeStringArray(media),
     mainImage: convertToSafeStringOrNull(mainImage),
     sliderImages: convertToSafeStringArray(sliderImages),
@@ -723,8 +700,6 @@ export const convertFormValuesToBridgeFormValues = (
     bio,
     title,
     description,
-    tags,
-    content,
     media,
     mainImage,
     sliderImages,
@@ -740,8 +715,6 @@ export const convertFormValuesToBridgeFormValues = (
     bio: convertToSafeString(bio, ''),
     title: convertToSafeString(title, ''),
     description: convertToSafeString(description, ''),
-    tags: convertToSafeString(tags, ''),
-    content: convertToSafeString(content, ''),
     media: convertToSafeStringArray(media),
     mainImage: convertToSafeStringOrNull(mainImage),
     sliderImages: convertToSafeStringArray(sliderImages),
@@ -773,7 +746,7 @@ export const safeMergeFormData = (
     convertToSafeStringOrNull,
   } = typeConverters;
 
-  // 기본 데이터 구조분해할당
+  // 기본 데이터 구조분해할당 (12개 필드, content/tags 제거)
   const {
     userImage: baseUserImage = '',
     nickname: baseNickname = '',
@@ -782,8 +755,6 @@ export const safeMergeFormData = (
     bio: baseBio = '',
     title: baseTitle = '',
     description: baseDescription = '',
-    tags: baseTags = '',
-    content: baseContent = '',
     media: baseMedia = [],
     mainImage: baseMainImage = null,
     sliderImages: baseSliderImages = [],
@@ -791,7 +762,7 @@ export const safeMergeFormData = (
     isEditorCompleted: baseIsCompleted = false,
   } = baseFormData;
 
-  // 업데이트 데이터 구조분해할당
+  // 업데이트 데이터 구조분해할당 (12개 필드, content/tags 제거)
   const {
     userImage: updateUserImage,
     nickname: updateNickname,
@@ -800,8 +771,6 @@ export const safeMergeFormData = (
     bio: updateBio,
     title: updateTitle,
     description: updateDescription,
-    tags: updateTags,
-    content: updateContent,
     media: updateMedia,
     mainImage: updateMainImage,
     sliderImages: updateSliderImages,
@@ -838,14 +807,6 @@ export const safeMergeFormData = (
       updateDescription !== undefined
         ? convertToSafeString(updateDescription, '')
         : convertToSafeString(baseDescription, ''),
-    tags:
-      updateTags !== undefined
-        ? convertToSafeString(updateTags, '')
-        : convertToSafeString(baseTags, ''),
-    content:
-      updateContent !== undefined
-        ? convertToSafeString(updateContent, '')
-        : convertToSafeString(baseContent, ''),
     media:
       updateMedia !== undefined
         ? convertToSafeStringArray(updateMedia)

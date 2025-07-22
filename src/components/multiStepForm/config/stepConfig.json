@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "stepConfiguration": {
+    "1": {
+      "title": "유저 정보 입력",
+      "component": "UserInfoStepContainer"
+    },
+    "2": {
+      "title": "블로그 기본 정보",
+      "component": "BlogBasicStepContainer"
+    },
+    "3": {
+      "title": "모듈화 에디터",
+      "component": "ModularBlogEditorContainer"
+    },
+    "4": {
+      "title": "블로그 미디어",
+      "component": "BlogMediaStepContainer"
+    }
+  },
+  "stepOrder": [1, 2, 3, 4],
+  "minStep": 1,
+  "maxStep": 4
+}
