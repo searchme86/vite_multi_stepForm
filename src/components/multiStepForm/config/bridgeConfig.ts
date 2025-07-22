@@ -211,7 +211,7 @@ const createEnvironmentConfig = (
 
 // 🔧 안전한 StepNumber 생성 함수
 const createSafeStepNumber = (value: number): StepNumber => {
-  const validStepNumbers: StepNumber[] = [1, 2, 3, 4, 5];
+  const validStepNumbers: StepNumber[] = [1, 2, 3, 4];
   const foundStep = validStepNumbers.find((step) => step === value);
 
   if (foundStep !== undefined) {
@@ -249,7 +249,7 @@ const createDefaultStepConfig = (stepNumber: StepNumber): StepBridgeConfig => {
       transferMode: 'forward',
       validationMode: 'strict',
       autoTransferEnabled: false,
-      validationFields: ['content'],
+      validationFields: ['editorCompletedContent'],
     },
     4: {
       enabled: true,
@@ -258,14 +258,6 @@ const createDefaultStepConfig = (stepNumber: StepNumber): StepBridgeConfig => {
       validationMode: 'strict',
       autoTransferEnabled: true,
       validationFields: ['editorCompletedContent', 'isEditorCompleted'],
-    },
-    5: {
-      enabled: false,
-      triggerConditions: ['form_submit'],
-      transferMode: 'forward',
-      validationMode: 'permissive',
-      autoTransferEnabled: false,
-      validationFields: [],
     },
   };
 
@@ -411,7 +403,7 @@ const createDefaultErrorHandlingConfig = (
     criticalErrorNotificationDuration: 10000,
     enableFallbackMode: true,
     fallbackData: {
-      content: '',
+      editorCompletedContent: '',
       isCompleted: false,
     },
     errorCategories: [
@@ -465,8 +457,8 @@ const createBridgeSystemConfig = (
   });
 
   // 안전한 StepNumber 생성 (타입단언 제거)
-  const autoTransferStep = createSafeStepNumber(4);
-  const targetStepAfterTransfer = createSafeStepNumber(5);
+  const autoTransferStep = createSafeStepNumber(3);
+  const targetStepAfterTransfer = createSafeStepNumber(4);
 
   // 기본 설정 생성
   const defaultConfig: BridgeSystemConfig = {
@@ -494,7 +486,6 @@ const createBridgeSystemConfig = (
       2: createDefaultStepConfig(2),
       3: createDefaultStepConfig(3),
       4: createDefaultStepConfig(4),
-      5: createDefaultStepConfig(5),
     },
     retryConfig: createDefaultRetryConfig(environment),
     loggingConfig: createDefaultLoggingConfig(environment),
@@ -581,7 +572,7 @@ const validateBridgeConfig = (
   }
 
   // 스텝 설정 검증
-  const requiredSteps: StepNumber[] = [1, 2, 3, 4, 5];
+  const requiredSteps: StepNumber[] = [1, 2, 3, 4];
   const { stepConfigs } = config;
 
   for (const stepNumber of requiredSteps) {
@@ -723,8 +714,8 @@ export const DEVELOPMENT_BRIDGE_CONFIG = createBridgeSystemConfig({
     enableProgressSync: true,
     enableValidationSync: true,
     debugMode: true,
-    autoTransferStep: createSafeStepNumber(4),
-    targetStepAfterTransfer: createSafeStepNumber(5),
+    autoTransferStep: createSafeStepNumber(3),
+    targetStepAfterTransfer: createSafeStepNumber(4),
   },
   loggingConfig: {
     enabled: true,
@@ -748,8 +739,8 @@ export const PRODUCTION_BRIDGE_CONFIG = createBridgeSystemConfig({
     enableProgressSync: true,
     enableValidationSync: true,
     debugMode: false,
-    autoTransferStep: createSafeStepNumber(4),
-    targetStepAfterTransfer: createSafeStepNumber(5),
+    autoTransferStep: createSafeStepNumber(3),
+    targetStepAfterTransfer: createSafeStepNumber(4),
   },
   loggingConfig: {
     enabled: true,
