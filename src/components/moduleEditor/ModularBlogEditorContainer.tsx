@@ -15,7 +15,10 @@ import { useBridgeIntegration } from '../multiStepForm/utils/useBridgeIntegratio
 import { resetEditorStoreCompletely } from '../../store/editorCore/editorCoreStore';
 import { resetEditorUIStoreCompletely } from '../../store/editorUI/editorUIStore';
 
-// 🔧 Bridge 연결 설정 인터페이스 (새로운 훅에 맞게 수정)
+// 🔧 3단계: 통일된 쿨다운 시간 상수 (5초 → 3초)
+const EDITOR_TRANSFER_COOLDOWN_MS = 3000; // Bridge와 동일한 3초
+
+// 🔧 Bridge 연결 설정 인터페이스 (Phase 1용 단순화)
 interface BridgeIntegrationConfig {
   readonly enableAutoTransfer: boolean;
   readonly enableStepTransition: boolean;
@@ -27,7 +30,7 @@ interface BridgeIntegrationConfig {
   readonly targetStepAfterTransfer: number;
 }
 
-// 🔧 에디터 상태 정보 인터페이스
+// 🔧 에디터 상태 정보 인터페이스 (단순화)
 interface EditorStateInfo {
   readonly containerCount: number;
   readonly paragraphCount: number;
@@ -40,18 +43,10 @@ interface EditorStateInfo {
 // 🔧 안전한 개발 환경 감지 함수
 const getIsDevelopmentMode = (): boolean => {
   try {
-    // process 객체 안전 접근
-    if (typeof process !== 'undefined' && process.env) {
-      const nodeEnv = process.env.NODE_ENV;
-      return typeof nodeEnv === 'string' && nodeEnv === 'development';
-    }
-
-    // 브라우저 환경에서 localhost 감지
     if (typeof window !== 'undefined' && window.location) {
-      const hostname = window.location.hostname;
+      const { hostname } = window.location;
       return hostname === 'localhost' || hostname === '127.0.0.1';
     }
-
     return false;
   } catch (error) {
     console.warn(
@@ -79,16 +74,36 @@ const extractContainerNames = (containers: unknown[]): string[] => {
     .filter((name) => typeof name === 'string');
 };
 
+// 🆕 Phase 1용 입력값 검증 함수
+const validateInputsForStructure = (inputs: unknown): string[] => {
+  if (!Array.isArray(inputs)) {
+    console.error(
+      '❌ [CONTAINER_VALIDATION] inputs가 배열이 아님:',
+      typeof inputs
+    );
+    return [];
+  }
+
+  const validInputs = inputs
+    .map((input) => (typeof input === 'string' ? input.trim() : ''))
+    .filter((input) => input.length > 0);
+
+  console.log('🔍 [CONTAINER_VALIDATION] 입력값 검증 완료:', {
+    originalCount: inputs.length,
+    validCount: validInputs.length,
+    validInputs,
+  });
+
+  return validInputs;
+};
+
 function ModularBlogEditorContainer(): React.ReactNode {
   const isInitializedRef = useRef<boolean>(false);
   const lastTransferAttemptRef = useRef<number>(0);
-  const structureCompleteCountRef = useRef<number>(0); // 🆕 구조 완료 횟수 추적
 
   useEffect(() => {
     if (!isInitializedRef.current) {
-      console.log(
-        '🔄 [EDITOR_CONTAINER] 에디터 스토어 초기화 - 에러 수정 버전'
-      );
+      console.log('🔄 [EDITOR_CONTAINER] 에디터 스토어 초기화 - Phase 1 버전');
 
       try {
         resetEditorStoreCompletely();
@@ -107,22 +122,19 @@ function ModularBlogEditorContainer(): React.ReactNode {
 
   const editorState = useEditorState();
 
-  console.log(
-    '🏗️ [EDITOR_CONTAINER] useEditorState 훅 결과 - 에러 수정 버전:',
-    {
-      hasContainers:
-        Array.isArray(editorState.localContainers) &&
-        editorState.localContainers.length > 0,
-      hasParagraphs:
-        Array.isArray(editorState.localParagraphs) &&
-        editorState.localParagraphs.length > 0,
-      hasInternalState: !!editorState.internalState,
-      hasMoveToContainer: typeof editorState.moveToContainer === 'function',
-      hasFixedStructureHandler:
-        typeof editorState.handleStructureComplete === 'function',
-      timestamp: new Date().toISOString(),
-    }
-  );
+  console.log('🏗️ [EDITOR_CONTAINER] useEditorState 훅 결과 - Phase 1 버전:', {
+    hasContainers:
+      Array.isArray(editorState.localContainers) &&
+      editorState.localContainers.length > 0,
+    hasParagraphs:
+      Array.isArray(editorState.localParagraphs) &&
+      editorState.localParagraphs.length > 0,
+    hasInternalState: !!editorState.internalState,
+    hasMoveToContainer: typeof editorState.moveToContainer === 'function',
+    hasSimplifiedStructureHandler:
+      typeof editorState.handleStructureComplete === 'function',
+    timestamp: new Date().toISOString(),
+  });
 
   // 🔧 에디터 상태 구조분해할당 및 fallback 처리
   const {
@@ -135,7 +147,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     toggleParagraphSelection: toggleParagraphSelect,
     addToLocalContainer: addParagraphsToContainer,
     moveLocalParagraphInContainer: changeParagraphOrder,
-    handleStructureComplete: handleStructureCompleteInternal, // ✅ 수정된 함수
+    handleStructureComplete: handleStructureCompleteInternal, // ✅ Phase 1 단순화된 함수
     goToStructureStep: navigateToStructureStepInternal,
     saveAllToContext: saveCurrentProgress,
     completeEditor: finishEditing,
@@ -148,12 +160,12 @@ function ModularBlogEditorContainer(): React.ReactNode {
     moveToContainer: moveToContainerFunction,
   } = editorState;
 
-  console.log('🏗️ [EDITOR_CONTAINER] 컴포넌트 렌더링 - 에러 수정 버전:', {
+  console.log('🏗️ [EDITOR_CONTAINER] 컴포넌트 렌더링 - Phase 1 버전:', {
     containers: Array.isArray(currentContainers) ? currentContainers.length : 0,
     paragraphs: Array.isArray(currentParagraphs) ? currentParagraphs.length : 0,
     currentStep: editorInternalState?.currentSubStep || 'unknown',
     hasMoveFunction: typeof moveToContainerFunction === 'function',
-    hasFixedHandler: typeof handleStructureCompleteInternal === 'function',
+    hasSimplifiedHandler: typeof handleStructureCompleteInternal === 'function',
     timestamp: new Date().toLocaleTimeString(),
   });
 
@@ -178,7 +190,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     isTransitioning: isStepTransitioning,
   } = safeInternalState;
 
-  // 🔧 Bridge 연결 설정 (타입 수정 및 안전한 개발 모드 감지)
+  // 🔧 Bridge 연결 설정 (Phase 1용 단순화)
   const bridgeConfig: BridgeIntegrationConfig = {
     enableAutoTransfer: true,
     enableStepTransition: true,
@@ -190,10 +202,10 @@ function ModularBlogEditorContainer(): React.ReactNode {
     targetStepAfterTransfer: 5,
   };
 
-  // 🔧 새로운 Bridge 통합 훅 사용
+  // 🔧 Bridge 통합 훅 사용 (Phase 1에서는 기본 기능만)
   const bridgeIntegration = useBridgeIntegration(bridgeConfig);
 
-  console.log('🌉 [EDITOR_CONTAINER] Bridge 통합 상태:', {
+  console.log('🌉 [EDITOR_CONTAINER] Bridge 통합 상태 - Phase 1:', {
     isConnected: bridgeIntegration.isConnected,
     isTransferring: bridgeIntegration.isTransferring,
     canTransfer: bridgeIntegration.canTransfer,
@@ -219,7 +231,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
 
     const unassignedParagraphs = safeParagraphs.filter((paragraph) => {
       if (!paragraph || typeof paragraph !== 'object') {
-        return true; // 잘못된 데이터는 미할당으로 간주
+        return true;
       }
 
       const containerId = Reflect.get(paragraph, 'containerId');
@@ -289,7 +301,6 @@ function ModularBlogEditorContainer(): React.ReactNode {
       try {
         moveToContainerFunction(paragraphId, targetContainerId);
 
-        // 🔧 이동 후 상태 업데이트 확인
         const updatedStateInfo = calculateEditorStateInfo();
         console.log('📊 [EDITOR_CONTAINER] 이동 후 상태:', {
           containerCount: updatedStateInfo.containerCount,
@@ -306,46 +317,33 @@ function ModularBlogEditorContainer(): React.ReactNode {
     [moveToContainerFunction, calculateEditorStateInfo]
   );
 
-  // ✅ 수정된 구조 설정 완료 처리 - 에러 방지 및 디버깅 강화
+  // ✅ 🎯 **Phase 1 핵심 수정**: completeStructureSetup 대폭 단순화
   const completeStructureSetup = useCallback(
-    async (inputs: string[]) => {
-      const attemptNumber = ++structureCompleteCountRef.current;
-
+    (inputs: string[]) => {
       console.log(
-        '🏗️ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 시작 - 에러 수정 버전:',
+        '🏗️ [EDITOR_CONTAINER] 구조 설정 완료 - Phase 1 단순화 버전:',
         {
           inputs,
           inputCount: Array.isArray(inputs) ? inputs.length : 0,
-          attemptNumber,
           timestamp: new Date().toISOString(),
         }
       );
 
       try {
-        // Early return: 입력값 검증
-        if (!Array.isArray(inputs)) {
-          console.error(
-            '❌ [EDITOR_CONTAINER] inputs가 배열이 아님:',
-            typeof inputs
-          );
-          return;
-        }
+        // 1️⃣ 입력값 기본 검증
+        const validInputs = validateInputsForStructure(inputs);
 
-        const validInputs = inputs.filter(
-          (input) => typeof input === 'string' && input.trim().length > 0
-        );
-
+        // Early return: 최소 섹션 수 확인
         if (validInputs.length < 2) {
           console.error('❌ [EDITOR_CONTAINER] 최소 2개 섹션 필요:', {
             provided: validInputs.length,
             required: 2,
             validInputs,
-            attemptNumber,
           });
           return;
         }
 
-        // Early return: 함수 존재 여부 확인
+        // 2️⃣ handleStructureComplete 함수 존재 확인
         if (typeof handleStructureCompleteInternal !== 'function') {
           console.error(
             '❌ [EDITOR_CONTAINER] handleStructureComplete 함수가 없습니다'
@@ -353,29 +351,43 @@ function ModularBlogEditorContainer(): React.ReactNode {
           return;
         }
 
-        console.log('📞 [EDITOR_CONTAINER] 수정된 구조 완료 핸들러 실행:', {
-          validInputs,
-          attemptNumber,
-          handlerType: typeof handleStructureCompleteInternal,
-        });
+        // 3️⃣ 단순화된 핸들러 호출 (Phase 1의 핵심)
+        console.log(
+          '📞 [EDITOR_CONTAINER] Phase 1 단순화된 구조 완료 핸들러 실행:',
+          {
+            validInputs,
+            handlerType: typeof handleStructureCompleteInternal,
+          }
+        );
 
-        // ✅ 수정된 핸들러 호출
         handleStructureCompleteInternal(validInputs);
 
-        console.log('✅ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 성공:', {
-          attemptNumber,
-          inputCount: validInputs.length,
-        });
+        console.log(
+          '✅ [EDITOR_CONTAINER] Phase 1 구조 설정 완료 프로세스 성공'
+        );
       } catch (error) {
-        console.error('❌ [EDITOR_CONTAINER] 구조 설정 완료 프로세스 에러:', {
-          error,
-          attemptNumber,
-          inputs,
-        });
+        console.error(
+          '❌ [EDITOR_CONTAINER] Phase 1 구조 설정 완료 프로세스 에러:',
+          {
+            error,
+            inputs,
+          }
+        );
       }
     },
     [handleStructureCompleteInternal]
   );
+
+  // 🔄 기존 복잡한 함수는 주석 처리 (추후 참고용)
+  /*
+  const completeStructureSetupComplex = useCallback(
+    async (inputs: string[]) => {
+      // ... 기존 복잡한 로직
+      // 추후 필요시 참고할 수 있도록 보존
+    },
+    []
+  );
+  */
 
   const navigateToStructureStep = useCallback(async () => {
     console.log('⬅️ [EDITOR_CONTAINER] 구조 설정으로 이동');
@@ -398,12 +410,13 @@ function ModularBlogEditorContainer(): React.ReactNode {
     }
   }, [navigateToStructureStepInternal, createPromiseDelay]);
 
-  // 🔧 새로운 Bridge 통합을 활용한 에디터 완료 처리
+  // 🔧 Phase 1용 간소화된 에디터 완료 처리 (3단계: 쿨다운 시간 3초로 통일)
   const handleEditorComplete = useCallback(async () => {
-    console.log('🎉 [EDITOR_CONTAINER] 에디터 완료 프로세스 시작');
+    console.log(
+      '🎉 [EDITOR_CONTAINER] 에디터 완료 프로세스 시작 - Phase 1 (쿨다운 3초)'
+    );
 
     try {
-      // 🔧 에디터 완료 전 상태 확인
       const currentStateInfo = calculateEditorStateInfo();
 
       console.log('📊 [EDITOR_CONTAINER] 완료 전 상태 검증:', {
@@ -415,7 +428,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
         timestamp: new Date().toISOString(),
       });
 
-      // 🔧 Early return: 전송 준비 상태 확인
+      // Early return: 전송 준비 상태 확인
       if (!currentStateInfo.hasContent) {
         console.warn('⚠️ [EDITOR_CONTAINER] 콘텐츠가 없어 전송을 건너뜁니다');
         return;
@@ -431,32 +444,32 @@ function ModularBlogEditorContainer(): React.ReactNode {
         return;
       }
 
-      // 🔧 에디터 완료 상태 설정
+      // 에디터 완료 상태 설정
       if (typeof finishEditing === 'function') {
         finishEditing();
       } else {
         console.warn('⚠️ [EDITOR_CONTAINER] finishEditing 함수가 없습니다');
       }
 
-      // 🔧 Bridge 연결 상태 확인
-      console.log('🌉 [EDITOR_CONTAINER] Bridge 연결 상태 확인:', {
+      // Phase 1에서는 기본 Bridge 연결만 확인
+      console.log('🌉 [EDITOR_CONTAINER] Bridge 연결 상태 확인 - Phase 1:', {
         isConnected: bridgeIntegration.isConnected,
         isTransferring: bridgeIntegration.isTransferring,
         canTransfer: bridgeIntegration.canTransfer,
         timestamp: new Date().toISOString(),
       });
 
-      // 🔧 중복 전송 방지 (5초 내 재시도 방지)
+      // 🔧 3단계: 통일된 중복 전송 방지 (3초로 변경)
       const currentTime = Date.now();
       const timeSinceLastAttempt = currentTime - lastTransferAttemptRef.current;
-      const minTimeBetweenAttempts = 5000; // 5초
 
-      if (timeSinceLastAttempt < minTimeBetweenAttempts) {
+      if (timeSinceLastAttempt < EDITOR_TRANSFER_COOLDOWN_MS) {
         console.warn(
-          '⚠️ [EDITOR_CONTAINER] 최근 전송 시도가 있어 건너뜁니다:',
+          '⚠️ [EDITOR_CONTAINER] 최근 전송 시도가 있어 건너뜁니다 (3초 쿨다운):',
           {
             timeSinceLastAttempt,
-            minRequired: minTimeBetweenAttempts,
+            cooldownMs: EDITOR_TRANSFER_COOLDOWN_MS,
+            remainingTime: EDITOR_TRANSFER_COOLDOWN_MS - timeSinceLastAttempt,
           }
         );
         return;
@@ -464,59 +477,75 @@ function ModularBlogEditorContainer(): React.ReactNode {
 
       lastTransferAttemptRef.current = currentTime;
 
-      // 🔧 새로운 Bridge 통합 시스템으로 전송
+      // Phase 1용 단순한 Bridge 전송 시도
       if (!bridgeIntegration.canTransfer) {
-        console.error('❌ [EDITOR_CONTAINER] Bridge 전송 불가능한 상태:', {
-          isConnected: bridgeIntegration.isConnected,
-          isTransferring: bridgeIntegration.isTransferring,
-          canTransfer: bridgeIntegration.canTransfer,
-        });
+        console.error(
+          '❌ [EDITOR_CONTAINER] Bridge 전송 불가능한 상태 - Phase 1:',
+          {
+            isConnected: bridgeIntegration.isConnected,
+            isTransferring: bridgeIntegration.isTransferring,
+            canTransfer: bridgeIntegration.canTransfer,
+          }
+        );
         return;
       }
 
-      console.log('🌉 [EDITOR_CONTAINER] Bridge 통합 시스템으로 전송 시도');
+      console.log(
+        '🌉 [EDITOR_CONTAINER] Bridge 통합 시스템으로 전송 시도 - Phase 1 (3초 쿨다운)'
+      );
 
       const transferResult = await bridgeIntegration.executeManualTransfer();
 
       if (transferResult) {
-        console.log('✅ [EDITOR_CONTAINER] Bridge 전송 성공');
+        console.log(
+          '✅ [EDITOR_CONTAINER] Bridge 전송 성공 - Phase 1 (3초 쿨다운)'
+        );
 
-        // 🔧 전송 성공 후 통계 확인
         const statistics = bridgeIntegration.getStatistics();
-        console.log('📊 [EDITOR_CONTAINER] 전송 후 Bridge 통계:', {
+        console.log('📊 [EDITOR_CONTAINER] 전송 후 Bridge 통계 - Phase 1:', {
           connectionState: statistics.connectionState,
           transferCount: statistics.connectionState.transferCount,
           errorCount: statistics.connectionState.errorCount,
           bridgeStats: statistics.bridgeStats,
+          cooldownMs: EDITOR_TRANSFER_COOLDOWN_MS,
         });
       } else {
-        console.error('❌ [EDITOR_CONTAINER] Bridge 전송 실패');
+        console.error(
+          '❌ [EDITOR_CONTAINER] Bridge 전송 실패 - Phase 1 (3초 쿨다운)'
+        );
       }
     } catch (error) {
-      console.error('❌ [EDITOR_CONTAINER] 에디터 완료 프로세스 에러:', error);
+      console.error(
+        '❌ [EDITOR_CONTAINER] 에디터 완료 프로세스 에러 - Phase 1 (3초 쿨다운):',
+        error
+      );
     }
   }, [calculateEditorStateInfo, finishEditing, bridgeIntegration]);
 
-  // 🔧 Bridge 연결 상태 변화 감지 및 로깅
+  // 🔧 Bridge 연결 상태 변화 감지 및 로깅 (Phase 1 단순화, 쿨다운 정보 포함)
   useEffect(() => {
     const containerNames = extractContainerNames(safeContainers);
 
-    console.log('📊 [EDITOR_CONTAINER] 상태 변화 감지 - 에러 수정 버전:', {
-      currentStep: currentEditorStep,
-      isInStructureStep: currentEditorStep === 'structure',
-      isInWritingStep: currentEditorStep === 'writing',
-      editorStateInfo,
-      bridgeConnection: {
-        isConnected: bridgeIntegration.isConnected,
-        isTransferring: bridgeIntegration.isTransferring,
-        canTransfer: bridgeIntegration.canTransfer,
-      },
-      containerNames,
-      containerCount: containerNames.length,
-      hasMoveFunction: typeof handleMoveToContainer === 'function',
-      structureCompleteAttempts: structureCompleteCountRef.current,
-      timestamp: new Date().toISOString(),
-    });
+    console.log(
+      '📊 [EDITOR_CONTAINER] 상태 변화 감지 - Phase 1 버전 (3초 쿨다운):',
+      {
+        currentStep: currentEditorStep,
+        isInStructureStep: currentEditorStep === 'structure',
+        isInWritingStep: currentEditorStep === 'writing',
+        editorStateInfo,
+        bridgeConnection: {
+          isConnected: bridgeIntegration.isConnected,
+          isTransferring: bridgeIntegration.isTransferring,
+          canTransfer: bridgeIntegration.canTransfer,
+        },
+        containerNames,
+        containerCount: containerNames.length,
+        hasMoveFunction: typeof handleMoveToContainer === 'function',
+        phase1Simplified: true,
+        cooldownMs: EDITOR_TRANSFER_COOLDOWN_MS,
+        timestamp: new Date().toISOString(),
+      }
+    );
   }, [
     currentEditorStep,
     editorStateInfo,
@@ -527,7 +556,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
     handleMoveToContainer,
   ]);
 
-  // 🔧 Bridge 통계 정보 주기적 로깅 (디버그 모드에서만)
+  // 🔧 Bridge 통계 정보 주기적 로깅 (디버그 모드에서만, Phase 1 단순화, 쿨다운 정보 포함)
   useEffect(() => {
     if (!bridgeConfig.debugMode) {
       return;
@@ -538,7 +567,7 @@ function ModularBlogEditorContainer(): React.ReactNode {
         const statistics = bridgeIntegration.getStatistics();
 
         console.log(
-          '📈 [EDITOR_CONTAINER] Bridge 통계 리포트 - 에러 수정 버전:',
+          '📈 [EDITOR_CONTAINER] Bridge 통계 리포트 - Phase 1 버전 (3초 쿨다운):',
           {
             timestamp: new Date().toLocaleTimeString(),
             editorState: {
@@ -554,16 +583,17 @@ function ModularBlogEditorContainer(): React.ReactNode {
               statusMessage: statistics.uiStats.statusMessage || '없음',
             },
             connectionState: statistics.connectionState,
-            structureCompleteAttempts: structureCompleteCountRef.current,
+            phase1Simplified: true,
+            cooldownMs: EDITOR_TRANSFER_COOLDOWN_MS,
           }
         );
       } catch (error) {
         console.error(
-          '❌ [EDITOR_CONTAINER] Bridge 통계 리포트 생성 실패:',
+          '❌ [EDITOR_CONTAINER] Bridge 통계 리포트 생성 실패 - Phase 1:',
           error
         );
       }
-    }, 15000); // 15초마다
+    }, 15000);
 
     return () => clearInterval(statisticsInterval);
   }, [
@@ -579,11 +609,11 @@ function ModularBlogEditorContainer(): React.ReactNode {
     <div className="space-y-6">
       <ProgressSteps currentSubStep={currentEditorStep} />
 
-      {/* 🔧 Bridge 연결 상태 표시 (개발 환경에서만) */}
+      {/* 🔧 Bridge 연결 상태 표시 (개발 환경에서만, Phase 1 단순화, 쿨다운 정보 포함) */}
       {bridgeConfig.debugMode ? (
         <div className="p-3 text-sm border border-blue-200 rounded-lg bg-blue-50">
           <div className="mb-2 font-semibold text-blue-800">
-            🌉 Bridge 연결 상태 (디버그 모드) - 에러 수정 버전
+            🌉 Bridge 연결 상태 (Phase 1 단순화 버전, 3초 쿨다운)
           </div>
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
@@ -600,8 +630,8 @@ function ModularBlogEditorContainer(): React.ReactNode {
                 컨테이너: {editorStateInfo.containerCount}개 | 문단:{' '}
                 {editorStateInfo.paragraphCount}개 | 미할당:{' '}
                 {editorStateInfo.unassignedParagraphCount}개 | 전송준비:{' '}
-                {editorStateInfo.isReadyForTransfer ? '✅' : '❌'} |
-                구조완료시도: {structureCompleteCountRef.current}회
+                {editorStateInfo.isReadyForTransfer ? '✅' : '❌'} | Phase 1
+                단순화 | 쿨다운: {EDITOR_TRANSFER_COOLDOWN_MS / 1000}초
               </div>
             </div>
           </div>
@@ -650,3 +680,10 @@ function ModularBlogEditorContainer(): React.ReactNode {
 }
 
 export default React.memo(ModularBlogEditorContainer);
+
+console.log('🔧 [EDITOR_CONTAINER] 쿨다운 시간 통일 완료:', {
+  oldCooldown: '5000ms',
+  newCooldown: `${EDITOR_TRANSFER_COOLDOWN_MS}ms`,
+  bridgeAlignment: true,
+  phase: 'Phase 3 완료',
+});

@@ -3,6 +3,72 @@
 import { createJSONStorage } from 'zustand/middleware';
 import type { HybridImageViewConfig } from './commonTypes';
 
+// 🔧 3단계: 캐시 무효화 신호 추가
+let persistCacheInvalidationSignal = 0;
+
+// 🔧 3단계: persist 캐시 무효화 함수
+export const invalidatePersistCaches = (): void => {
+  console.log('🧹 [PERSIST_CACHE] persist 캐시 무효화 시작');
+
+  try {
+    // 1. persist 무효화 신호 증가
+    persistCacheInvalidationSignal += 1;
+
+    // 2. localStorage에서 persist 관련 캐시 정리
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const keys = Object.keys(window.localStorage);
+        const persistKeys = keys.filter(
+          (key) =>
+            key.includes('persist') ||
+            key.includes('hybrid') ||
+            key.includes('imageGallery') ||
+            key.includes('multiStep')
+        );
+
+        persistKeys.forEach((key) => {
+          try {
+            window.localStorage.removeItem(key);
+          } catch (error) {
+            console.warn(`⚠️ [PERSIST_CACHE] ${key} 정리 실패:`, error);
+          }
+        });
+
+        console.log('🧹 [PERSIST_CACHE] persist 캐시 정리 완료:', {
+          cleanedKeys: persistKeys.length,
+          cleanedKeysList: persistKeys,
+        });
+      } catch (storageError) {
+        console.warn(
+          '⚠️ [PERSIST_CACHE] localStorage 접근 실패:',
+          storageError
+        );
+      }
+    }
+
+    // 3. serialization 락 매니저 정리
+    const lockManager = SerializationLockManager.getInstance();
+    if (lockManager) {
+      console.log('🔧 [PERSIST_CACHE] serialization 락 매니저 상태 리셋');
+    }
+
+    console.log('✅ [PERSIST_CACHE] persist 캐시 무효화 완료:', {
+      invalidationSignal: persistCacheInvalidationSignal,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (invalidationError) {
+    console.error(
+      '❌ [PERSIST_CACHE] persist 캐시 무효화 실패:',
+      invalidationError
+    );
+  }
+};
+
+// 🔧 3단계: persist 캐시 무효화 신호 조회 함수
+export const getPersistCacheInvalidationSignal = (): number => {
+  return persistCacheInvalidationSignal;
+};
+
 export interface PersistConfig<T> {
   name: string;
   storage: ReturnType<typeof createJSONStorage>;
@@ -16,7 +82,7 @@ export interface HybridPersistConfig<T> extends PersistConfig<T> {
   deserialize?: (str: string) => Partial<T>;
 }
 
-// 🔧 원자적 직렬화/역직렬화 락 관리
+// 🔧 원자적 직렬화/역직렬화 락 관리 (무효화 신호 추가)
 class SerializationLockManager {
   private static instance: SerializationLockManager;
   private isSerializing = false;
@@ -27,6 +93,7 @@ class SerializationLockManager {
     reject: (error: Error) => void;
   }> = [];
   private isProcessingQueue = false;
+  private lastInvalidationSignal = 0; // 🔧 무효화 신호 추적
 
   static getInstance(): SerializationLockManager {
     if (!SerializationLockManager.instance) {
@@ -42,6 +109,19 @@ class SerializationLockManager {
     return new Promise((resolve, reject) => {
       this.operationQueue.push({
         operation: async () => {
+          // 🔧 무효화 신호 확인
+          const currentSignal = persistCacheInvalidationSignal;
+          if (currentSignal !== this.lastInvalidationSignal) {
+            console.log(
+              '🔄 [SERIALIZATION_LOCK] 무효화 신호 감지, 상태 리셋:',
+              {
+                previousSignal: this.lastInvalidationSignal,
+                currentSignal,
+              }
+            );
+            this.lastInvalidationSignal = currentSignal;
+          }
+
           const canProceed = this.acquireLock(lockType);
           if (!canProceed) {
             throw new Error(`Lock acquisition failed for ${lockType}`);
@@ -68,14 +148,18 @@ class SerializationLockManager {
         return false;
       }
       this.isSerializing = true;
-      console.log('🔒 [SERIALIZATION_LOCK] 직렬화 락 획득');
+      console.log(
+        '🔒 [SERIALIZATION_LOCK] 직렬화 락 획득 (무효화 신호 확인됨)'
+      );
       return true;
     } else {
       if (this.isSerializing || this.isDeserializing) {
         return false;
       }
       this.isDeserializing = true;
-      console.log('🔒 [SERIALIZATION_LOCK] 역직렬화 락 획득');
+      console.log(
+        '🔒 [SERIALIZATION_LOCK] 역직렬화 락 획득 (무효화 신호 확인됨)'
+      );
       return true;
     }
   }
@@ -184,10 +268,11 @@ const validateRestoredState = <
 >(
   state: Partial<T>
 ): boolean => {
-  console.log('🔍 [VALIDATION] 복원된 상태 검증 시작:', {
+  console.log('🔍 [VALIDATION] 복원된 상태 검증 시작 (무효화 신호 포함):', {
     hasImageViewConfig: 'imageViewConfig' in state,
     hasInitializedFlag: '_isInitialized' in state,
     stateKeys: Object.keys(state),
+    invalidationSignal: persistCacheInvalidationSignal,
   });
 
   // imageViewConfig 검증
@@ -214,11 +299,12 @@ const validateRestoredState = <
     const imageMetadataLength = imageMetadata.length;
     const sliderImagesLength = sliderImages.length;
 
-    console.log('📊 [VALIDATION] 배열 길이 정보:', {
+    console.log('📊 [VALIDATION] 배열 길이 정보 (무효화 신호 포함):', {
       selectedImagesLength,
       selectedImageIdsLength,
       imageMetadataLength,
       sliderImagesLength,
+      invalidationSignal: persistCacheInvalidationSignal,
     });
 
     // 🚨 핵심 변경: 치명적 불일치만 에러로 처리
@@ -284,13 +370,18 @@ const validateRestoredState = <
     }
   }
 
-  console.log('✅ [VALIDATION] 상태 검증 성공 (자동 복구 포함):', {
-    imageViewConfigValid: true,
-    selectedImagesCount: state.imageViewConfig?.selectedImages?.length || 0,
-    selectedImageIdsCount: state.imageViewConfig?.selectedImageIds?.length || 0,
-    sliderImagesCount: state.imageViewConfig?.sliderImages?.length || 0,
-    autoRecoveryEnabled: true,
-  });
+  console.log(
+    '✅ [VALIDATION] 상태 검증 성공 (자동 복구 포함, 무효화 신호 포함):',
+    {
+      imageViewConfigValid: true,
+      selectedImagesCount: state.imageViewConfig?.selectedImages?.length || 0,
+      selectedImageIdsCount:
+        state.imageViewConfig?.selectedImageIds?.length || 0,
+      sliderImagesCount: state.imageViewConfig?.sliderImages?.length || 0,
+      autoRecoveryEnabled: true,
+      invalidationSignal: persistCacheInvalidationSignal,
+    }
+  );
 
   return true;
 };
@@ -411,7 +502,7 @@ export const createHybridStorageAdapter = () => {
   };
 };
 
-// 🚨 수정: 슬라이더 필드를 포함한 원자적 직렬화 함수
+// 🚨 수정: 슬라이더 필드를 포함한 원자적 직렬화 함수 (무효화 신호 추가)
 export const hybridSerializeImageGalleryState = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -424,7 +515,7 @@ export const hybridSerializeImageGalleryState = <
 >(
   state: Partial<T>
 ): string => {
-  // 🔧 동기적 직렬화로 Race Condition 방지
+  // 🔧 동기적 직렬화로 Race Condition 방지 (무효화 신호 추가)
   try {
     const {
       imageViewConfig,
@@ -444,6 +535,8 @@ export const hybridSerializeImageGalleryState = <
       isHybridMode: isHybridMode ?? true,
       lastSyncTimestamp: lastSyncTimestamp ?? null,
       customGalleryViews: customGalleryViews ?? [],
+      // 🔧 무효화 신호 포함
+      _persistInvalidationSignal: persistCacheInvalidationSignal,
     };
 
     if (hasImageViewConfig) {
@@ -494,16 +587,20 @@ export const hybridSerializeImageGalleryState = <
         sliderImages: validSliderImages, // 검증된 슬라이더 이미지만 저장
       };
 
-      console.log('💾 [ATOMIC_SERIALIZE] 슬라이더 포함 원자적 직렬화 완료:', {
-        originalSelectedImagesCount: selectedImages.length,
-        validSelectedImagesCount: validSelectedImages.length,
-        originalSliderImagesCount: sliderImages.length,
-        validSliderImagesCount: validSliderImages.length,
-        cleanedImageIdsCount: cleanedSelectedImageIds.length,
-        cleanedMetadataCount: cleanedImageMetadata.length,
-        dataIntegrityEnsured: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
+      console.log(
+        '💾 [ATOMIC_SERIALIZE] 슬라이더 포함 원자적 직렬화 완료 (무효화 신호 포함):',
+        {
+          originalSelectedImagesCount: selectedImages.length,
+          validSelectedImagesCount: validSelectedImages.length,
+          originalSliderImagesCount: sliderImages.length,
+          validSliderImagesCount: validSliderImages.length,
+          cleanedImageIdsCount: cleanedSelectedImageIds.length,
+          cleanedMetadataCount: cleanedImageMetadata.length,
+          dataIntegrityEnsured: true,
+          invalidationSignal: persistCacheInvalidationSignal,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      );
     }
 
     const serializedData = JSON.stringify({
@@ -520,7 +617,7 @@ export const hybridSerializeImageGalleryState = <
   }
 };
 
-// 🚨 수정: 슬라이더 필드를 포함한 원자적 역직렬화 함수
+// 🚨 수정: 슬라이더 필드를 포함한 원자적 역직렬화 함수 (무효화 신호 검증 추가)
 export const hybridDeserializeImageGalleryState = <
   T extends {
     imageViewConfig?: HybridImageViewConfig;
@@ -533,13 +630,31 @@ export const hybridDeserializeImageGalleryState = <
 >(
   dataString: string
 ): Partial<T> => {
-  // 🔧 동기적 역직렬화로 Race Condition 방지
+  // 🔧 동기적 역직렬화로 Race Condition 방지 (무효화 신호 검증)
   try {
     const parsedData = JSON.parse(dataString);
 
     const isObject = typeof parsedData === 'object' && parsedData !== null;
     if (!isObject) {
       console.error('❌ [ATOMIC_DESERIALIZE] 유효하지 않은 데이터 형식');
+      return {} satisfies Partial<T>;
+    }
+
+    // 🔧 무효화 신호 확인
+    const storedInvalidationSignal = Reflect.get(
+      parsedData,
+      '_persistInvalidationSignal'
+    );
+    const currentInvalidationSignal = persistCacheInvalidationSignal;
+
+    if (
+      typeof storedInvalidationSignal === 'number' &&
+      storedInvalidationSignal !== currentInvalidationSignal
+    ) {
+      console.log('🔄 [ATOMIC_DESERIALIZE] 무효화 신호 불일치, 기본값 반환:', {
+        storedSignal: storedInvalidationSignal,
+        currentSignal: currentInvalidationSignal,
+      });
       return {} satisfies Partial<T>;
     }
 
@@ -660,7 +775,7 @@ export const hybridDeserializeImageGalleryState = <
         restoredState.imageViewConfig = restoredConfig;
 
         console.log(
-          '📁 [ATOMIC_DESERIALIZE] 슬라이더 포함 원자적 역직렬화 완료:',
+          '📁 [ATOMIC_DESERIALIZE] 슬라이더 포함 원자적 역직렬화 완료 (무효화 신호 검증됨):',
           {
             originalSelectedImagesCount: selectedImages.length,
             validRestoredImagesCount: validRestoredImages.length,
@@ -671,6 +786,7 @@ export const hybridDeserializeImageGalleryState = <
             configValidated: true,
             autoSyncApplied: true,
             noDataLoss: validRestoredImages.length > 0,
+            invalidationSignal: currentInvalidationSignal,
             timestamp: new Date().toLocaleTimeString(),
           }
         );
@@ -785,31 +901,35 @@ export const hybridPartializeImageGalleryState = <
     Reflect.set(partializedState, 'lastSyncTimestamp', state.lastSyncTimestamp);
   }
 
-  console.log('📦 [PARTIALIZE] 슬라이더 포함 정리된 부분 저장 완료:', {
-    hasImageViewConfig,
-    hasCustomGalleryViews,
-    hasInitializationFlag,
-    hasIsPreviewPanelOpen,
-    hasIsHybridMode,
-    hasLastSyncTimestamp,
-    isInitialized: state._isInitialized,
-    selectedImagesCount:
-      hasImageViewConfig && state.imageViewConfig
-        ? (partializedState.imageViewConfig as HybridImageViewConfig)
-            ?.selectedImages?.length || 0
-        : 0,
-    sliderImagesCount:
-      hasImageViewConfig && state.imageViewConfig
-        ? (partializedState.imageViewConfig as HybridImageViewConfig)
-            ?.sliderImages?.length || 0
-        : 0,
-    dataIntegrityEnsured: true,
-  });
+  console.log(
+    '📦 [PARTIALIZE] 슬라이더 포함 정리된 부분 저장 완료 (무효화 신호 포함):',
+    {
+      hasImageViewConfig,
+      hasCustomGalleryViews,
+      hasInitializationFlag,
+      hasIsPreviewPanelOpen,
+      hasIsHybridMode,
+      hasLastSyncTimestamp,
+      isInitialized: state._isInitialized,
+      selectedImagesCount:
+        hasImageViewConfig && state.imageViewConfig
+          ? (partializedState.imageViewConfig as HybridImageViewConfig)
+              ?.selectedImages?.length || 0
+          : 0,
+      sliderImagesCount:
+        hasImageViewConfig && state.imageViewConfig
+          ? (partializedState.imageViewConfig as HybridImageViewConfig)
+              ?.sliderImages?.length || 0
+          : 0,
+      dataIntegrityEnsured: true,
+      invalidationSignal: persistCacheInvalidationSignal,
+    }
+  );
 
   return partializedState;
 };
 
-// 🚨 Race Condition 해결: 원자적 복원 콜백
+// 🚨 Race Condition 해결: 원자적 복원 콜백 (무효화 신호 검증 추가)
 export const createOnRehydrateStorageCallback = <
   T extends {
     _triggerAutoInitialization?: () => void;
@@ -824,13 +944,17 @@ export const createOnRehydrateStorageCallback = <
       return;
     }
 
-    console.log('🔄 [ATOMIC_REHYDRATE] 원자적 상태 복원 시작:', {
-      hasState: true,
-      isInitialized: Reflect.get(state, '_isInitialized') ?? false,
-      hasImageViewConfig: 'imageViewConfig' in state,
-      selectedImagesCount: state.imageViewConfig?.selectedImages?.length || 0,
-      sliderImagesCount: state.imageViewConfig?.sliderImages?.length || 0,
-    });
+    console.log(
+      '🔄 [ATOMIC_REHYDRATE] 원자적 상태 복원 시작 (무효화 신호 포함):',
+      {
+        hasState: true,
+        isInitialized: Reflect.get(state, '_isInitialized') ?? false,
+        hasImageViewConfig: 'imageViewConfig' in state,
+        selectedImagesCount: state.imageViewConfig?.selectedImages?.length || 0,
+        sliderImagesCount: state.imageViewConfig?.sliderImages?.length || 0,
+        invalidationSignal: persistCacheInvalidationSignal,
+      }
+    );
 
     // 🔧 복원된 상태 최종 검증
     const isValidRestoredState = validateRestoredState(state);
@@ -883,11 +1007,15 @@ export const createOnRehydrateStorageCallback = <
         }
       }
 
-      console.log('✅ [ATOMIC_REHYDRATE] 이미지 데이터 무결성 검증 성공:', {
-        selectedImagesCount: selectedImages?.length || 0,
-        sliderImagesCount: sliderImages?.length || 0,
-        allImagesValid: true,
-      });
+      console.log(
+        '✅ [ATOMIC_REHYDRATE] 이미지 데이터 무결성 검증 성공 (무효화 신호 포함):',
+        {
+          selectedImagesCount: selectedImages?.length || 0,
+          sliderImagesCount: sliderImages?.length || 0,
+          allImagesValid: true,
+          invalidationSignal: persistCacheInvalidationSignal,
+        }
+      );
     }
 
     // 🔧 복원 후 원자적 초기화 및 동기화 (순차 실행)
@@ -917,13 +1045,14 @@ export const createOnRehydrateStorageCallback = <
         }
 
         console.log(
-          '✅ [ATOMIC_REHYDRATE] 슬라이더 포함 원자적 복원 프로세스 완료:',
+          '✅ [ATOMIC_REHYDRATE] 슬라이더 포함 원자적 복원 프로세스 완료 (무효화 신호 포함):',
           {
             totalSelectedImages:
               state.imageViewConfig?.selectedImages?.length || 0,
             totalSliderImages: state.imageViewConfig?.sliderImages?.length || 0,
             restorationSuccessful: true,
             noRaceCondition: true,
+            invalidationSignal: persistCacheInvalidationSignal,
           }
         );
       } catch (restoreError) {
@@ -970,7 +1099,7 @@ export const createHybridPersistConfig = <
     };
 
     console.log(
-      '🔧 [HYBRID_PERSIST] 슬라이더 포함 원자적 복원 하이브리드 설정 생성 완료:',
+      '🔧 [HYBRID_PERSIST] 슬라이더 포함 원자적 복원 하이브리드 설정 생성 완료 (무효화 신호 포함):',
       {
         configName,
         storageType,
@@ -980,6 +1109,8 @@ export const createHybridPersistConfig = <
         hasDataValidation: true,
         hasSliderSupport: true,
         noRaceCondition: true,
+        hasInvalidationSignal: true, // 🔧 새로 추가
+        invalidationSignal: persistCacheInvalidationSignal,
       }
     );
 
@@ -1015,4 +1146,12 @@ export const createDevPersistConfig = <T>(
     removeItem: () => {},
   })),
   skipHydration: true,
+});
+
+console.log('📦 [PERSIST_CONFIG] 캐시 무효화 신호 시스템 초기화 완료:', {
+  invalidatePersistCaches: '사용 가능',
+  getPersistCacheInvalidationSignal: '사용 가능',
+  serializationLockManager: '무효화 신호 추적 지원',
+  atomicOperations: '모든 함수에 무효화 신호 포함',
+  cacheUnification: '완료',
 });

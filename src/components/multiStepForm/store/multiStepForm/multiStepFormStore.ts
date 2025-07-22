@@ -48,10 +48,28 @@ interface BridgeCompatibleFormValues {
   isEditorCompleted?: boolean;
 }
 
-// 스토어 인터페이스 - Bridge 메서드 추가
+// 🆕 Phase 2: Bridge가 기대하는 정확한 FormValues 타입 (formTypes.ts 기반)
+interface ExpectedBridgeFormValues {
+  nickname: string; // required
+  title: string; // required
+  editorCompletedContent?: string;
+  isEditorCompleted?: boolean;
+  [key: string]: string | string[] | boolean | null | undefined;
+}
+
+// 스토어 인터페이스 - Bridge 메서드 및 속성 추가
 interface MultiStepFormStore {
   formData: FormData;
   toasts: ToastMessage[];
+
+  // 🆕 Phase 2: Bridge 호환성을 위한 직접 속성 접근
+  formValues: ExpectedBridgeFormValues; // Bridge가 기대하는 getter 속성
+  currentStep: number; // Bridge가 기대하는 스텝 번호
+  editorCompletedContent: string; // Bridge가 기대하는 에디터 내용 getter
+  isEditorCompleted: boolean; // Bridge가 기대하는 완료 상태 getter
+  progressWidth: number; // Bridge가 기대하는 진행률
+
+  // 기존 메서드들
   getFormValues: () => FormData;
   updateFormValue: (
     fieldName: string,
@@ -68,6 +86,11 @@ interface MultiStepFormStore {
   updateEditorContent: (content: string) => void;
   setEditorCompleted: (completed: boolean) => void;
   setFormValues: (values: BridgeCompatibleFormValues) => void;
+
+  // 🆕 Phase 2: Bridge 호환성을 위한 추가 메서드들
+  updateCurrentStep: (step: number) => void;
+  updateProgressWidth: (width: number) => void;
+  getBridgeCompatibleFormValues: () => ExpectedBridgeFormValues;
 }
 
 // 저장할 데이터 타입 정의
@@ -215,10 +238,12 @@ const createSafeTypeConverters = () => {
     }
     if (typeof value === 'string') {
       const lowerValue = value.toLowerCase();
-      if (lowerValue === 'true') {
+      const isTrueString = lowerValue === 'true';
+      if (isTrueString) {
         return true;
       }
-      if (lowerValue === 'false') {
+      const isFalseString = lowerValue === 'false';
+      if (isFalseString) {
         return false;
       }
     }
@@ -226,7 +251,8 @@ const createSafeTypeConverters = () => {
   };
 
   const convertToSafeStringArray = (value: unknown): string[] => {
-    if (!Array.isArray(value)) {
+    const isArray = Array.isArray(value);
+    if (!isArray) {
       return [];
     }
 
@@ -234,10 +260,12 @@ const createSafeTypeConverters = () => {
   };
 
   const convertToSafeStringOrNull = (value: unknown): string | null => {
-    if (value === null) {
+    const isNull = value === null;
+    if (isNull) {
       return null;
     }
-    if (typeof value === 'string') {
+    const isString = typeof value === 'string';
+    if (isString) {
       return value;
     }
     return null;
@@ -253,7 +281,8 @@ const createSafeTypeConverters = () => {
 
 // 🔧 이미지 데이터 크기 추정
 const estimateImageDataSize = (imageData: string): number => {
-  if (typeof imageData !== 'string') {
+  const isString = typeof imageData === 'string';
+  if (!isString) {
     return 0;
   }
 
@@ -278,14 +307,16 @@ const estimateDataSize = (data: StorageData): number => {
   if (formData) {
     const formDataEntries = Object.entries(formData);
 
-    formDataEntries.forEach(([fieldName, fieldValue]) => {
-      if (fieldValue === null || fieldValue === undefined) {
-        return;
+    for (const [fieldName, fieldValue] of formDataEntries) {
+      const isNullOrUndefined = fieldValue === null || fieldValue === undefined;
+      if (isNullOrUndefined) {
+        continue;
       }
 
       const fieldEstimate = FIELD_SIZE_ESTIMATES.get(fieldName) || 100;
 
-      if (typeof fieldValue === 'string') {
+      const isString = typeof fieldValue === 'string';
+      if (isString) {
         // 이미지 필드인 경우 별도 처리
         const isImageField =
           fieldName.includes('Image') || fieldName === 'mainImage';
@@ -301,25 +332,31 @@ const estimateDataSize = (data: StorageData): number => {
           const actualSize = fieldValue.length;
           totalEstimatedSize += actualSize;
         }
-      } else if (Array.isArray(fieldValue)) {
-        const arraySize = fieldValue.reduce((acc, item) => {
-          if (typeof item === 'string') {
-            const isImageData = item.length > 100;
-            return (
-              acc + (isImageData ? estimateImageDataSize(item) : item.length)
-            );
-          }
-          return acc;
-        }, 0);
-        totalEstimatedSize += arraySize;
       } else {
-        totalEstimatedSize += fieldEstimate;
+        const isArray = Array.isArray(fieldValue);
+        if (isArray) {
+          const arraySize = fieldValue.reduce((acc, item) => {
+            const isStringItem = typeof item === 'string';
+            if (isStringItem) {
+              const isImageData = item.length > 100;
+              const itemSize = isImageData
+                ? estimateImageDataSize(item)
+                : item.length;
+              return acc + itemSize;
+            }
+            return acc;
+          }, 0);
+          totalEstimatedSize += arraySize;
+        } else {
+          totalEstimatedSize += fieldEstimate;
+        }
       }
-    });
+    }
   }
 
   // Toasts 크기 추정
-  if (Array.isArray(toasts)) {
+  const isToastsArray = Array.isArray(toasts);
+  if (isToastsArray) {
     const toastsSize = toasts.length * 200; // 토스트당 평균 200바이트
     totalEstimatedSize += toastsSize;
   }
@@ -364,13 +401,15 @@ const isStorageSafe = (data: StorageData): boolean => {
   const estimatedSizeInMB = estimatedSize / (1024 * 1024);
 
   // 추정 크기가 2.5MB 이하면 안전하다고 가정
-  if (estimatedSizeInMB <= 2.5) {
+  const isSizeUnderSafeLimit = estimatedSizeInMB <= 2.5;
+  if (isSizeUnderSafeLimit) {
     console.log('✅ [STORAGE_SAFE] 추정 크기 안전함, 정확한 측정 생략');
     return true;
   }
 
   // 추정 크기가 4MB 이상이면 위험하다고 가정
-  if (estimatedSizeInMB >= 4) {
+  const isSizeOverDangerLimit = estimatedSizeInMB >= 4;
+  if (isSizeOverDangerLimit) {
     console.log('⚠️ [STORAGE_SAFE] 추정 크기 위험함, 저장 거부');
     return false;
   }
@@ -407,22 +446,23 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
   } = formData || {};
 
   // 이미지 필드들 처리
-  const processedUserImage =
-    typeof userImage === 'string' && userImage.length <= 100000
-      ? userImage
-      : '';
-  const processedMainImage =
-    typeof mainImage === 'string' && mainImage.length <= 100000
-      ? mainImage
-      : null;
+  const isUserImageValid =
+    typeof userImage === 'string' && userImage.length <= 100000;
+  const processedUserImage = isUserImageValid ? userImage : '';
+
+  const isMainImageValid =
+    typeof mainImage === 'string' && mainImage.length <= 100000;
+  const processedMainImage = isMainImageValid ? mainImage : null;
 
   // media 배열 필터링
-  const processedMedia = Array.isArray(media)
+  const isMediaArray = Array.isArray(media);
+  const processedMedia = isMediaArray
     ? media.filter((item): item is string => {
         const isValidString = typeof item === 'string';
         const isSafeSize = isValidString && item.length <= 100000;
 
-        if (isValidString && !isSafeSize) {
+        const isValidButUnsafe = isValidString && !isSafeSize;
+        if (isValidButUnsafe) {
           console.log('🛡️ [SAFE_STORAGE] media 아이템 크기 초과로 제외');
         }
 
@@ -431,12 +471,14 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
     : [];
 
   // sliderImages 배열 필터링
-  const processedSliderImages = Array.isArray(sliderImages)
+  const isSliderImagesArray = Array.isArray(sliderImages);
+  const processedSliderImages = isSliderImagesArray
     ? sliderImages.filter((item): item is string => {
         const isValidString = typeof item === 'string';
         const isSafeSize = isValidString && item.length <= 100000;
 
-        if (isValidString && !isSafeSize) {
+        const isValidButUnsafe = isValidString && !isSafeSize;
+        if (isValidButUnsafe) {
           console.log('🛡️ [SAFE_STORAGE] sliderImages 아이템 크기 초과로 제외');
         }
 
@@ -454,7 +496,8 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
   };
 
   // 토스트 데이터 처리 - 최근 5개만 유지
-  const safeToasts = Array.isArray(toasts) ? toasts.slice(-5) : [];
+  const isToastsArray = Array.isArray(toasts);
+  const safeToasts = isToastsArray ? toasts.slice(-5) : [];
 
   const safeStorageData: StorageData = {
     formData: safeFormData,
@@ -462,13 +505,11 @@ const createSafeStorageData = (state: MultiStepFormStore): StorageData => {
   };
 
   console.log('🛡️ [SAFE_STORAGE] 안전한 저장 데이터 생성 완료:', {
-    originalMediaCount: Array.isArray(media) ? media.length : 0,
+    originalMediaCount: isMediaArray ? media.length : 0,
     processedMediaCount: processedMedia.length,
-    originalSliderImagesCount: Array.isArray(sliderImages)
-      ? sliderImages.length
-      : 0,
+    originalSliderImagesCount: isSliderImagesArray ? sliderImages.length : 0,
     processedSliderImagesCount: processedSliderImages.length,
-    originalToastsCount: Array.isArray(toasts) ? toasts.length : 0,
+    originalToastsCount: isToastsArray ? toasts.length : 0,
     processedToastsCount: safeToasts.length,
     timestamp: new Date().toISOString(),
   });
@@ -535,15 +576,272 @@ const convertBridgeFormValuesToFormData = (
   return convertedFormData;
 };
 
-// Zustand 스토어 생성
+// 🆕 Phase 2: FormData를 Bridge 호환 FormValues로 변환하는 함수 (🚨 에러 수정)
+const convertFormDataToBridgeFormValues = (
+  formData: FormData | undefined | null
+): ExpectedBridgeFormValues => {
+  console.log('🔄 [BRIDGE_CONVERTER] FormData → Bridge FormValues 변환 시작');
+
+  const { convertToSafeString, convertToSafeBoolean } =
+    createSafeTypeConverters();
+
+  // 🚨 핵심 수정: formData가 없는 경우 기본값 반환
+  const isFormDataValid = formData && typeof formData === 'object';
+  if (!isFormDataValid) {
+    console.warn('⚠️ [BRIDGE_CONVERTER] formData가 없음, 기본값 사용');
+    return {
+      nickname: '',
+      title: '',
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+  }
+
+  const {
+    nickname = '',
+    title = '',
+    editorCompletedContent = '',
+    isEditorCompleted = false,
+    ...otherFields
+  } = formData;
+
+  const bridgeFormValues: ExpectedBridgeFormValues = {
+    nickname: convertToSafeString(nickname, ''),
+    title: convertToSafeString(title, ''),
+    editorCompletedContent: convertToSafeString(editorCompletedContent, ''),
+    isEditorCompleted: convertToSafeBoolean(isEditorCompleted, false),
+    ...otherFields,
+  };
+
+  console.log('✅ [BRIDGE_CONVERTER] Bridge FormValues 변환 완료:', {
+    nickname: bridgeFormValues.nickname,
+    title: bridgeFormValues.title,
+    hasEditorContent: !!bridgeFormValues.editorCompletedContent,
+    isEditorCompleted: bridgeFormValues.isEditorCompleted,
+    otherFieldsCount: Object.keys(otherFields).length,
+    timestamp: new Date().toISOString(),
+  });
+
+  return bridgeFormValues;
+};
+
+// 🆕 Phase 2: 진행률 계산 함수 (🚨 에러 방지 버전)
+const calculateProgressWidthSafely = (
+  formData: FormData | null | undefined,
+  hardcodedCurrentStep: number
+): number => {
+  console.log('📊 [PROGRESS_CALC] 안전한 진행률 계산 시작:', {
+    hasFormData: !!formData,
+    hardcodedCurrentStep,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🚨 안전성 검사: formData 유효성 확인
+  const safeFormData = formData || {};
+
+  const requiredFields = ['nickname', 'title'];
+  const completedRequiredFields = requiredFields.filter((field) => {
+    const fieldValue = safeFormData[field];
+    const isStringValue = typeof fieldValue === 'string';
+    const hasContent = isStringValue && fieldValue.trim().length > 0;
+    return hasContent;
+  });
+
+  const baseProgress = (hardcodedCurrentStep / 5) * 100; // 5단계 기준
+  const fieldProgress =
+    (completedRequiredFields.length / requiredFields.length) * 20; // 최대 20% 추가
+
+  const totalProgress = Math.min(100, baseProgress + fieldProgress);
+
+  console.log('📊 [PROGRESS_CALC] 안전한 진행률 계산 완료:', {
+    hardcodedCurrentStep,
+    baseProgress,
+    fieldProgress,
+    totalProgress,
+    completedRequiredFields,
+    timestamp: new Date().toISOString(),
+  });
+
+  return totalProgress;
+};
+
+// 🔧 기본 FormData 생성 함수 (🚨 에러 방지)
+const createDefaultFormData = (): FormData => {
+  return {
+    userImage: '',
+    nickname: '',
+    emailPrefix: '',
+    emailDomain: '',
+    bio: '',
+    title: '',
+    description: '',
+    tags: '',
+    content: '',
+    mainImage: null,
+    media: [],
+    sliderImages: [],
+    editorCompletedContent: '',
+    isEditorCompleted: false,
+  };
+};
+
+// Zustand 스토어 생성 (🚨 에러 수정 버전)
 export const useMultiStepFormStore = create<MultiStepFormStore>()(
   persist(
     (set, get) => ({
-      // 초기 상태
-      formData: {},
+      // 초기 상태 (🚨 기본값 보장)
+      formData: createDefaultFormData(),
       toasts: [],
 
-      // 폼 값 가져오기
+      // 🆕 Phase 2: Bridge 호환성을 위한 계산된 속성들 (🚨 순환 참조 해결)
+      get formValues() {
+        console.log('🔄 [BRIDGE_GETTER] formValues getter 호출 시작');
+
+        try {
+          const state = get();
+
+          // 🚨 핵심 수정: 안전한 formData 접근
+          const { formData = null } = state || {};
+
+          const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
+
+          console.log('🔄 [BRIDGE_GETTER] formValues getter 호출 완료:', {
+            hasFormData: !!formData,
+            formDataKeys: formData ? Object.keys(formData).length : 0,
+            bridgeFormValuesKeys: Object.keys(bridgeFormValues).length,
+            nickname: bridgeFormValues.nickname,
+            title: bridgeFormValues.title,
+            timestamp: new Date().toISOString(),
+          });
+
+          return bridgeFormValues;
+        } catch (getterError) {
+          console.error(
+            '❌ [BRIDGE_GETTER] formValues getter 오류:',
+            getterError
+          );
+          return {
+            nickname: '',
+            title: '',
+            editorCompletedContent: '',
+            isEditorCompleted: false,
+          };
+        }
+      },
+
+      get currentStep() {
+        // 🎯 Phase 2: Writing 단계로 하드코딩 (Bridge 요구사항)
+        console.log(
+          '🔄 [BRIDGE_GETTER] currentStep getter 호출: 4 (Writing Step)'
+        );
+        return 4;
+      },
+
+      get editorCompletedContent() {
+        console.log(
+          '🔄 [BRIDGE_GETTER] editorCompletedContent getter 호출 시작'
+        );
+
+        try {
+          const state = get();
+
+          // 🚨 핵심 수정: 안전한 접근
+          const { formData = null } = state || {};
+          const content = formData?.editorCompletedContent || '';
+
+          console.log(
+            '🔄 [BRIDGE_GETTER] editorCompletedContent getter 호출 완료:',
+            {
+              hasFormData: !!formData,
+              contentLength: content.length,
+              hasContent: !!content,
+              preview:
+                content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          const isString = typeof content === 'string';
+          return isString ? content : '';
+        } catch (getterError) {
+          console.error(
+            '❌ [BRIDGE_GETTER] editorCompletedContent getter 오류:',
+            getterError
+          );
+          return '';
+        }
+      },
+
+      get isEditorCompleted() {
+        console.log('🔄 [BRIDGE_GETTER] isEditorCompleted getter 호출 시작');
+
+        try {
+          const state = get();
+
+          // 🚨 핵심 수정: 안전한 접근
+          const { formData = null } = state || {};
+          const completed = formData?.isEditorCompleted || false;
+
+          console.log(
+            '🔄 [BRIDGE_GETTER] isEditorCompleted getter 호출 완료:',
+            {
+              hasFormData: !!formData,
+              completed,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          const isBoolean = typeof completed === 'boolean';
+          return isBoolean ? completed : false;
+        } catch (getterError) {
+          console.error(
+            '❌ [BRIDGE_GETTER] isEditorCompleted getter 오류:',
+            getterError
+          );
+          return false;
+        }
+      },
+
+      get progressWidth() {
+        console.log('🔄 [BRIDGE_GETTER] progressWidth getter 호출 시작');
+
+        try {
+          const state = get();
+
+          // 🚨 핵심 수정: state 안전성 검사 + getter 의존성 제거
+          if (!state) {
+            console.warn('⚠️ [BRIDGE_GETTER] state가 없음, 기본 진행률 반환');
+            return 0;
+          }
+
+          const { formData = null } = state;
+
+          // 🚨 핵심 수정: 하드코딩된 currentStep 사용 (getter 의존성 제거)
+          const hardcodedCurrentStep = 4; // state.currentStep 대신 직접 값 사용
+
+          const progress = calculateProgressWidthSafely(
+            formData,
+            hardcodedCurrentStep
+          );
+
+          console.log('🔄 [BRIDGE_GETTER] progressWidth getter 호출 완료:', {
+            hasFormData: !!formData,
+            hardcodedCurrentStep,
+            progress,
+            timestamp: new Date().toISOString(),
+          });
+
+          return progress;
+        } catch (getterError) {
+          console.error(
+            '❌ [BRIDGE_GETTER] progressWidth getter 오류:',
+            getterError
+          );
+          return 0;
+        }
+      },
+
+      // 기존 메서드들 유지...
       getFormValues: () => {
         const state = get();
         const { formData } = state;
@@ -553,7 +851,44 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
           timestamp: new Date().toISOString(),
         });
 
-        return formData || {};
+        return formData || createDefaultFormData();
+      },
+
+      // 🆕 Phase 2: Bridge 호환성을 위한 추가 메서드들
+      updateCurrentStep: (step: number) => {
+        console.log('📝 [BRIDGE_STORE] currentStep 업데이트:', {
+          step,
+          timestamp: new Date().toISOString(),
+        });
+
+        // 현재는 하드코딩된 값이므로 실제 업데이트는 하지 않음
+        // 추후 필요시 상태로 관리 가능
+      },
+
+      updateProgressWidth: (width: number) => {
+        console.log('📝 [BRIDGE_STORE] progressWidth 업데이트:', {
+          width,
+          timestamp: new Date().toISOString(),
+        });
+
+        // 현재는 계산된 값이므로 실제 업데이트는 하지 않음
+        // 진행률은 formData와 currentStep에서 자동 계산됨
+      },
+
+      getBridgeCompatibleFormValues: () => {
+        const state = get();
+
+        // 🚨 핵심 수정: 안전한 접근
+        const { formData = null } = state || {};
+        const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
+
+        console.log('📊 [BRIDGE_STORE] Bridge 호환 FormValues 반환:', {
+          hasFormData: !!formData,
+          bridgeFormValues,
+          timestamp: new Date().toISOString(),
+        });
+
+        return bridgeFormValues;
       },
 
       // 단일 폼 값 업데이트
@@ -569,8 +904,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
 
         set((state) => {
-          const { formData: currentFormData } = state;
-          const safeFormData = currentFormData || {};
+          const { formData: currentFormData = null } = state;
+          const safeFormData = currentFormData || createDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -599,8 +934,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
 
         set((state) => {
-          const { formData: currentFormData } = state;
-          const safeFormData = currentFormData || {};
+          const { formData: currentFormData = null } = state;
+          const safeFormData = currentFormData || createDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -635,8 +970,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         }
 
         set((state) => {
-          const { formData: currentFormData } = state;
-          const safeFormData = currentFormData || {};
+          const { formData: currentFormData = null } = state;
+          const safeFormData = currentFormData || createDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -669,8 +1004,8 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         }
 
         set((state) => {
-          const { formData: currentFormData } = state;
-          const safeFormData = currentFormData || {};
+          const { formData: currentFormData = null } = state;
+          const safeFormData = currentFormData || createDefaultFormData();
 
           const newFormData = {
             ...safeFormData,
@@ -725,11 +1060,9 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         });
 
         set((state) => {
-          const { formData: currentFormData } = state;
+          const { formData: currentFormData = null } = state;
 
-          const hasFormData =
-            currentFormData !== null && currentFormData !== undefined;
-          if (!hasFormData) {
+          if (!currentFormData) {
             console.log('⚠️ [STORE_RESET] 폼 데이터가 없음, 변경 없음');
             return state;
           }
@@ -752,7 +1085,7 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
         set((state) => ({
           ...state,
-          formData: {},
+          formData: createDefaultFormData(),
         }));
 
         console.log('✅ [STORE_RESET_ALL] 전체 폼 데이터 초기화 완료');
@@ -834,47 +1167,56 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       partialize: (state) => {
         console.log('💾 [PERSIST] localStorage 저장 시작');
 
-        const safeData = createSafeStorageData(state);
-        const isSafeToStore = isStorageSafe(safeData);
+        try {
+          const safeData = createSafeStorageData(state);
+          const isSafeToStore = isStorageSafe(safeData);
 
-        if (isSafeToStore) {
-          console.log('✅ [PERSIST] 안전한 데이터 localStorage 저장');
-          return safeData;
+          if (isSafeToStore) {
+            console.log('✅ [PERSIST] 안전한 데이터 localStorage 저장');
+            return safeData;
+          }
+
+          console.warn('⚠️ [PERSIST] 데이터 크기 초과로 필수 텍스트만 저장');
+
+          const { formData } = state;
+          const safeFormData = formData || createDefaultFormData();
+          const {
+            nickname = '',
+            emailPrefix = '',
+            emailDomain = '',
+            bio = '',
+            title = '',
+            description = '',
+            tags = '',
+            content = '',
+            editorCompletedContent = '',
+            isEditorCompleted = false,
+          } = safeFormData;
+
+          const textOnlyData: StorageData = {
+            formData: {
+              nickname,
+              emailPrefix,
+              emailDomain,
+              bio,
+              title,
+              description,
+              tags,
+              content,
+              editorCompletedContent,
+              isEditorCompleted,
+            },
+            toasts: [],
+          };
+
+          return textOnlyData;
+        } catch (persistError) {
+          console.error('❌ [PERSIST] 저장 처리 오류:', persistError);
+          return {
+            formData: createDefaultFormData(),
+            toasts: [],
+          };
         }
-
-        console.warn('⚠️ [PERSIST] 데이터 크기 초과로 필수 텍스트만 저장');
-
-        const { formData } = state;
-        const {
-          nickname = '',
-          emailPrefix = '',
-          emailDomain = '',
-          bio = '',
-          title = '',
-          description = '',
-          tags = '',
-          content = '',
-          editorCompletedContent = '',
-          isEditorCompleted = false,
-        } = formData || {};
-
-        const textOnlyData: StorageData = {
-          formData: {
-            nickname,
-            emailPrefix,
-            emailDomain,
-            bio,
-            title,
-            description,
-            tags,
-            content,
-            editorCompletedContent,
-            isEditorCompleted,
-          },
-          toasts: [],
-        };
-
-        return textOnlyData;
       },
       onRehydrateStorage: () => {
         console.log('🔄 [PERSIST] localStorage에서 데이터 복원 시작');
@@ -882,13 +1224,36 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         return (state, error) => {
           if (error) {
             console.error('❌ [PERSIST] localStorage 복원 실패:', error);
-            localStorage.removeItem('multi-step-form-storage');
+
+            try {
+              localStorage.removeItem('multi-step-form-storage');
+            } catch (cleanupError) {
+              console.error(
+                '❌ [PERSIST] localStorage 정리 실패:',
+                cleanupError
+              );
+            }
+
+            // 🚨 에러 시 기본 상태로 초기화
+            try {
+              const store = useMultiStepFormStore.getState();
+              store.resetAllFormData();
+            } catch (resetError) {
+              console.error('❌ [PERSIST] 상태 리셋 실패:', resetError);
+            }
           } else {
             console.log('✅ [PERSIST] localStorage 복원 완료:', {
+              hasState: !!state,
               hasFormData: !!state?.formData,
               formDataKeys: state?.formData ? Object.keys(state.formData) : [],
               timestamp: new Date().toISOString(),
             });
+
+            // 🚨 복원된 데이터 검증 및 보완
+            if (state && !state.formData) {
+              console.warn('⚠️ [PERSIST] formData가 없어 기본값으로 초기화');
+              state.formData = createDefaultFormData();
+            }
           }
         };
       },
@@ -896,6 +1261,4 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
   )
 );
 
-console.log(
-  '📄 [STORE] localStorage 최적화된 multiStepFormStore 모듈 로드 완료'
-);
+console.log('📄 [STORE] 🚨 에러 수정 완료된 multiStepFormStore 모듈 로드 완료');

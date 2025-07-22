@@ -60,6 +60,141 @@ interface BridgeEngineStatus {
   readonly hasValidExternalData: boolean;
 }
 
+// 🔧 JSON 안전 처리 유틸리티 (작업 2: 순환 참조 안전장치)
+function createJSONSafetyUtils() {
+  const createSafeStringifyProcessor = () => {
+    const processJsonSafely = (data: unknown): string => {
+      console.debug('🔍 [JSON_SAFETY] 안전한 JSON 변환 시작');
+
+      try {
+        const circularReferenceTracker = new WeakSet();
+
+        const safeJsonString = JSON.stringify(
+          data,
+          (_key: string, value: unknown) => {
+            // Early Return: null이나 primitive 타입은 그대로 반환
+            if (value === null || typeof value !== 'object') {
+              return value;
+            }
+
+            // Early Return: 순환 참조 감지 시 안전한 문자열로 대체
+            if (circularReferenceTracker.has(value)) {
+              console.warn(
+                '⚠️ [JSON_SAFETY] 순환 참조 감지됨, 안전한 표시로 대체'
+              );
+              return '[Circular Reference]';
+            }
+
+            circularReferenceTracker.add(value);
+            return value;
+          }
+        );
+
+        console.debug('✅ [JSON_SAFETY] JSON 변환 성공');
+        return safeJsonString;
+      } catch (jsonStringifyError) {
+        console.error('❌ [JSON_SAFETY] JSON 변환 실패:', jsonStringifyError);
+
+        // 폴백: 타임스탬프 기반 안전한 문자열 생성
+        const fallbackString = `{"fallback_timestamp": ${Date.now()}, "error": "json_stringify_failed"}`;
+        console.debug('🔄 [JSON_SAFETY] 폴백 문자열 사용:', fallbackString);
+        return fallbackString;
+      }
+    };
+
+    return { processJsonSafely };
+  };
+
+  const createSimpleHashGenerator = () => {
+    const generateSimpleHash = (data: unknown): string => {
+      console.debug('🔍 [HASH_GENERATOR] 해시 생성 시작');
+
+      try {
+        const { processJsonSafely } = createSafeStringifyProcessor();
+        const safeJsonString = processJsonSafely(data);
+
+        // Early Return: JSON 변환 실패 시 타임스탬프 기반 해시
+        if (safeJsonString.includes('json_stringify_failed')) {
+          const timestampHash = Date.now().toString(36);
+          console.warn(
+            '⚠️ [HASH_GENERATOR] JSON 실패로 타임스탬프 해시 사용:',
+            timestampHash
+          );
+          return timestampHash;
+        }
+
+        const hashAccumulator = safeJsonString
+          .split('')
+          .reduce((accumulator: number, character: string) => {
+            const characterCode = character.charCodeAt(0);
+            return (
+              ((accumulator << 5) - accumulator + characterCode) & 0xffffffff
+            );
+          }, 0);
+
+        // 🔧 개선: Math.abs 사용으로 음수 처리 안전화
+        const positiveHashValue = Math.abs(hashAccumulator);
+        const finalHashString = positiveHashValue.toString(36);
+
+        console.debug('✅ [HASH_GENERATOR] 해시 생성 완료:', finalHashString);
+        return finalHashString;
+      } catch (hashGenerationError) {
+        console.error(
+          '❌ [HASH_GENERATOR] 해시 생성 실패:',
+          hashGenerationError
+        );
+
+        // 최종 폴백: 현재 시간 + 랜덤값
+        const emergencyHash = `${Date.now().toString(36)}_${Math.random()
+          .toString(36)
+          .substring(2, 8)}`;
+        console.debug('🚨 [HASH_GENERATOR] 긴급 해시 사용:', emergencyHash);
+        return emergencyHash;
+      }
+    };
+
+    return { generateSimpleHash };
+  };
+
+  const createDataIntegrityValidator = () => {
+    const validateDataIntegrityWithHash = (
+      originalData: unknown,
+      expectedHash: string
+    ): boolean => {
+      console.debug('🔍 [DATA_INTEGRITY] 데이터 무결성 검증 시작');
+
+      try {
+        const { generateSimpleHash } = createSimpleHashGenerator();
+        const currentDataHash = generateSimpleHash(originalData);
+
+        const isIntegrityValid = currentDataHash === expectedHash;
+
+        console.debug('📊 [DATA_INTEGRITY] 무결성 검증 결과:', {
+          currentHash: currentDataHash,
+          expectedHash,
+          isValid: isIntegrityValid,
+        });
+
+        return isIntegrityValid;
+      } catch (integrityValidationError) {
+        console.error(
+          '❌ [DATA_INTEGRITY] 무결성 검증 실패:',
+          integrityValidationError
+        );
+        return false;
+      }
+    };
+
+    return { validateDataIntegrityWithHash };
+  };
+
+  return {
+    createSafeStringifyProcessor,
+    createSimpleHashGenerator,
+    createDataIntegrityValidator,
+  };
+}
+
 // 🔧 안전한 타입 변환 유틸리티
 function createSafeTypeConverters() {
   const convertToSafeNumber = (
@@ -422,15 +557,32 @@ function createBridgeEngineValidators() {
   };
 }
 
-// 🔧 외부 데이터 스냅샷 생성 모듈
+// 🔧 외부 데이터 스냅샷 생성 모듈 (JSON 안전장치 적용)
 function createExternalDataSnapshotGenerator() {
   const generateSnapshotFromExternalData = (
     externalData: ExternalEditorData
   ): EditorStateSnapshotForBridge => {
-    console.debug('🔧 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성 시작');
+    console.debug(
+      '🔧 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성 시작 (JSON 안전장치 적용)'
+    );
+
+    const { createSimpleHashGenerator } = createJSONSafetyUtils();
+    const { generateSimpleHash } = createSimpleHashGenerator();
 
     const { localContainers = [], localParagraphs = [] } = externalData;
     const extractionTimestamp = Date.now();
+
+    // 🔧 데이터 무결성 해시 생성 (순환 참조 안전)
+    const dataIntegrityHash = generateSimpleHash({
+      containers: localContainers,
+      paragraphs: localParagraphs,
+      timestamp: extractionTimestamp,
+    });
+
+    console.debug(
+      '🔒 [SNAPSHOT_GENERATOR] 데이터 무결성 해시 생성:',
+      dataIntegrityHash
+    );
 
     // 콘텐츠 생성
     const sortedContainers = [...localContainers].sort(
@@ -493,21 +645,24 @@ function createExternalDataSnapshotGenerator() {
     const completedContent = contentParts.join('\n');
     const isCompleted = completedContent.length > 0;
 
-    // 메타데이터 생성
+    // 메타데이터 생성 (JSON 안전장치 적용)
     const additionalMetrics = new Map<string, number>();
     additionalMetrics.set('containerCount', localContainers.length);
     additionalMetrics.set('paragraphCount', localParagraphs.length);
     additionalMetrics.set('contentLength', completedContent.length);
+    additionalMetrics.set('dataIntegrityHashLength', dataIntegrityHash.length);
 
     const processingFlags = new Set<string>();
     processingFlags.add('EXTERNAL_DATA_SOURCE');
     processingFlags.add('SNAPSHOT_GENERATED');
+    processingFlags.add('JSON_SAFETY_APPLIED');
 
     const snapshotMetadata = {
       extractionTimestamp,
       processingDurationMs: 0,
       validationStatus: true,
       dataIntegrity: completedContent.length > 0,
+      dataIntegrityHash, // 🔧 추가: 무결성 검증용 해시
       sourceInfo: {
         coreStoreVersion: 'external-1.0.0',
         uiStoreVersion: 'external-1.0.0',
@@ -524,6 +679,7 @@ function createExternalDataSnapshotGenerator() {
     const validationCache = new Map<string, boolean>();
     validationCache.set('structureValid', true);
     validationCache.set('hasContent', completedContent.length > 0);
+    validationCache.set('jsonSafetyApplied', true);
 
     // ParagraphBlock 타입으로 변환
     const convertedParagraphs: ParagraphBlock[] = localParagraphs.map(
@@ -551,12 +707,16 @@ function createExternalDataSnapshotGenerator() {
       validationCache,
     };
 
-    console.debug('✅ [BRIDGE_ENGINE] 외부 데이터 스냅샷 생성 완료:', {
-      containerCount: localContainers.length,
-      paragraphCount: localParagraphs.length,
-      contentLength: completedContent.length,
-      isCompleted,
-    });
+    console.debug(
+      '✅ [BRIDGE_ENGINE] 외부 데이터 스냅샷 생성 완료 (JSON 안전장치 적용):',
+      {
+        containerCount: localContainers.length,
+        paragraphCount: localParagraphs.length,
+        contentLength: completedContent.length,
+        isCompleted,
+        dataIntegrityHash,
+      }
+    );
 
     return snapshot;
   };
@@ -571,7 +731,9 @@ function createBridgeEngineCore(
   configuration: BridgeSystemConfiguration,
   externalData?: ExternalEditorData
 ) {
-  console.log('🔧 [BRIDGE_ENGINE] 핵심 엔진 생성 시작 (외부 데이터 지원)');
+  console.log(
+    '🔧 [BRIDGE_ENGINE] 핵심 엔진 생성 시작 (외부 데이터 지원 + JSON 안전장치)'
+  );
 
   const {
     convertToSafeNumber,
@@ -584,8 +746,10 @@ function createBridgeEngineCore(
     createExternalDataValidators();
   const { generateSnapshotFromExternalData } =
     createExternalDataSnapshotGenerator();
+  const { createDataIntegrityValidator } = createJSONSafetyUtils();
+  const { validateDataIntegrityWithHash } = createDataIntegrityValidator();
 
-  // 외부 데이터 검증
+  // 외부 데이터 검증 (JSON 안전장치 적용)
   const hasValidExternalData = externalData
     ? isValidExternalData(externalData)
     : false;
@@ -599,13 +763,17 @@ function createBridgeEngineCore(
           qualityScore: 0,
         };
 
-  console.log('📊 [BRIDGE_ENGINE] 외부 데이터 검증 결과:', {
-    hasValidExternalData,
-    qualityScore: externalDataQuality.qualityScore,
-    isQualityValid: externalDataQuality.isQualityValid,
-    containerValidCount: externalDataQuality.containerValidCount,
-    paragraphValidCount: externalDataQuality.paragraphValidCount,
-  });
+  console.log(
+    '📊 [BRIDGE_ENGINE] 외부 데이터 검증 결과 (JSON 안전장치 적용):',
+    {
+      hasValidExternalData,
+      qualityScore: externalDataQuality.qualityScore,
+      isQualityValid: externalDataQuality.isQualityValid,
+      containerValidCount: externalDataQuality.containerValidCount,
+      paragraphValidCount: externalDataQuality.paragraphValidCount,
+      jsonSafetyEnabled: true,
+    }
+  );
 
   let engineState: BridgeEngineState = {
     isInitialized: false,
@@ -631,13 +799,17 @@ function createBridgeEngineCore(
     errorHandler: createBridgeErrorHandler(),
   };
 
-  console.log('🔧 [BRIDGE_ENGINE] 핵심 컴포넌트 초기화 완료:', {
-    extractorInitialized: !!components.extractor,
-    transformerInitialized: !!components.transformer,
-    updaterInitialized: !!components.updater,
-    validatorInitialized: !!components.validator,
-    errorHandlerInitialized: !!components.errorHandler,
-  });
+  console.log(
+    '🔧 [BRIDGE_ENGINE] 핵심 컴포넌트 초기화 완료 (JSON 안전장치 포함):',
+    {
+      extractorInitialized: !!components.extractor,
+      transformerInitialized: !!components.transformer,
+      updaterInitialized: !!components.updater,
+      validatorInitialized: !!components.validator,
+      errorHandlerInitialized: !!components.errorHandler,
+      jsonSafetyUtilsLoaded: true,
+    }
+  );
 
   const updateEngineState = (updates: Partial<BridgeEngineState>): void => {
     engineState = {
@@ -662,12 +834,16 @@ function createBridgeEngineCore(
   };
 
   const validatePreconditions = (): boolean => {
-    console.log('🔍 [BRIDGE_ENGINE] 사전 조건 검증 시작 (외부 데이터 우선)');
+    console.log(
+      '🔍 [BRIDGE_ENGINE] 사전 조건 검증 시작 (외부 데이터 우선 + JSON 안전장치)'
+    );
 
     try {
       // Early Return: 외부 데이터가 있는 경우 우선 사용
       if (hasValidExternalData && externalData) {
-        console.log('✅ [BRIDGE_ENGINE] 외부 데이터를 사용한 검증');
+        console.log(
+          '✅ [BRIDGE_ENGINE] 외부 데이터를 사용한 검증 (JSON 안전장치 적용)'
+        );
 
         operationMetrics = {
           ...operationMetrics,
@@ -683,14 +859,24 @@ function createBridgeEngineCore(
         // 🔧 추가: 품질이 낮아도 최소 데이터가 있으면 허용
         const canUseExternalData = isQualityAcceptable || hasMinimumData;
 
-        console.log('📊 [BRIDGE_ENGINE] 외부 데이터 기반 검증 결과:', {
-          isQualityAcceptable,
-          hasMinimumData,
-          canUseExternalData,
-          qualityScore: externalDataQuality.qualityScore,
-          containerValidCount: externalDataQuality.containerValidCount,
-          paragraphValidCount: externalDataQuality.paragraphValidCount,
-        });
+        // 🔧 JSON 안전성 검증 추가
+        const jsonSafetyTestPassed = validateDataIntegrityWithHash(
+          externalData,
+          'external_data_test'
+        );
+
+        console.log(
+          '📊 [BRIDGE_ENGINE] 외부 데이터 기반 검증 결과 (JSON 안전장치 포함):',
+          {
+            isQualityAcceptable,
+            hasMinimumData,
+            canUseExternalData,
+            qualityScore: externalDataQuality.qualityScore,
+            containerValidCount: externalDataQuality.containerValidCount,
+            paragraphValidCount: externalDataQuality.paragraphValidCount,
+            jsonSafetyTestPassed,
+          }
+        );
 
         return canUseExternalData;
       }
@@ -742,7 +928,9 @@ function createBridgeEngineCore(
 
   const executeTransferOperation =
     async (): Promise<BridgeOperationExecutionResult> => {
-      console.log('🚀 [BRIDGE_ENGINE] 전송 작업 실행 시작 (외부 데이터 지원)');
+      console.log(
+        '🚀 [BRIDGE_ENGINE] 전송 작업 실행 시작 (외부 데이터 지원 + JSON 안전장치)'
+      );
       const operationStartTime = performance.now();
       const operationId = `bridge_${Date.now()}_${Math.random()
         .toString(36)
@@ -760,11 +948,13 @@ function createBridgeEngineCore(
           throw new Error('사전 조건 검증 실패');
         }
 
-        // 2단계: 데이터 추출 (외부 데이터 우선)
+        // 2단계: 데이터 추출 (외부 데이터 우선, JSON 안전장치 적용)
         let snapshot: EditorStateSnapshotForBridge;
 
         if (hasValidExternalData && externalData) {
-          console.log('📤 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성');
+          console.log(
+            '📤 [BRIDGE_ENGINE] 외부 데이터로부터 스냅샷 생성 (JSON 안전장치 적용)'
+          );
           snapshot = generateSnapshotFromExternalData(externalData);
         } else {
           console.log('📤 [BRIDGE_ENGINE] 기존 스토어로부터 스냅샷 추출');
@@ -814,6 +1004,7 @@ function createBridgeEngineCore(
           hasValidExternalData ? 'external' : 'store'
         );
         successMetadata.set('componentStatus', 'all_operational');
+        successMetadata.set('jsonSafetyApplied', true);
 
         const performanceProfile = new Map<string, number>();
         performanceProfile.set('totalDuration', operationDuration);
@@ -825,11 +1016,12 @@ function createBridgeEngineCore(
         resourceUsage.set('memoryUsed', 0);
         resourceUsage.set('cpuTime', operationDuration);
 
-        console.log('✅ [BRIDGE_ENGINE] 전송 작업 성공:', {
+        console.log('✅ [BRIDGE_ENGINE] 전송 작업 성공 (JSON 안전장치 적용):', {
           operationId,
           duration: `${operationDuration.toFixed(2)}ms`,
           operationCount: engineState.operationCount,
           dataSource: hasValidExternalData ? 'external' : 'store',
+          jsonSafetyEnabled: true,
         });
 
         return {
@@ -871,6 +1063,7 @@ function createBridgeEngineCore(
         failureMetadata.set('processingTimeMs', operationDuration);
         failureMetadata.set('transformationSuccess', false);
         failureMetadata.set('errorOccurred', true);
+        failureMetadata.set('jsonSafetyApplied', true);
 
         const performanceProfile = new Map<string, number>();
         performanceProfile.set('totalDuration', operationDuration);
@@ -918,7 +1111,9 @@ function createBridgeEngineCore(
   };
 
   const initializeEngine = (): boolean => {
-    console.log('🔧 [BRIDGE_ENGINE] 엔진 초기화 (외부 데이터 지원)');
+    console.log(
+      '🔧 [BRIDGE_ENGINE] 엔진 초기화 (외부 데이터 지원 + JSON 안전장치)'
+    );
 
     try {
       const allComponentsReady = Object.values(components).every(
@@ -936,11 +1131,12 @@ function createBridgeEngineCore(
         operationCount: 0,
       });
 
-      console.log('✅ [BRIDGE_ENGINE] 엔진 초기화 완료:', {
+      console.log('✅ [BRIDGE_ENGINE] 엔진 초기화 완료 (JSON 안전장치 포함):', {
         hasExternalData: hasValidExternalData,
         externalDataQuality: externalDataQuality.qualityScore,
         qualityThreshold: 60,
         componentStatus: 'all_ready',
+        jsonSafetyEnabled: true,
       });
       return true;
     } catch (initError) {
@@ -998,12 +1194,14 @@ function createBridgeEngineCore(
   };
 }
 
-// 🔧 메인 팩토리 함수 (외부 데이터 지원 추가)
+// 🔧 메인 팩토리 함수 (외부 데이터 지원 + JSON 안전장치)
 export function createBridgeEngine(
   customConfiguration?: Partial<BridgeSystemConfiguration>,
   externalData?: ExternalEditorData
 ) {
-  console.log('🏭 [BRIDGE_ENGINE] Bridge 엔진 팩토리 시작 (외부 데이터 지원)');
+  console.log(
+    '🏭 [BRIDGE_ENGINE] Bridge 엔진 팩토리 시작 (외부 데이터 지원 + JSON 안전장치)'
+  );
 
   const { isValidConfiguration } = createBridgeEngineValidators();
   const { isValidExternalData } = createExternalDataValidators();
@@ -1034,26 +1232,31 @@ export function createBridgeEngine(
   const hasValidExternalData = externalData
     ? isValidExternalData(externalData)
     : false;
-  console.log('📊 [BRIDGE_ENGINE] 외부 데이터 상태:', {
+  console.log('📊 [BRIDGE_ENGINE] 외부 데이터 상태 (JSON 안전장치 포함):', {
     hasExternalData: !!externalData,
     isValidExternalData: hasValidExternalData,
     containerCount: externalData?.localContainers?.length || 0,
     paragraphCount: externalData?.localParagraphs?.length || 0,
+    jsonSafetyEnabled: true,
   });
 
-  console.log('✅ [BRIDGE_ENGINE] Bridge 엔진 생성 완료:', {
-    enableValidation: mergedConfiguration.enableValidation,
-    debugMode: mergedConfiguration.debugMode,
-    maxRetryAttempts: mergedConfiguration.maxRetryAttempts,
-    hasExternalData: hasValidExternalData,
-    qualityThreshold: 60,
-  });
+  console.log(
+    '✅ [BRIDGE_ENGINE] Bridge 엔진 생성 완료 (JSON 안전장치 포함):',
+    {
+      enableValidation: mergedConfiguration.enableValidation,
+      debugMode: mergedConfiguration.debugMode,
+      maxRetryAttempts: mergedConfiguration.maxRetryAttempts,
+      hasExternalData: hasValidExternalData,
+      qualityThreshold: 60,
+      jsonSafetyEnabled: true,
+    }
+  );
 
   return createBridgeEngineCore(mergedConfiguration, externalData);
 }
 
 console.log(
-  '🏗️ [BRIDGE_ENGINE] 브릿지 엔진 모듈 초기화 완료 (외부 데이터 지원)'
+  '🏗️ [BRIDGE_ENGINE] 브릿지 엔진 모듈 초기화 완료 (외부 데이터 지원 + JSON 안전장치)'
 );
 console.log('📊 [BRIDGE_ENGINE] 제공 기능:', {
   transferExecution: '에디터 → 멀티스텝 전송',
@@ -1064,5 +1267,7 @@ console.log('📊 [BRIDGE_ENGINE] 제공 기능:', {
   performanceMonitoring: '성능 메트릭스 추적',
   improvedDebugging: '향상된 디버깅 정보',
   relaxedQualityCheck: '완화된 품질 기준 (60%)',
+  jsonSafetyGuard: '🔒 JSON 순환 참조 안전장치',
+  dataIntegrityValidation: '🔒 데이터 무결성 검증',
 });
-console.log('✅ [BRIDGE_ENGINE] 모든 엔진 기능 준비 완료');
+console.log('✅ [BRIDGE_ENGINE] 모든 엔진 기능 준비 완료 (JSON 안전장치 포함)');

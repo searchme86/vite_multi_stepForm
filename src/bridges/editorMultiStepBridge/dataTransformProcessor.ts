@@ -8,6 +8,67 @@ import type {
 } from './modernBridgeTypes';
 import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
 
+// 🔧 전역 캐시 무효화 신호 (다른 캐시 시스템과 연동)
+let globalCacheInvalidationSignal = 0;
+
+// 🔧 전역 캐시 무효화 함수 (3단계 핵심)
+export const invalidateAllCaches = (): void => {
+  console.log('🧹 [CACHE_UNIFIED] 전체 캐시 시스템 무효화 시작');
+
+  try {
+    // 1. DataTransform 캐시 무효화
+    globalCacheManager.cache.clear();
+
+    // 2. 전역 무효화 신호 증가 (다른 시스템에서 감지 가능)
+    globalCacheInvalidationSignal += 1;
+
+    // 3. localStorage에서 persist 관련 캐시도 정리 시도
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const keys = Object.keys(window.localStorage);
+        const cacheKeys = keys.filter(
+          (key) =>
+            key.includes('cache') ||
+            key.includes('persist') ||
+            key.includes('hybrid')
+        );
+
+        cacheKeys.forEach((key) => {
+          try {
+            window.localStorage.removeItem(key);
+          } catch (error) {
+            console.warn(`⚠️ [CACHE_UNIFIED] ${key} 정리 실패:`, error);
+          }
+        });
+
+        console.log('🧹 [CACHE_UNIFIED] localStorage 캐시 정리 완료:', {
+          cleanedKeys: cacheKeys.length,
+          cleanedKeysList: cacheKeys,
+        });
+      } catch (storageError) {
+        console.warn(
+          '⚠️ [CACHE_UNIFIED] localStorage 접근 실패:',
+          storageError
+        );
+      }
+    }
+
+    console.log('✅ [CACHE_UNIFIED] 전체 캐시 시스템 무효화 완료:', {
+      dataTransformCacheCleared: true,
+      invalidationSignal: globalCacheInvalidationSignal,
+      persistCacheAttempted: true,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (invalidationError) {
+    console.error('❌ [CACHE_UNIFIED] 캐시 무효화 실패:', invalidationError);
+  }
+};
+
+// 🔧 캐시 무효화 신호 조회 함수
+export const getCacheInvalidationSignal = (): number => {
+  return globalCacheInvalidationSignal;
+};
+
 // 🔧 변환 처리 인터페이스 정의
 interface ValidatedDataSet {
   readonly containers: readonly Container[];
@@ -31,6 +92,267 @@ interface ProcessingMetrics {
   readonly totalProcessingTime: number;
   readonly qualityScore: number;
 }
+
+// 🔧 캐시 관리 인터페이스 추가
+interface CacheEntry {
+  readonly data: EditorToMultiStepDataTransformationResult;
+  readonly timestamp: number;
+  readonly accessCount: number;
+  readonly invalidationSignal: number; // 🔧 새로 추가: 무효화 신호 추적
+}
+
+interface CacheManager {
+  readonly cache: Map<string, CacheEntry>;
+  readonly expiryMs: number;
+  readonly maxSize: number;
+  cleanupTimer: number | null;
+}
+
+// 🔧 전역 캐시 매니저 생성
+const createCacheManager = (): CacheManager => {
+  console.log('🔧 [CACHE_MANAGER] 통합 캐시 매니저 생성 시작');
+
+  const cache = new Map<string, CacheEntry>();
+  const expiryMs = 5 * 60 * 1000; // 5분
+  const maxSize = 100; // 최대 캐시 항목 수
+
+  return {
+    cache,
+    expiryMs,
+    maxSize,
+    cleanupTimer: null,
+  };
+};
+
+const globalCacheManager = createCacheManager();
+
+// 🔧 캐시 정리 함수들 (무효화 신호 검증 추가)
+const clearExpiredCacheEntries = (cacheManager: CacheManager): number => {
+  console.log(
+    '🧹 [CACHE_CLEANUP] 만료된 캐시 항목 정리 시작 (무효화 신호 포함)'
+  );
+
+  const { cache, expiryMs } = cacheManager;
+  const currentTime = Date.now();
+  const currentInvalidationSignal = globalCacheInvalidationSignal;
+  let removedCount = 0;
+
+  const expiredKeys: string[] = [];
+
+  cache.forEach((entry, key) => {
+    const { timestamp, invalidationSignal } = entry;
+    const age = currentTime - timestamp;
+
+    // 🔧 수정: 시간 만료 또는 무효화 신호 변경 확인
+    const isTimeExpired = age > expiryMs;
+    const isSignalInvalidated =
+      invalidationSignal !== currentInvalidationSignal;
+
+    if (isTimeExpired || isSignalInvalidated) {
+      expiredKeys.push(key);
+    }
+  });
+
+  expiredKeys.forEach((key) => {
+    const wasDeleted = cache.delete(key);
+    if (wasDeleted) {
+      removedCount += 1;
+    }
+  });
+
+  console.log('✅ [CACHE_CLEANUP] 만료된 캐시 정리 완료 (무효화 신호 포함):', {
+    removedCount,
+    remainingCount: cache.size,
+    totalChecked: cache.size + removedCount,
+    currentInvalidationSignal,
+  });
+
+  return removedCount;
+};
+
+const clearOldestCacheEntries = (
+  cacheManager: CacheManager,
+  targetSize: number
+): number => {
+  console.log('🔄 [CACHE_SIZE] 오래된 캐시 항목 정리 시작');
+
+  const { cache } = cacheManager;
+  const currentSize = cache.size;
+
+  if (currentSize <= targetSize) {
+    return 0;
+  }
+
+  const entries = Array.from(cache.entries());
+  const sortedEntries = entries.sort(([, entryA], [, entryB]) => {
+    // 접근 횟수가 적고 오래된 순으로 정렬
+    const scoreA = entryA.accessCount * 1000 + entryA.timestamp;
+    const scoreB = entryB.accessCount * 1000 + entryB.timestamp;
+    return scoreA - scoreB;
+  });
+
+  const itemsToRemove = currentSize - targetSize;
+  let removedCount = 0;
+
+  for (let i = 0; i < itemsToRemove && i < sortedEntries.length; i += 1) {
+    const [key] = sortedEntries[i];
+    const wasDeleted = cache.delete(key);
+    if (wasDeleted) {
+      removedCount += 1;
+    }
+  }
+
+  console.log('✅ [CACHE_SIZE] 오래된 캐시 정리 완료:', {
+    removedCount,
+    targetSize,
+    finalSize: cache.size,
+  });
+
+  return removedCount;
+};
+
+// 🔧 자동 캐시 정리 타이머 함수
+const startAutomaticCacheCleanup = (cacheManager: CacheManager): void => {
+  console.log('⏰ [CACHE_TIMER] 자동 캐시 정리 타이머 시작 (무효화 신호 포함)');
+
+  // 기존 타이머가 있으면 정리
+  if (cacheManager.cleanupTimer !== null) {
+    clearInterval(cacheManager.cleanupTimer);
+  }
+
+  const cleanupInterval = setInterval(() => {
+    try {
+      console.log('🔄 [CACHE_TIMER] 정기 캐시 정리 실행 (무효화 신호 포함)');
+
+      // 만료된 항목 정리 (무효화 신호 포함)
+      const expiredRemoved = clearExpiredCacheEntries(cacheManager);
+
+      // 크기 제한 적용
+      const sizeRemoved = clearOldestCacheEntries(
+        cacheManager,
+        cacheManager.maxSize
+      );
+
+      console.log('📊 [CACHE_TIMER] 정기 정리 결과 (무효화 신호 포함):', {
+        expiredRemoved,
+        sizeRemoved,
+        finalCacheSize: cacheManager.cache.size,
+        currentInvalidationSignal: globalCacheInvalidationSignal,
+        nextCleanup: '60초 후',
+      });
+    } catch (cleanupError) {
+      console.error('❌ [CACHE_TIMER] 캐시 정리 중 오류:', cleanupError);
+    }
+  }, 60000); // 1분마다 실행
+
+  cacheManager.cleanupTimer = cleanupInterval;
+
+  console.log(
+    '✅ [CACHE_TIMER] 자동 캐시 정리 타이머 설정 완료 (무효화 신호 포함)'
+  );
+};
+
+const stopAutomaticCacheCleanup = (cacheManager: CacheManager): void => {
+  console.log('⏹️ [CACHE_TIMER] 자동 캐시 정리 타이머 중지');
+
+  if (cacheManager.cleanupTimer !== null) {
+    clearInterval(cacheManager.cleanupTimer);
+    cacheManager.cleanupTimer = null;
+  }
+};
+
+// 🔧 캐시 접근 함수들 (무효화 신호 검증 추가)
+const getCachedResult = (
+  cacheManager: CacheManager,
+  cacheKey: string
+): EditorToMultiStepDataTransformationResult | null => {
+  console.log('🔍 [CACHE_GET] 캐시 조회 시작 (무효화 신호 포함):', {
+    cacheKey,
+  });
+
+  const { cache, expiryMs } = cacheManager;
+  const cachedEntry = cache.get(cacheKey);
+
+  if (!cachedEntry) {
+    console.log('❌ [CACHE_GET] 캐시 미스:', { cacheKey });
+    return null;
+  }
+
+  const { data, timestamp, accessCount, invalidationSignal } = cachedEntry;
+  const currentTime = Date.now();
+  const age = currentTime - timestamp;
+  const currentInvalidationSignal = globalCacheInvalidationSignal;
+
+  // 🔧 수정: 시간 만료 또는 무효화 신호 변경 확인
+  const isTimeExpired = age > expiryMs;
+  const isSignalInvalidated = invalidationSignal !== currentInvalidationSignal;
+
+  if (isTimeExpired || isSignalInvalidated) {
+    const reason = isTimeExpired ? '시간 만료' : '무효화 신호 변경';
+    console.log(`⏰ [CACHE_GET] 캐시 만료됨 (${reason}):`, {
+      cacheKey,
+      age,
+      expiryMs,
+      cachedSignal: invalidationSignal,
+      currentSignal: currentInvalidationSignal,
+    });
+    cache.delete(cacheKey);
+    return null;
+  }
+
+  // 접근 횟수 증가 (무효화 신호 유지)
+  const updatedEntry: CacheEntry = {
+    data,
+    timestamp,
+    accessCount: accessCount + 1,
+    invalidationSignal, // 🔧 기존 신호 유지
+  };
+  cache.set(cacheKey, updatedEntry);
+
+  console.log('✅ [CACHE_GET] 캐시 히트 (무효화 신호 포함):', {
+    cacheKey,
+    age,
+    accessCount: updatedEntry.accessCount,
+    invalidationSignal,
+  });
+
+  return data;
+};
+
+const setCachedResult = (
+  cacheManager: CacheManager,
+  cacheKey: string,
+  data: EditorToMultiStepDataTransformationResult
+): void => {
+  console.log('💾 [CACHE_SET] 캐시 저장 시작 (무효화 신호 포함):', {
+    cacheKey,
+  });
+
+  const { cache, maxSize } = cacheManager;
+
+  // 크기 제한 확인
+  if (cache.size >= maxSize) {
+    console.log('📏 [CACHE_SET] 캐시 크기 제한, 정리 실행');
+    clearOldestCacheEntries(cacheManager, Math.floor(maxSize * 0.8));
+  }
+
+  // 🔧 수정: 현재 무효화 신호 포함하여 저장
+  const cacheEntry: CacheEntry = {
+    data,
+    timestamp: Date.now(),
+    accessCount: 1,
+    invalidationSignal: globalCacheInvalidationSignal, // 🔧 현재 신호로 저장
+  };
+
+  cache.set(cacheKey, cacheEntry);
+
+  console.log('✅ [CACHE_SET] 캐시 저장 완료 (무효화 신호 포함):', {
+    cacheKey,
+    cacheSize: cache.size,
+    maxSize,
+    invalidationSignal: globalCacheInvalidationSignal,
+  });
+};
 
 // 🔧 안전한 타입 검증 모듈
 function createTransformTypeGuardModule() {
@@ -672,11 +994,20 @@ function createMainTransformationModule() {
   const transformEditorStateToMultiStep = (
     editorSnapshot: EditorStateSnapshotForBridge
   ): EditorToMultiStepDataTransformationResult => {
-    console.log('🚀 [TRANSFORM] Editor → MultiStep 변환 시작');
+    console.log('🚀 [TRANSFORM] Editor → MultiStep 변환 시작 (캐시 통합)');
     const transformationStartTime = performance.now();
     const operationId = `transform_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 8)}`;
+
+    // 🔧 캐시 확인 로직 (무효화 신호 포함)
+    const cacheKey = `transform_${JSON.stringify(editorSnapshot).slice(0, 50)}`;
+    const cachedResult = getCachedResult(globalCacheManager, cacheKey);
+
+    if (cachedResult) {
+      console.log('🎯 [TRANSFORM] 캐시에서 결과 반환 (무효화 신호 검증됨)');
+      return cachedResult;
+    }
 
     try {
       // 1단계: 데이터 추출 및 검증
@@ -751,7 +1082,10 @@ function createMainTransformationModule() {
         contentIntegrityHash: contentHash,
       };
 
-      console.log('✅ [TRANSFORM] Editor → MultiStep 변환 완료:', {
+      // 🔧 캐시에 결과 저장 (무효화 신호 포함)
+      setCachedResult(globalCacheManager, cacheKey, transformationResult);
+
+      console.log('✅ [TRANSFORM] Editor → MultiStep 변환 완료 (캐시 통합):', {
         operationId,
         strategy: selectedStrategy,
         success: generationSuccess,
@@ -759,6 +1093,8 @@ function createMainTransformationModule() {
         isCompleted: transformedIsCompleted,
         qualityScore: quality,
         duration: `${processingMetrics.totalProcessingTime.toFixed(2)}ms`,
+        cacheStored: true,
+        invalidationSignal: globalCacheInvalidationSignal,
       });
 
       return transformationResult;
@@ -815,15 +1151,22 @@ function createMainTransformationModule() {
   };
 }
 
-// 🔧 메인 팩토리 함수
+// 🔧 메인 팩토리 함수 (캐시 무효화 기능 추가)
 export function createDataStructureTransformer() {
-  console.log('🏭 [TRANSFORMER_FACTORY] 데이터 구조 변환기 생성 시작');
+  console.log(
+    '🏭 [TRANSFORMER_FACTORY] 통합 캐시 데이터 구조 변환기 생성 시작'
+  );
 
   const { selectTransformationStrategy } = createStrategySelectionModule();
   const { applyTransformationStrategy } = createContentGenerationModule();
   const { transformEditorStateToMultiStep } = createMainTransformationModule();
 
-  console.log('✅ [TRANSFORMER_FACTORY] 데이터 구조 변환기 생성 완료');
+  // 🔧 자동 캐시 정리 시작 (무효화 신호 포함)
+  startAutomaticCacheCleanup(globalCacheManager);
+
+  console.log(
+    '✅ [TRANSFORMER_FACTORY] 통합 캐시 데이터 구조 변환기 생성 완료'
+  );
 
   return {
     transformEditorStateToMultiStep,
@@ -833,16 +1176,38 @@ export function createDataStructureTransformer() {
       strategy: TransformationStrategyType,
       dataSet: ValidatedDataSet
     ) => applyTransformationStrategy(strategy, dataSet),
+
+    // 🔧 캐시 관리 함수들 노출 (통합 버전)
+    getCacheStatistics: () => ({
+      size: globalCacheManager.cache.size,
+      maxSize: globalCacheManager.maxSize,
+      expiryMs: globalCacheManager.expiryMs,
+      invalidationSignal: globalCacheInvalidationSignal,
+    }),
+    clearCache: () => {
+      console.log('🧹 [CACHE] 수동 캐시 전체 정리 (통합 버전)');
+      globalCacheManager.cache.clear();
+    },
+    stopCacheCleanup: () => stopAutomaticCacheCleanup(globalCacheManager),
+
+    // 🔧 3단계 핵심: 캐시 무효화 기능들
+    invalidateAllCaches,
+    getCacheInvalidationSignal,
   };
 }
 
 console.log(
-  '🏗️ [DATA_TRANSFORM_PROCESSOR] 데이터 변환 프로세서 모듈 초기화 완료'
+  '🏗️ [DATA_TRANSFORM_PROCESSOR] 통합 캐시 데이터 변환 프로세서 모듈 초기화 완료'
 );
-console.log('📊 [DATA_TRANSFORM_PROCESSOR] 제공 기능:', {
+console.log('📊 [DATA_TRANSFORM_PROCESSOR] 제공 기능 (캐시 통합 버전):', {
   strategySelection: '최적 변환 전략 선택',
   contentGeneration: '다양한 콘텐츠 생성 방식',
   qualityAnalysis: '데이터 품질 분석',
   performanceTracking: '변환 성능 추적',
+  cacheManagement: '자동 캐시 정리 시스템',
+  cacheUnification: '통합 캐시 무효화 시스템', // 🔧 새로 추가된 기능
+  invalidationSignal: '캐시 무효화 신호 관리', // 🔧 새로 추가된 기능
 });
-console.log('✅ [DATA_TRANSFORM_PROCESSOR] 모든 변환 기능 준비 완료');
+console.log(
+  '✅ [DATA_TRANSFORM_PROCESSOR] 모든 변환 기능 준비 완료 (캐시 통합)'
+);

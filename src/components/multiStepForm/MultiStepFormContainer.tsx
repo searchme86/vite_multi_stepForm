@@ -8,6 +8,7 @@ import React, {
   useMemo,
 } from 'react';
 import { FormProvider } from 'react-hook-form';
+
 import type { StepNumber } from './types/stepTypes';
 import {
   renderStepComponent,
@@ -31,50 +32,50 @@ interface DevelopmentEnvironmentDetection {
   isDevelopmentMode: boolean;
 }
 
+interface PreviewPanelStateSelection {
+  isPreviewPanelOpen: boolean;
+  deviceType: 'mobile' | 'desktop';
+}
+
+// 🔧 안정적인 기본값들을 미리 정의
+const DEFAULT_PREVIEW_PANEL_STATE: PreviewPanelStateSelection = {
+  isPreviewPanelOpen: false,
+  deviceType: 'desktop',
+};
+
+const DEFAULT_BACKGROUND_CLICK_HANDLER = (): void => {
+  console.log('🔧 [SELECTOR] Default background click handler');
+};
+
 const detectDevelopmentEnvironment = (): boolean => {
   try {
     const environmentInfo: DevelopmentEnvironmentDetection = {
-      hasNodeEnvironment:
-        typeof process !== 'undefined' && process !== null && !!process.env,
-      hasWindowLocation: typeof window !== 'undefined' && !!window.location,
+      hasNodeEnvironment: false,
+      hasWindowLocation: false,
       nodeEnvironmentValue: '',
       currentHostname: '',
       isDevelopmentMode: false,
     };
 
-    if (
-      environmentInfo.hasNodeEnvironment &&
-      typeof process !== 'undefined' &&
-      process.env
-    ) {
-      const processEnv = process.env;
-      const nodeEnvironment = processEnv['NODE_ENV'];
-      const nodeEnvironmentString =
-        typeof nodeEnvironment === 'string' ? nodeEnvironment : '';
-      environmentInfo.nodeEnvironmentValue = nodeEnvironmentString;
+    // Node.js 환경 체크
+    const isNodeEnvironmentAvailable =
+      typeof window !== 'undefined' && typeof window.location !== 'undefined';
 
-      if (nodeEnvironmentString === 'development') {
-        console.log('🔧 [ENV_DETECTION] Node.js 개발 환경 감지');
-        return true;
-      }
-    }
-
-    if (environmentInfo.hasWindowLocation) {
-      const windowLocation = window.location;
-      const currentHostname = windowLocation ? windowLocation.hostname : '';
-      const hostnameString =
-        typeof currentHostname === 'string' ? currentHostname : '';
-      environmentInfo.currentHostname = hostnameString;
+    if (isNodeEnvironmentAvailable) {
+      const { hostname = '' } = window.location;
+      const currentHostname = typeof hostname === 'string' ? hostname : '';
+      environmentInfo.currentHostname = currentHostname;
+      environmentInfo.hasWindowLocation = true;
 
       const isDevelopmentHostname =
-        hostnameString === 'localhost' ||
-        hostnameString === '127.0.0.1' ||
-        hostnameString.endsWith('.local');
+        currentHostname === 'localhost' ||
+        currentHostname === '127.0.0.1' ||
+        currentHostname.endsWith('.local');
 
       if (isDevelopmentHostname) {
         console.log(
           '🔧 [ENV_DETECTION] 브라우저 개발 환경 감지:',
-          hostnameString
+          currentHostname
         );
         return true;
       }
@@ -132,33 +133,38 @@ function MultiStepFormContainer(): React.ReactNode {
     return hasValidCurrentStep && hasFormMethods && hasNavigationFunctions;
   }, [currentStep, methods, goToNextStep, goToPrevStep, goToStep]);
 
-  // 🔧 스토어 selector 안정화
-  const previewPanelState = usePreviewPanelStore(
-    useCallback((storeState) => {
-      if (storeState === null || storeState === undefined) {
-        return {
-          isPreviewPanelOpen: false,
-          deviceType: 'desktop' as const,
-        };
-      }
+  // 🔧 스토어에서 안전하게 데이터 추출
+  const rawPreviewPanelState = usePreviewPanelStore();
 
-      const storeDataMap = new Map(Object.entries(storeState));
-      const isPreviewPanelOpen = storeDataMap.get('isPreviewPanelOpen');
-      const deviceType = storeDataMap.get('deviceType');
+  // 🔧 안정적인 state 객체 생성 - useMemo로 참조 안정성 확보
+  const previewPanelState = useMemo((): PreviewPanelStateSelection => {
+    if (!rawPreviewPanelState) {
+      console.log(
+        '🔍 [MULTISTEP_CONTAINER] Preview panel state가 null/undefined, 기본값 사용'
+      );
+      return DEFAULT_PREVIEW_PANEL_STATE;
+    }
 
-      const isOpenBoolean =
-        typeof isPreviewPanelOpen === 'boolean' ? isPreviewPanelOpen : false;
-      const deviceTypeString =
-        deviceType === 'mobile' || deviceType === 'desktop'
-          ? deviceType
-          : 'desktop';
+    const { isPreviewPanelOpen = false, deviceType = 'desktop' } =
+      rawPreviewPanelState;
 
-      return {
-        isPreviewPanelOpen: isOpenBoolean,
-        deviceType: deviceTypeString,
-      };
-    }, [])
-  );
+    const isOpenBoolean =
+      typeof isPreviewPanelOpen === 'boolean' ? isPreviewPanelOpen : false;
+    const deviceTypeString =
+      deviceType === 'mobile' || deviceType === 'desktop'
+        ? deviceType
+        : 'desktop';
+
+    console.log('🔍 [MULTISTEP_CONTAINER] Preview panel state 추출:', {
+      isOpenBoolean,
+      deviceTypeString,
+    });
+
+    return {
+      isPreviewPanelOpen: isOpenBoolean,
+      deviceType: deviceTypeString,
+    };
+  }, [rawPreviewPanelState]);
 
   const { isPreviewPanelOpen, deviceType } = previewPanelState;
 
@@ -189,6 +195,11 @@ function MultiStepFormContainer(): React.ReactNode {
   useEffect(() => {
     if (isComponentMounted) {
       console.log('⏭️ [MULTISTEP_CONTAINER] 이미 마운트 완료됨');
+      return;
+    }
+
+    if (!isHookDataReady) {
+      console.log('⏳ [MULTISTEP_CONTAINER] 훅 데이터 준비 대기 중');
       return;
     }
 
@@ -225,14 +236,11 @@ function MultiStepFormContainer(): React.ReactNode {
         return;
       }
 
-      const eventDataMap = new Map(Object.entries(keyboardEvent));
-      const isControlKeyPressed = eventDataMap.get('ctrlKey') === true;
-      const isShiftKeyPressed = eventDataMap.get('shiftKey') === true;
-      const pressedKey = eventDataMap.get('key');
-      const pressedKeyString = typeof pressedKey === 'string' ? pressedKey : '';
+      const { ctrlKey = false, shiftKey = false, key = '' } = keyboardEvent;
+      const pressedKeyString = typeof key === 'string' ? key : '';
 
       const isDebugToggleShortcut =
-        isControlKeyPressed && isShiftKeyPressed && pressedKeyString === 'D';
+        ctrlKey && shiftKey && pressedKeyString === 'D';
 
       if (isDebugToggleShortcut) {
         keyboardEvent.preventDefault();
@@ -255,13 +263,19 @@ function MultiStepFormContainer(): React.ReactNode {
 
   // 🔧 디버그 로그 인터벌 - 최적화
   useEffect(() => {
+    const currentIntervalId = logIntervalRef.current;
+
     if (!bridgeDebugEnabled) {
-      const currentIntervalId = logIntervalRef.current;
       if (currentIntervalId !== undefined) {
         console.log('🔧 [MULTISTEP_CONTAINER] 디버그 로그 인터벌 정리');
         clearInterval(currentIntervalId);
         logIntervalRef.current = undefined;
       }
+      return;
+    }
+
+    if (currentIntervalId !== undefined) {
+      console.log('🔧 [MULTISTEP_CONTAINER] 기존 디버그 로그 인터벌 유지');
       return;
     }
 
@@ -553,19 +567,31 @@ const BackgroundOverlay = React.memo(function BackgroundOverlay({
   isMobile,
   shouldAnimate,
 }: BackgroundOverlayProps): React.ReactNode {
-  const backgroundClickHandler = usePreviewPanelStore(
-    useCallback((storeState) => {
-      if (storeState === null || storeState === undefined) {
-        return (): void => {};
-      }
+  // 🔧 스토어에서 안전하게 핸들러 추출
+  const rawStoreState = usePreviewPanelStore();
 
-      const storeDataMap = new Map(Object.entries(storeState));
-      const handleBackgroundClick = storeDataMap.get('handleBackgroundClick');
-      return typeof handleBackgroundClick === 'function'
-        ? handleBackgroundClick
-        : (): void => {};
-    }, [])
-  );
+  // 🔧 안정적인 핸들러 추출 - useCallback으로 참조 안정성 확보
+  const handleBackgroundClick = useCallback((): void => {
+    if (!rawStoreState) {
+      console.log(
+        '🔧 [BACKGROUND_OVERLAY] 스토어 상태가 없음, 기본 핸들러 사용'
+      );
+      DEFAULT_BACKGROUND_CLICK_HANDLER();
+      return;
+    }
+
+    const { handleBackgroundClick: storeHandler } = rawStoreState;
+
+    if (typeof storeHandler === 'function') {
+      console.log('🔧 [BACKGROUND_OVERLAY] 스토어 핸들러 실행');
+      storeHandler();
+    } else {
+      console.log(
+        '🔧 [BACKGROUND_OVERLAY] 핸들러가 함수가 아님, 기본 핸들러 사용'
+      );
+      DEFAULT_BACKGROUND_CLICK_HANDLER();
+    }
+  }, [rawStoreState]);
 
   return (
     <div
@@ -580,7 +606,7 @@ const BackgroundOverlay = React.memo(function BackgroundOverlay({
               }`
         }
       `}
-      onClick={backgroundClickHandler}
+      onClick={handleBackgroundClick}
     />
   );
 });
@@ -588,5 +614,5 @@ const BackgroundOverlay = React.memo(function BackgroundOverlay({
 export default MultiStepFormContainer;
 
 console.log(
-  '📄 [MULTISTEP_CONTAINER] MultiStepFormContainer 모듈 로드 완료 - Phase 2 순환 의존성 해결'
+  '📄 [MULTISTEP_CONTAINER] MultiStepFormContainer 모듈 로드 완료 - Phase 3 무한루프 해결'
 );

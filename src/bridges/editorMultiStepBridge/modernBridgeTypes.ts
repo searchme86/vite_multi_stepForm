@@ -1,9 +1,18 @@
-// bridges/editorMultiStepBridge/modernBridgeTypes.ts
+// 📁 bridges/editorMultiStepBridge/modernBridgeTypes.ts
 
-import type { Container, ParagraphBlock } from '../../store/shared/commonTypes';
-import type { FormValues } from '../../components/multiStepForm/types/formTypes';
+// 🔧 **통합된 타입들을 commonTypes에서 import** (타입 통일)
+import type {
+  Container,
+  ParagraphBlock,
+  FormValues,
+} from '../../store/shared/commonTypes';
 
-// 🔧 외부 에디터 데이터 인터페이스 - 새로 추가
+// 🔧 **Bridge 전용 FormValues 별칭** (호환성 유지)
+export type BridgeFormValues = FormValues;
+export type BridgeCompatibleFormValues = FormValues;
+export type ExpectedBridgeFormValues = FormValues;
+
+// 🔧 외부 에디터 데이터 인터페이스
 export interface ExternalEditorData {
   readonly localContainers: readonly Container[];
   readonly localParagraphs: readonly LocalParagraphForExternal[];
@@ -127,10 +136,10 @@ export interface EditorStateSnapshotForBridge {
   readonly validationCache: Map<string, boolean>;
 }
 
-// 🔧 멀티스텝 폼 스냅샷 - 완전한 상태 정보
+// 🔧 멀티스텝 폼 스냅샷 - 완전한 상태 정보 (통합된 FormValues 사용)
 export interface MultiStepFormSnapshotForBridge {
   readonly formCurrentStep: number;
-  readonly formValues: FormValues;
+  readonly formValues: BridgeFormValues; // 🔧 통합된 FormValues 사용
   readonly formProgressWidth: number;
   readonly formShowPreview: boolean;
   readonly formEditorCompletedContent: string;
@@ -207,9 +216,9 @@ export interface TypeGuardHelpers {
   readonly isValidParagraph: (
     candidateParagraph: unknown
   ) => candidateParagraph is ParagraphBlock;
-  readonly isValidFormValues: (
+  readonly isValidBridgeFormValues: (
     candidateFormValues: unknown
-  ) => candidateFormValues is FormValues;
+  ) => candidateFormValues is BridgeFormValues;
   readonly validateObjectStructure: (
     candidate: unknown,
     requiredKeys: readonly string[]
@@ -269,7 +278,7 @@ export interface SyncManager {
   ) => Promise<boolean>;
 }
 
-// 🔧 함수 타입 정의 - 완전한 타입 안전성
+// 🔧 함수 타입 정의 - 완전한 타입 안전성 (통합된 FormValues 사용)
 export type EditorStateExtractionFunction =
   () => EditorStateSnapshotForBridge | null;
 
@@ -396,7 +405,268 @@ export interface ResourceManager {
   };
 }
 
-// 🔧 기본 내보내기 - 호환성을 위한 별칭
+// 🔧 **Bridge 타입 가드 유틸리티 생성기**
+export const createBridgeTypeGuards = () => {
+  console.log('🔧 [BRIDGE_TYPES] Bridge 타입 가드 생성');
+
+  const isValidBridgeFormValues = (
+    candidate: unknown
+  ): candidate is BridgeFormValues => {
+    console.log('🔍 [BRIDGE_TYPES] BridgeFormValues 검증 시작');
+
+    const isObjectType = candidate !== null && typeof candidate === 'object';
+    if (!isObjectType) {
+      console.log('❌ [BRIDGE_TYPES] 후보가 객체가 아님');
+      return false;
+    }
+
+    // Bridge FormValues는 통합된 FormValues와 동일한 구조
+    const requiredFields = [
+      'nickname',
+      'emailPrefix',
+      'emailDomain',
+      'title',
+      'description',
+      'content',
+    ];
+
+    const candidateObject = candidate;
+    const hasAllRequiredFields = requiredFields.every((fieldName) => {
+      const hasField = fieldName in candidateObject;
+      return hasField;
+    });
+
+    if (!hasAllRequiredFields) {
+      console.log('❌ [BRIDGE_TYPES] BridgeFormValues 필수 필드 누락');
+      return false;
+    }
+
+    console.log('✅ [BRIDGE_TYPES] BridgeFormValues 검증 완료');
+    return true;
+  };
+
+  const isValidEditorSnapshot = (
+    candidate: unknown
+  ): candidate is EditorStateSnapshotForBridge => {
+    console.log('🔍 [BRIDGE_TYPES] EditorSnapshot 검증 시작');
+
+    const isObjectType = candidate !== null && typeof candidate === 'object';
+    if (!isObjectType) {
+      console.log('❌ [BRIDGE_TYPES] 스냅샷이 객체가 아님');
+      return false;
+    }
+
+    const snapshotCandidate = candidate;
+    const requiredFields = [
+      'editorContainers',
+      'editorParagraphs',
+      'editorCompletedContent',
+      'editorIsCompleted',
+      'extractedTimestamp',
+    ];
+
+    const hasAllRequiredFields = requiredFields.every((fieldName) => {
+      const hasField = fieldName in snapshotCandidate;
+      return hasField;
+    });
+
+    if (!hasAllRequiredFields) {
+      console.log('❌ [BRIDGE_TYPES] EditorSnapshot 필수 필드 누락');
+      return false;
+    }
+
+    // 필드 타입 검증
+    const editorContainers = Reflect.get(snapshotCandidate, 'editorContainers');
+    const editorParagraphs = Reflect.get(snapshotCandidate, 'editorParagraphs');
+    const editorCompletedContent = Reflect.get(
+      snapshotCandidate,
+      'editorCompletedContent'
+    );
+    const editorIsCompleted = Reflect.get(
+      snapshotCandidate,
+      'editorIsCompleted'
+    );
+    const extractedTimestamp = Reflect.get(
+      snapshotCandidate,
+      'extractedTimestamp'
+    );
+
+    const hasValidTypes =
+      Array.isArray(editorContainers) &&
+      Array.isArray(editorParagraphs) &&
+      typeof editorCompletedContent === 'string' &&
+      typeof editorIsCompleted === 'boolean' &&
+      typeof extractedTimestamp === 'number';
+
+    if (!hasValidTypes) {
+      console.log('❌ [BRIDGE_TYPES] EditorSnapshot 타입 불일치');
+      return false;
+    }
+
+    console.log('✅ [BRIDGE_TYPES] EditorSnapshot 검증 완료');
+    return true;
+  };
+
+  const isValidMultiStepSnapshot = (
+    candidate: unknown
+  ): candidate is MultiStepFormSnapshotForBridge => {
+    console.log('🔍 [BRIDGE_TYPES] MultiStepSnapshot 검증 시작');
+
+    const isObjectType = candidate !== null && typeof candidate === 'object';
+    if (!isObjectType) {
+      console.log('❌ [BRIDGE_TYPES] 스냅샷이 객체가 아님');
+      return false;
+    }
+
+    const snapshotCandidate = candidate;
+    const requiredFields = [
+      'formCurrentStep',
+      'formValues',
+      'snapshotTimestamp',
+    ];
+
+    const hasAllRequiredFields = requiredFields.every((fieldName) => {
+      const hasField = fieldName in snapshotCandidate;
+      return hasField;
+    });
+
+    if (!hasAllRequiredFields) {
+      console.log('❌ [BRIDGE_TYPES] MultiStepSnapshot 필수 필드 누락');
+      return false;
+    }
+
+    // FormValues 검증
+    const formValues = Reflect.get(snapshotCandidate, 'formValues');
+    const formValuesIsValid = isValidBridgeFormValues(formValues);
+
+    if (!formValuesIsValid) {
+      console.log('❌ [BRIDGE_TYPES] MultiStepSnapshot의 FormValues 무효');
+      return false;
+    }
+
+    console.log('✅ [BRIDGE_TYPES] MultiStepSnapshot 검증 완료');
+    return true;
+  };
+
+  const isValidTransformationResult = (
+    candidate: unknown
+  ): candidate is EditorToMultiStepDataTransformationResult => {
+    console.log('🔍 [BRIDGE_TYPES] TransformationResult 검증 시작');
+
+    const isObjectType = candidate !== null && typeof candidate === 'object';
+    if (!isObjectType) {
+      console.log('❌ [BRIDGE_TYPES] 변환 결과가 객체가 아님');
+      return false;
+    }
+
+    const resultCandidate = candidate;
+    const requiredFields = [
+      'transformedContent',
+      'transformedIsCompleted',
+      'transformationSuccess',
+    ];
+
+    const hasAllRequiredFields = requiredFields.every((fieldName) => {
+      const hasField = fieldName in resultCandidate;
+      return hasField;
+    });
+
+    if (!hasAllRequiredFields) {
+      console.log('❌ [BRIDGE_TYPES] TransformationResult 필수 필드 누락');
+      return false;
+    }
+
+    console.log('✅ [BRIDGE_TYPES] TransformationResult 검증 완료');
+    return true;
+  };
+
+  console.log('✅ [BRIDGE_TYPES] Bridge 타입 가드 생성 완료');
+
+  return {
+    isValidBridgeFormValues,
+    isValidEditorSnapshot,
+    isValidMultiStepSnapshot,
+    isValidTransformationResult,
+  };
+};
+
+// 🔧 **Bridge 타입 변환 유틸리티 생성기**
+export const createBridgeTypeConverters = () => {
+  console.log('🔧 [BRIDGE_TYPES] Bridge 타입 변환기 생성');
+
+  const convertToBridgeFormValues = (
+    rawFormValues: unknown
+  ): BridgeFormValues | null => {
+    console.log('🔄 [BRIDGE_TYPES] BridgeFormValues 변환 시작');
+
+    const typeGuards = createBridgeTypeGuards();
+    const { isValidBridgeFormValues } = typeGuards;
+
+    const isValid = isValidBridgeFormValues(rawFormValues);
+    if (!isValid) {
+      console.log('❌ [BRIDGE_TYPES] 유효하지 않은 FormValues');
+      return null;
+    }
+
+    // 타입 가드를 통과했으므로 안전하게 변환
+    const validFormValues = rawFormValues;
+
+    console.log('✅ [BRIDGE_TYPES] BridgeFormValues 변환 완료');
+    return validFormValues;
+  };
+
+  const createDefaultBridgeFormValues = (): BridgeFormValues => {
+    console.log('🔧 [BRIDGE_TYPES] 기본 BridgeFormValues 생성');
+
+    const defaultBridgeFormValues: BridgeFormValues = {
+      userImage: '',
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: '',
+      title: '',
+      description: '',
+      tags: '',
+      content: '',
+      media: [],
+      mainImage: null,
+      sliderImages: [],
+      editorContainers: [],
+      editorParagraphs: [],
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+
+    console.log('✅ [BRIDGE_TYPES] 기본 BridgeFormValues 생성 완료');
+    return defaultBridgeFormValues;
+  };
+
+  const mergeBridgeFormValues = (
+    baseBridgeFormValues: BridgeFormValues,
+    updateBridgeFormValues: Partial<BridgeFormValues>
+  ): BridgeFormValues => {
+    console.log('🔄 [BRIDGE_TYPES] BridgeFormValues 병합 시작');
+
+    // 구조분해할당으로 안전한 병합
+    const mergedFormValues: BridgeFormValues = {
+      ...baseBridgeFormValues,
+      ...updateBridgeFormValues,
+    };
+
+    console.log('✅ [BRIDGE_TYPES] BridgeFormValues 병합 완료');
+    return mergedFormValues;
+  };
+
+  console.log('✅ [BRIDGE_TYPES] Bridge 타입 변환기 생성 완료');
+
+  return {
+    convertToBridgeFormValues,
+    createDefaultBridgeFormValues,
+    mergeBridgeFormValues,
+  };
+};
+
+// 🔧 기본 내보내기 - 호환성을 위한 별칭 (통합된 타입 사용)
 export type BridgeDataValidationResult = ValidationResult;
 export type BridgeOperationErrorDetails = ErrorDetails;
 export type BridgeSystemConfig = BridgeSystemConfiguration;
@@ -430,6 +700,8 @@ console.log('📊 [MODERN_BRIDGE_TYPES] 인터페이스 개수:', {
   utilityTypes: 12,
   functionTypes: 11,
   helperInterfaces: 8,
+  bridgeAliases: 4, // 🔧 새로 추가된 Bridge 별칭들
 });
 console.log('✅ [MODERN_BRIDGE_TYPES] 타입 안전성 및 성능 최적화 완료');
-console.log('🔧 [MODERN_BRIDGE_TYPES] ExternalEditorData 인터페이스 추가 완료');
+console.log('🔧 [MODERN_BRIDGE_TYPES] 통합된 FormValues 타입 사용');
+console.log('🎯 [MODERN_BRIDGE_TYPES] Bridge 호환성 별칭 추가 완료');
