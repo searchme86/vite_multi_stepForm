@@ -399,19 +399,28 @@ function WritingStep({
     return convertToBridgeConfigurationRecord(bridgeConfiguration);
   }, [bridgeConfiguration]);
 
-  // 🔧 수정: useBridgeUI 훅 사용 (강화된 에러 처리)
-  const bridgeUIResult = useMemo(() => {
-    try {
-      console.log('🔧 [WRITING_STEP] useBridgeUI 훅 호출 시작 (관대한 모드)');
+  // 🔧 수정: useBridgeUI 훅을 최상위에서 직접 호출 (Hooks 규칙 완전 준수)
+  console.log(
+    '🔧 [WRITING_STEP] useBridgeUI 훅 호출 - 최상위 레벨 (Hooks 규칙 준수)'
+  );
 
-      return useBridgeUI(bridgeConfigurationRecord, externalEditorData);
-    } catch (bridgeUIError) {
-      console.error(
-        '❌ [WRITING_STEP] useBridgeUI 훅 호출 실패:',
-        bridgeUIError
-      );
+  // ✅ React 훅은 반드시 컴포넌트 최상위에서 호출되어야 함
+  const bridgeUIResult = useBridgeUI(
+    bridgeConfigurationRecord,
+    externalEditorData
+  );
 
-      // 🔧 수정: fallback 객체 반환 (관대한 모드) - 타입 안전성 강화
+  // 🔧 안전한 fallback 처리 (훅 호출 후)
+  const safeBridgeUIResult = useMemo(() => {
+    console.log('🔧 [WRITING_STEP] Bridge UI 결과 안전성 확인');
+
+    // bridgeUIResult가 없거나 필수 속성이 없는 경우 fallback
+    if (
+      !bridgeUIResult ||
+      typeof bridgeUIResult !== 'object' ||
+      !('handleForwardTransfer' in bridgeUIResult)
+    ) {
+      console.warn('⚠️ [WRITING_STEP] Bridge UI 결과 없음, fallback 객체 사용');
       return {
         editorStatistics: null,
         validationState: null,
@@ -431,7 +440,10 @@ function WritingStep({
         },
       };
     }
-  }, [bridgeConfigurationRecord, externalEditorData]);
+
+    console.log('✅ [WRITING_STEP] Bridge UI 결과 유효, 원본 사용');
+    return bridgeUIResult;
+  }, [bridgeUIResult, externalEditorData]);
 
   // 🔧 구조분해할당으로 값 추출
   const {
@@ -442,7 +454,7 @@ function WritingStep({
     handleForwardTransfer: executeManualTransfer,
     hasExternalData,
     externalDataQuality,
-  } = bridgeUIResult;
+  } = safeBridgeUIResult;
 
   const {
     isOpen: isErrorModalOpen,
