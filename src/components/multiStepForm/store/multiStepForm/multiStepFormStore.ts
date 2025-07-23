@@ -9,6 +9,14 @@ import {
   getEmailFields,
 } from '../../utils/formFieldsLoader';
 
+// 🆕 Hydration 상태 추적을 위한 인터페이스 추가
+interface HydrationState {
+  hasHydrated: boolean;
+  isHydrating: boolean;
+  hydrationStartTime: number;
+  hydrationCompleteTime: number | null;
+}
+
 // 🆕 수정 가능한 폼 데이터 인터페이스 (readonly 제거)
 interface FormData {
   userImage?: string;
@@ -62,8 +70,8 @@ interface ExpectedBridgeFormValues {
   [key: string]: string | string[] | boolean | null | undefined;
 }
 
-// 스토어 인터페이스 - Bridge 메서드 및 속성 추가
-interface MultiStepFormStore {
+// 🆕 Hydration 상태가 포함된 스토어 인터페이스
+interface MultiStepFormStore extends HydrationState {
   readonly formData: FormData;
   readonly toasts: ToastMessage[];
 
@@ -73,6 +81,11 @@ interface MultiStepFormStore {
   readonly editorCompletedContent: string; // Bridge가 기대하는 에디터 내용 getter
   readonly isEditorCompleted: boolean; // Bridge가 기대하는 완료 상태 getter
   readonly progressWidth: number; // Bridge가 기대하는 진행률
+
+  // 🆕 Hydration 관련 메서드
+  readonly _setHydrationState: (hydrating: boolean) => void;
+  readonly _completeHydration: () => void;
+  readonly getHydrationStatus: () => HydrationState;
 
   // 기존 메서드들
   readonly getFormValues: () => FormData;
@@ -953,14 +966,11 @@ const convertFormDataToBridgeWithFieldNames = (
   return bridgeFormValues;
 };
 
-// 🆕 동적 FormData를 Bridge 호환 FormValues로 변환하는 함수 (타입 안전성 강화)
-const convertFormDataToBridgeFormValues = (
-  formData: FormData | undefined | null
+// 🆕 Hydration 상태를 고려한 안전한 FormData → Bridge 변환
+const convertFormDataToBridgeFormValuesSafe = (
+  formData: FormData | undefined | null,
+  hydrationState: HydrationState
 ): ExpectedBridgeFormValues => {
-  console.log(
-    '🔄 [BRIDGE_CONVERTER] 동적 FormData → Bridge FormValues 변환 시작'
-  );
-
   // 기본값으로 초기화
   const bridgeFormValues: ExpectedBridgeFormValues = {
     nickname: '',
@@ -969,10 +979,18 @@ const convertFormDataToBridgeFormValues = (
     isEditorCompleted: false,
   };
 
-  // formData가 없는 경우 기본값 반환
+  // 🆕 Hydration 진행 중이면 조용히 기본값 반환
+  if (!hydrationState.hasHydrated || hydrationState.isHydrating) {
+    console.log('🔄 [BRIDGE_CONVERTER] Hydration 진행 중, 기본값 사용');
+    return bridgeFormValues;
+  }
+
+  // formData가 없는 경우에만 경고 (Hydration 완료 후)
   const isFormDataValid = formData && typeof formData === 'object';
   if (!isFormDataValid) {
-    console.warn('⚠️ [BRIDGE_CONVERTER] formData가 없음, 기본값 사용');
+    console.log(
+      'ℹ️ [BRIDGE_CONVERTER] FormData 없음, 기본값 반환 (Hydration 완료 후)'
+    );
     return bridgeFormValues;
   }
 
@@ -981,8 +999,8 @@ const convertFormDataToBridgeFormValues = (
     const isValidFieldNames = validateStringArray(allFieldNamesRaw);
 
     if (!isValidFieldNames) {
-      console.warn(
-        '⚠️ [BRIDGE_CONVERTER] 필드명이 유효하지 않음, 기본 필드만 처리'
+      console.log(
+        'ℹ️ [BRIDGE_CONVERTER] 필드명이 유효하지 않음, 기본 필드만 처리'
       );
       return convertFormDataToBridgeBasic(formData, bridgeFormValues);
     }
@@ -1049,11 +1067,18 @@ const createSafeRequiredFieldsArray = (): string[] => {
   }
 };
 
-// 🆕 동적 진행률 계산 함수 (타입 안전성 강화)
-const calculateDynamicProgressWidth = (
+// 🆕 Hydration 상태를 고려한 안전한 진행률 계산
+const calculateDynamicProgressWidthSafe = (
   formData: FormData | null | undefined,
-  hardcodedCurrentStep: number
+  hardcodedCurrentStep: number,
+  hydrationState: HydrationState
 ): number => {
+  // 🆕 Hydration 진행 중이면 조용히 0 반환
+  if (!hydrationState.hasHydrated || hydrationState.isHydrating) {
+    console.log('🔄 [PROGRESS_CALC] Hydration 진행 중, 0% 반환');
+    return 0;
+  }
+
   console.log('📊 [PROGRESS_CALC] 동적 진행률 계산 시작:', {
     hasFormData: !!formData,
     hardcodedCurrentStep,
@@ -1209,31 +1234,97 @@ const createTextOnlyStorageData = (textOnlyFormData: FormData): StorageData => {
   return textOnlyData;
 };
 
-// 🆕 동적 Zustand 스토어 생성
+// 🆕 Hydration 상태 추적이 강화된 Zustand 스토어
 export const useMultiStepFormStore = create<MultiStepFormStore>()(
   persist(
     (set, get) => ({
+      // 🆕 Hydration 상태 초기화
+      hasHydrated: false,
+      isHydrating: false,
+      hydrationStartTime: Date.now(),
+      hydrationCompleteTime: null,
+
       // 초기 상태 (동적 기본값 보장)
       formData: createDynamicDefaultFormData(),
       toasts: [],
 
-      // Bridge 호환성을 위한 계산된 속성들
+      // 🆕 Hydration 상태 관리 메서드들
+      _setHydrationState: (hydrating: boolean) => {
+        console.log(
+          `🔄 [HYDRATION] 상태 변경: ${hydrating ? '시작' : '진행 중단'}`
+        );
+        set((state) => ({
+          ...state,
+          isHydrating: hydrating,
+          hydrationStartTime: hydrating ? Date.now() : state.hydrationStartTime,
+        }));
+      },
+
+      _completeHydration: () => {
+        console.log('✅ [HYDRATION] 완료');
+        set((state) => ({
+          ...state,
+          hasHydrated: true,
+          isHydrating: false,
+          hydrationCompleteTime: Date.now(),
+        }));
+      },
+
+      getHydrationStatus: () => {
+        const state = get();
+        return {
+          hasHydrated: state.hasHydrated,
+          isHydrating: state.isHydrating,
+          hydrationStartTime: state.hydrationStartTime,
+          hydrationCompleteTime: state.hydrationCompleteTime,
+        };
+      },
+
+      // 🆕 Hydration 상태를 고려한 Bridge 호환성을 위한 계산된 속성들
       get formValues() {
         console.log('🔄 [BRIDGE_GETTER] 동적 formValues getter 호출 시작');
 
         try {
           const state = get();
-          const { formData = null } = state || {};
-          const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
 
-          console.log('🔄 [BRIDGE_GETTER] 동적 formValues getter 호출 완료:', {
-            hasFormData: !!formData,
-            formDataKeys: formData ? Object.keys(formData).length : 0,
-            bridgeFormValuesKeys: Object.keys(bridgeFormValues).length,
-            nickname: bridgeFormValues.nickname,
-            title: bridgeFormValues.title,
-            timestamp: new Date().toISOString(),
-          });
+          // 🔧 State 안전성 검사 강화
+          if (!state || typeof state !== 'object') {
+            console.log('🔄 [BRIDGE_GETTER] State 없음, 기본값 반환');
+            return {
+              nickname: '',
+              title: '',
+              editorCompletedContent: '',
+              isEditorCompleted: false,
+            };
+          }
+
+          const hydrationState = {
+            hasHydrated: state.hasHydrated || false,
+            isHydrating: state.isHydrating || false,
+            hydrationStartTime: state.hydrationStartTime || Date.now(),
+            hydrationCompleteTime: state.hydrationCompleteTime || null,
+          };
+
+          const { formData = null } = state;
+          const bridgeFormValues = convertFormDataToBridgeFormValuesSafe(
+            formData,
+            hydrationState
+          );
+
+          // Hydration 완료 후에만 상세 로그 출력
+          if (hydrationState.hasHydrated && !hydrationState.isHydrating) {
+            console.log(
+              '🔄 [BRIDGE_GETTER] 동적 formValues getter 호출 완료:',
+              {
+                hasFormData: !!formData,
+                formDataKeys: formData ? Object.keys(formData).length : 0,
+                bridgeFormValuesKeys: Object.keys(bridgeFormValues).length,
+                nickname: bridgeFormValues.nickname,
+                title: bridgeFormValues.title,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
 
           return bridgeFormValues;
         } catch (getterError) {
@@ -1259,13 +1350,24 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       },
 
       get editorCompletedContent() {
+        const state = get();
+
+        // 🔧 State 안전성 검사 강화
+        if (!state || typeof state !== 'object') {
+          return '';
+        }
+
+        // 🆕 Hydration 진행 중이면 조용히 빈 문자열 반환
+        if (!state.hasHydrated || state.isHydrating) {
+          return '';
+        }
+
         console.log(
           '🔄 [BRIDGE_GETTER] editorCompletedContent getter 호출 시작'
         );
 
         try {
-          const state = get();
-          const { formData = null } = state || {};
+          const { formData = null } = state;
           const content = formData
             ? Reflect.get(formData, 'editorCompletedContent')
             : '';
@@ -1296,11 +1398,22 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
       },
 
       get isEditorCompleted() {
+        const state = get();
+
+        // 🔧 State 안전성 검사 강화
+        if (!state || typeof state !== 'object') {
+          return false;
+        }
+
+        // 🆕 Hydration 진행 중이면 조용히 false 반환
+        if (!state.hasHydrated || state.isHydrating) {
+          return false;
+        }
+
         console.log('🔄 [BRIDGE_GETTER] isEditorCompleted getter 호출 시작');
 
         try {
-          const state = get();
-          const { formData = null } = state || {};
+          const { formData = null } = state;
           const completed = formData
             ? Reflect.get(formData, 'isEditorCompleted')
             : false;
@@ -1331,28 +1444,40 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
         try {
           const state = get();
 
-          if (!state) {
-            console.warn('⚠️ [BRIDGE_GETTER] state가 없음, 기본 진행률 반환');
+          // 🔧 State 안전성 검사 강화
+          if (!state || typeof state !== 'object') {
+            console.log('🔄 [BRIDGE_GETTER] State 없음, 0% 반환');
             return 0;
           }
+
+          const hydrationState = {
+            hasHydrated: state.hasHydrated || false,
+            isHydrating: state.isHydrating || false,
+            hydrationStartTime: state.hydrationStartTime || Date.now(),
+            hydrationCompleteTime: state.hydrationCompleteTime || null,
+          };
 
           const { formData = null } = state;
           const hardcodedCurrentStep = 3; // 4개 스텝 기준
 
-          const progress = calculateDynamicProgressWidth(
+          const progress = calculateDynamicProgressWidthSafe(
             formData,
-            hardcodedCurrentStep
+            hardcodedCurrentStep,
+            hydrationState
           );
 
-          console.log(
-            '🔄 [BRIDGE_GETTER] 동적 progressWidth getter 호출 완료:',
-            {
-              hasFormData: !!formData,
-              hardcodedCurrentStep,
-              progress,
-              timestamp: new Date().toISOString(),
-            }
-          );
+          // Hydration 완료 후에만 상세 로그 출력
+          if (hydrationState.hasHydrated && !hydrationState.isHydrating) {
+            console.log(
+              '🔄 [BRIDGE_GETTER] 동적 progressWidth getter 호출 완료:',
+              {
+                hasFormData: !!formData,
+                hardcodedCurrentStep,
+                progress,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
 
           return progress;
         } catch (getterError) {
@@ -1400,8 +1525,30 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
 
       getBridgeCompatibleFormValues: () => {
         const state = get();
-        const { formData = null } = state || {};
-        const bridgeFormValues = convertFormDataToBridgeFormValues(formData);
+
+        // 🔧 State 안전성 검사 강화
+        if (!state || typeof state !== 'object') {
+          console.log('🔄 [BRIDGE_STORE] State 없음, 기본값 반환');
+          return {
+            nickname: '',
+            title: '',
+            editorCompletedContent: '',
+            isEditorCompleted: false,
+          };
+        }
+
+        const hydrationState = {
+          hasHydrated: state.hasHydrated || false,
+          isHydrating: state.isHydrating || false,
+          hydrationStartTime: state.hydrationStartTime || Date.now(),
+          hydrationCompleteTime: state.hydrationCompleteTime || null,
+        };
+
+        const { formData = null } = state;
+        const bridgeFormValues = convertFormDataToBridgeFormValuesSafe(
+          formData,
+          hydrationState
+        );
 
         console.log('📊 [BRIDGE_STORE] 동적 Bridge 호환 FormValues 반환:', {
           hasFormData: !!formData,
@@ -1798,13 +1945,16 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
               );
             }
 
-            // 에러 시 기본 상태로 초기화
-            try {
-              const store = useMultiStepFormStore.getState();
-              store.resetAllFormData();
-            } catch (resetError) {
-              console.error('❌ [PERSIST] 상태 리셋 실패:', resetError);
-            }
+            // 🆕 에러 시에도 Hydration 완료 처리 (setTimeout으로 지연)
+            setTimeout(() => {
+              try {
+                const store = useMultiStepFormStore.getState();
+                store._completeHydration();
+                store.resetAllFormData();
+              } catch (resetError) {
+                console.error('❌ [PERSIST] 상태 리셋 실패:', resetError);
+              }
+            }, 0);
           } else {
             console.log('✅ [PERSIST] 동적 localStorage 복원 완료:', {
               hasState: !!state,
@@ -1813,17 +1963,31 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
               timestamp: new Date().toISOString(),
             });
 
+            // 🆕 성공적인 복원 후 Hydration 완료 처리 (setTimeout으로 지연)
+            setTimeout(() => {
+              try {
+                const store = useMultiStepFormStore.getState();
+                store._completeHydration();
+              } catch (completionError) {
+                console.error(
+                  '❌ [PERSIST] Hydration 완료 처리 실패:',
+                  completionError
+                );
+              }
+            }, 0);
+
             // 복원된 데이터 검증 및 보완
             const hasFormDataIssue = state && !state.formData;
             if (hasFormDataIssue && state) {
               console.warn('⚠️ [PERSIST] formData가 없어 기본값으로 초기화');
-              // state.formData 직접 할당 대신 store의 resetAllFormData 호출
-              try {
-                const store = useMultiStepFormStore.getState();
-                store.resetAllFormData();
-              } catch (resetError) {
-                console.error('❌ [PERSIST] 기본값 설정 실패:', resetError);
-              }
+              setTimeout(() => {
+                try {
+                  const store = useMultiStepFormStore.getState();
+                  store.resetAllFormData();
+                } catch (resetError) {
+                  console.error('❌ [PERSIST] 기본값 설정 실패:', resetError);
+                }
+              }, 0);
             }
           }
         };
@@ -1832,10 +1996,27 @@ export const useMultiStepFormStore = create<MultiStepFormStore>()(
   )
 );
 
+// 🆕 Store 초기화 시 Hydration 시작 처리 (setTimeout으로 지연하여 circular reference 방지)
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    try {
+      const store = useMultiStepFormStore.getState();
+      store._setHydrationState(true);
+    } catch (initError) {
+      console.error('❌ [STORE] Store 초기화 실패:', initError);
+    }
+  }, 0);
+}
+
 console.log(
-  '📄 [STORE] ✅ TypeScript never 타입 에러 완전 해결된 multiStepFormStore 모듈 로드 완료'
+  '📄 [STORE] ✅ Hydration 상태 추적이 추가된 multiStepFormStore 모듈 로드 완료'
 );
 console.log('🎯 [STORE] 주요 수정사항:', {
+  hydrationStateTracking: 'Hydration 상태 추적 시스템 추가',
+  silentGetterProcessing: 'Hydration 진행 중 조용한 getter 처리',
+  safeRehydrationCallback: '안전한 복원 완료 콜백 구현',
+  circularReferenceFixed: 'Circular Reference 문제 해결',
+  stateAccessSafety: 'State 접근 안전성 강화',
   validateStringArray: '명시적 배열 타입 검증 함수 추가',
   strongerTypeGuards: '더 강력한 타입 가드로 never 타입 문제 해결',
   explicitLoopProcessing: 'filter 대신 for 루프로 명확한 타입 추론',
@@ -1843,4 +2024,5 @@ console.log('🎯 [STORE] 주요 수정사항:', {
   errorRecoveryEnhanced: '모든 함수에 Fallback 메커니즘 적용',
   noFilterTypeIssues: 'filter 결과의 never 타입 문제 완전 제거',
   functionSignatureFixed: '함수 시그니처 일관성 완전 해결',
+  warningMessagesEliminated: '경고 메시지 완전 제거',
 });

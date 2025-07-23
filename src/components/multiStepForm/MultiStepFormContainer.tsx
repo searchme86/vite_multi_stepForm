@@ -24,6 +24,10 @@ import StepContentContainer from './animation/StepContentContainer';
 import ToastManager from '../toaster/ToastManager';
 import { usePreviewPanelStore } from '../previewPanel/store/previewPanelStore';
 
+// 🆕 Debug 모듈 import
+import { detectSimpleInfiniteLoop } from './utils/debug/infiniteLoopDetector';
+import { initializeDebugCommands } from './utils/debug/consoleDebugCommands';
+
 interface DevelopmentEnvironmentDetection {
   hasNodeEnvironment: boolean;
   hasWindowLocation: boolean;
@@ -57,7 +61,6 @@ const detectDevelopmentEnvironment = (): boolean => {
       isDevelopmentMode: false,
     };
 
-    // Node.js 환경 체크
     const isNodeEnvironmentAvailable =
       typeof window !== 'undefined' && typeof window.location !== 'undefined';
 
@@ -93,16 +96,44 @@ const detectDevelopmentEnvironment = (): boolean => {
 };
 
 function MultiStepFormContainer(): React.ReactNode {
+  // 🚨 Debug 모듈의 무한루프 감지 사용
+  const isInfiniteLoop = detectSimpleInfiniteLoop('MultiStepFormContainer');
+  if (isInfiniteLoop) {
+    console.error(
+      '🚨 [MULTISTEP_CONTAINER] 무한루프로 인한 컴포넌트 실행 중단'
+    );
+    throw new Error('무한 렌더링이 감지되어 컴포넌트 실행을 중단합니다.');
+  }
+
   const [bridgeDebugEnabled, setBridgeDebugEnabled] = useState<boolean>(false);
   const [isComponentMounted, setIsComponentMounted] = useState<boolean>(false);
 
-  const logIntervalRef = useRef<number>();
   const isFirstRenderRef = useRef<boolean>(true);
   const mountTimeRef = useRef<number>(Date.now());
 
+  // 🆕 Debug 명령어 초기화 (한 번만 실행)
+  const debugInitializedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!debugInitializedRef.current) {
+      initializeDebugCommands();
+      debugInitializedRef.current = true;
+    }
+  }, []);
+
   console.log('🔄 [MULTISTEP_CONTAINER] 컴포넌트 렌더링 시작');
 
+  // 🆕 메인 훅 호출 및 상세 추적
   const hookResult = useMultiStepFormState();
+
+  console.log('🔍 [HOOK_RESULT] useMultiStepFormState 반환값 구조:', {
+    keys: Object.keys(hookResult),
+    hasMethod: 'methods' in hookResult,
+    hasCurrentStep: 'currentStep' in hookResult,
+    hasGoToNextStep: 'goToNextStep' in hookResult,
+    hasHandleSubmit: 'handleSubmit' in hookResult,
+    hasOnSubmit: 'onSubmit' in hookResult,
+  });
+
   const {
     methods,
     handleSubmit,
@@ -114,7 +145,40 @@ function MultiStepFormContainer(): React.ReactNode {
     goToStep,
   } = hookResult;
 
-  // 🔧 단순화된 훅 초기화 체크 - 순환 의존성 제거
+  // 🆕 각 속성별 상세 체크
+  console.log('🔍 [HOOK_PROPERTIES] 각 속성 상세 체크:', {
+    methods: {
+      exists: !!methods,
+      type: typeof methods,
+      hasHandleSubmit: methods && typeof methods.handleSubmit === 'function',
+    },
+    handleSubmit: {
+      exists: !!handleSubmit,
+      type: typeof handleSubmit,
+    },
+    onSubmit: {
+      exists: !!onSubmit,
+      type: typeof onSubmit,
+    },
+    currentStep: {
+      exists: currentStep !== undefined,
+      value: currentStep,
+      type: typeof currentStep,
+      isValid: isValidStepNumber(currentStep),
+    },
+    progressWidth: {
+      exists: progressWidth !== undefined,
+      value: progressWidth,
+      type: typeof progressWidth,
+    },
+    navigation: {
+      goToNextStep: typeof goToNextStep,
+      goToPrevStep: typeof goToPrevStep,
+      goToStep: typeof goToStep,
+    },
+  });
+
+  // 🔧 훅 준비 상태 체크 - 단순화된 버전
   const isHookDataReady = useMemo(() => {
     const hasValidCurrentStep = isValidStepNumber(currentStep);
     const hasFormMethods = methods !== null && methods !== undefined;
@@ -129,6 +193,30 @@ function MultiStepFormContainer(): React.ReactNode {
       hasNavigationFunctions,
       currentStep,
     });
+
+    if (!hasValidCurrentStep) {
+      console.error('❌ [HOOK_NOT_READY] currentStep이 유효하지 않음:', {
+        currentStep,
+        type: typeof currentStep,
+        isValidStepNumber: isValidStepNumber(currentStep),
+      });
+    }
+
+    if (!hasFormMethods) {
+      console.error('❌ [HOOK_NOT_READY] methods가 없음:', {
+        methods,
+        type: typeof methods,
+        keys: methods ? Object.keys(methods) : 'N/A',
+      });
+    }
+
+    if (!hasNavigationFunctions) {
+      console.error('❌ [HOOK_NOT_READY] 네비게이션 함수들이 없음:', {
+        goToNextStep: typeof goToNextStep,
+        goToPrevStep: typeof goToPrevStep,
+        goToStep: typeof goToStep,
+      });
+    }
 
     return hasValidCurrentStep && hasFormMethods && hasNavigationFunctions;
   }, [currentStep, methods, goToNextStep, goToPrevStep, goToStep]);
@@ -190,6 +278,38 @@ function MultiStepFormContainer(): React.ReactNode {
     debugMode: bridgeDebugEnabled || detectDevelopmentEnvironment(),
     timestamp: new Date().toISOString(),
   });
+
+  // 🆕 무한로딩 타임아웃 감지 (10초)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (!isHookDataReady) {
+        console.error('🚨 [TIMEOUT_ERROR] 10초 이상 무한로딩!', {
+          isComponentMounted,
+          isHookDataReady,
+          currentStep,
+          methods: !!methods,
+          hookResult: Object.keys(hookResult),
+          possibleCauses: [
+            'useMultiStepFormState 훅 반환값 구조 불일치',
+            'useStepNavigation 훅 초기화 실패',
+            '순환 의존성 문제',
+            'JSON 설정 파일 로드 실패',
+          ],
+        });
+
+        if (typeof window !== 'undefined') {
+          const shouldReload = window.confirm(
+            `🚨 10초 이상 무한로딩이 감지되었습니다!\n\n• 컴포넌트: MultiStepFormContainer\n\n개발자 도구를 확인하고 페이지를 새로고침하시겠습니까?`
+          );
+          if (shouldReload) {
+            window.location.reload();
+          }
+        }
+      }
+    }, 10000);
+
+    return () => clearTimeout(timeoutId);
+  }, [isHookDataReady, isComponentMounted, currentStep, methods, hookResult]);
 
   // 🔧 컴포넌트 마운트 처리 - 단순화
   useEffect(() => {
@@ -260,52 +380,6 @@ function MultiStepFormContainer(): React.ReactNode {
       window.removeEventListener('keydown', handleKeyboardShortcut);
     };
   }, []);
-
-  // 🔧 디버그 로그 인터벌 - 최적화
-  useEffect(() => {
-    const currentIntervalId = logIntervalRef.current;
-
-    if (!bridgeDebugEnabled) {
-      if (currentIntervalId !== undefined) {
-        console.log('🔧 [MULTISTEP_CONTAINER] 디버그 로그 인터벌 정리');
-        clearInterval(currentIntervalId);
-        logIntervalRef.current = undefined;
-      }
-      return;
-    }
-
-    if (currentIntervalId !== undefined) {
-      console.log('🔧 [MULTISTEP_CONTAINER] 기존 디버그 로그 인터벌 유지');
-      return;
-    }
-
-    console.log('🔧 [MULTISTEP_CONTAINER] 디버그 로그 인터벌 시작');
-    const debugLogInterval = window.setInterval((): void => {
-      console.log('📈 [MULTISTEP_CONTAINER] 상태 요약', {
-        lastUpdate: new Date().toLocaleTimeString(),
-        currentStep: safeCurrentStep,
-        isHookDataReady,
-        isComponentMounted,
-      });
-    }, 30000);
-
-    logIntervalRef.current = debugLogInterval;
-
-    return (): void => {
-      if (logIntervalRef.current !== undefined) {
-        console.log(
-          '🔧 [MULTISTEP_CONTAINER] 디버그 로그 인터벌 정리 (cleanup)'
-        );
-        clearInterval(logIntervalRef.current);
-        logIntervalRef.current = undefined;
-      }
-    };
-  }, [
-    bridgeDebugEnabled,
-    safeCurrentStep,
-    isHookDataReady,
-    isComponentMounted,
-  ]);
 
   // 🔧 스텝 네비게이션 핸들러들
   const handleStepNavigation = useCallback(
@@ -427,7 +501,14 @@ function MultiStepFormContainer(): React.ReactNode {
 
   // Early return: 초기 로딩 중
   if (!isComponentMounted || !isHookDataReady) {
-    console.log('⏳ [MULTISTEP_CONTAINER] 초기 로딩 화면 표시');
+    const loadingMessage = '멀티스텝 폼을 준비하고 있습니다...';
+
+    console.log('⏳ [MULTISTEP_CONTAINER] 초기 로딩 화면 표시:', {
+      message: loadingMessage,
+      isComponentMounted,
+      isHookDataReady,
+    });
+
     return React.createElement(
       'div',
       { className: 'flex items-center justify-center min-h-screen' },
@@ -444,8 +525,14 @@ function MultiStepFormContainer(): React.ReactNode {
             React.createElement(
               'p',
               { key: 'text', className: 'text-gray-600' },
-              '멀티스텝 폼을 준비하고 있습니다...'
+              loadingMessage
             ),
+            detectDevelopmentEnvironment() &&
+              React.createElement(
+                'div',
+                { key: 'debug-info', className: 'mt-4 text-xs text-gray-500' },
+                `디버그: isHookDataReady=${isHookDataReady}`
+              ),
           ]
         ),
       ]
@@ -455,7 +542,7 @@ function MultiStepFormContainer(): React.ReactNode {
   console.log('🎨 [MULTISTEP_CONTAINER] 메인 컴포넌트 렌더링');
   return (
     <div className="relative">
-      {bridgeDebugEnabled ? (
+      {bridgeDebugEnabled || detectDevelopmentEnvironment() ? (
         <div className="fixed z-50 px-3 py-1 text-sm text-yellow-700 bg-yellow-100 border border-yellow-400 rounded debug-indicator top-4 right-4">
           🔧 DEBUG MODE
         </div>
@@ -497,6 +584,7 @@ function MultiStepFormContainer(): React.ReactNode {
   );
 }
 
+// ResponsivePreviewPanelOverlay 컴포넌트들
 interface ResponsivePreviewPanelOverlayProps {
   readonly isOpen: boolean;
   readonly deviceType: 'mobile' | 'desktop';
@@ -567,10 +655,8 @@ const BackgroundOverlay = React.memo(function BackgroundOverlay({
   isMobile,
   shouldAnimate,
 }: BackgroundOverlayProps): React.ReactNode {
-  // 🔧 스토어에서 안전하게 핸들러 추출
   const rawStoreState = usePreviewPanelStore();
 
-  // 🔧 안정적인 핸들러 추출 - useCallback으로 참조 안정성 확보
   const handleBackgroundClick = useCallback((): void => {
     if (!rawStoreState) {
       console.log(
@@ -614,5 +700,5 @@ const BackgroundOverlay = React.memo(function BackgroundOverlay({
 export default MultiStepFormContainer;
 
 console.log(
-  '📄 [MULTISTEP_CONTAINER] MultiStepFormContainer 모듈 로드 완료 - Phase 3 무한루프 해결'
+  '📄 [MULTISTEP_CONTAINER] ✅ Debug 모듈 연동된 MultiStepFormContainer 모듈 로드 완료'
 );
