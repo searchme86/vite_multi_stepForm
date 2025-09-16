@@ -1,12 +1,35 @@
+// src/components/multiStepForm/reactHookForm/hooks/useFormControls.ts
+
 import React from 'react';
-import { UseFormReturn } from 'react-hook-form';
-import { FormSchemaValues } from '../../types/formTypes';
+import type { UseFormReturn, FieldErrors } from 'react-hook-form';
+import type { FormSchemaValues } from '../../types/formTypes';
 
-export const useFormControls = (methods: UseFormReturn<FormSchemaValues>) => {
-  console.log('📝 useFormControls: 폼 컨트롤 초기화');
+interface OptimizedFormControls {
+  readonly errors: FieldErrors<FormSchemaValues>;
+  readonly isValid: boolean;
+  readonly isSubmitting: boolean;
+  readonly isDirty: boolean;
+  readonly trigger: UseFormReturn<FormSchemaValues>['trigger'];
+  readonly watch: UseFormReturn<FormSchemaValues>['watch'];
+  readonly setValue: UseFormReturn<FormSchemaValues>['setValue'];
+  readonly getValues: UseFormReturn<FormSchemaValues>['getValues'];
+  readonly reset: UseFormReturn<FormSchemaValues>['reset'];
+  readonly clearErrors: UseFormReturn<FormSchemaValues>['clearErrors'];
+  readonly setError: UseFormReturn<FormSchemaValues>['setError'];
+}
 
+// 🚀 메인 훅
+export const useFormControls = (
+  methods: UseFormReturn<FormSchemaValues>
+): OptimizedFormControls => {
+  // 구조분해할당과 fallback 처리
   const {
-    formState: { errors, isValid, isSubmitting, isDirty },
+    formState: {
+      errors = {},
+      isValid = false,
+      isSubmitting = false,
+      isDirty = false,
+    } = {},
     trigger,
     watch,
     setValue,
@@ -16,47 +39,26 @@ export const useFormControls = (methods: UseFormReturn<FormSchemaValues>) => {
     setError,
   } = methods;
 
-  const triggerValidation = React.useCallback(
-    async (fields?: (keyof FormSchemaValues)[]) => {
-      console.log('📝 useFormControls: 유효성 검사 트리거', fields);
-      return await trigger(fields);
-    },
-    [trigger]
-  );
-
-  const updateField = React.useCallback(
-    (name: keyof FormSchemaValues, value: any) => {
-      console.log('📝 useFormControls: 필드 업데이트', { name, value });
-      setValue(name, value);
-    },
-    [setValue]
-  );
-
-  const getFieldValue = React.useCallback(
-    (name: keyof FormSchemaValues) => {
-      const value = getValues(name);
-      console.log('📝 useFormControls: 필드 값 가져오기', { name, value });
-      return value;
-    },
-    [getValues]
-  );
-
-  const resetForm = React.useCallback(() => {
-    console.log('📝 useFormControls: 폼 초기화');
-    reset();
-  }, [reset]);
+  // 메모이제이션된 함수들
+  const optimizedTrigger = React.useCallback(trigger, [trigger]);
+  const optimizedWatch = React.useCallback(watch, [watch]);
+  const optimizedSetValue = React.useCallback(setValue, [setValue]);
+  const optimizedGetValues = React.useCallback(getValues, [getValues]);
+  const optimizedReset = React.useCallback(reset, [reset]);
+  const optimizedClearErrors = React.useCallback(clearErrors, [clearErrors]);
+  const optimizedSetError = React.useCallback(setError, [setError]);
 
   return {
     errors,
     isValid,
     isSubmitting,
     isDirty,
-    trigger: triggerValidation,
-    watch,
-    setValue: updateField,
-    getValues: getFieldValue,
-    reset: resetForm,
-    clearErrors,
-    setError,
+    trigger: optimizedTrigger,
+    watch: optimizedWatch,
+    setValue: optimizedSetValue,
+    getValues: optimizedGetValues,
+    reset: optimizedReset,
+    clearErrors: optimizedClearErrors,
+    setError: optimizedSetError,
   };
 };

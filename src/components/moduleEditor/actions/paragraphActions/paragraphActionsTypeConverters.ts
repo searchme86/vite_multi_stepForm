@@ -4,7 +4,8 @@
 import {
   ParagraphBlock as ZustandParagraphBlock,
   Container as ZustandContainer,
-} from '../../store/shared/commonTypes';
+  // } from '../../store/shared/commonTypes';
+} from '../../../../store/shared/commonTypes';
 import { LocalParagraph } from '../../types/paragraph';
 import { Container } from '../../types/container';
 

@@ -5,9 +5,41 @@ import {
   initialEditorUIState,
   type EditorUIState,
 } from './initialEditorUIState';
-import type { EditorUIGetters } from './getterEditorUI';
-import type { EditorUISetters } from './setterEditorUI';
 import { createPersistConfig } from '../shared/persistConfig';
+
+interface EditorUIGetters {
+  getCurrentSubStep: () => SubStep;
+  getIsTransitioning: () => boolean;
+  getActiveParagraphId: () => string | null;
+  getIsPreviewOpen: () => boolean;
+  getSelectedParagraphIds: () => string[];
+  getTargetContainerId: () => string;
+  isStructureStep: () => boolean;
+  isWritingStep: () => boolean;
+  hasSelectedParagraphs: () => boolean;
+  getSelectedParagraphsCount: () => number;
+  isParagraphSelected: (paragraphId: string) => boolean;
+  isParagraphActive: (paragraphId: string) => boolean;
+}
+
+interface EditorUISetters {
+  setCurrentSubStep: (step: SubStep) => void;
+  setIsTransitioning: (transitioning: boolean) => void;
+  setActiveParagraphId: (paragraphId: string | null) => void;
+  setIsPreviewOpen: (open: boolean) => void;
+  setSelectedParagraphIds: (ids: string[]) => void;
+  setTargetContainerId: (containerId: string) => void;
+  goToStructureStep: () => void;
+  goToWritingStep: () => void;
+  setTransitioning: (transitioning: boolean) => void;
+  activateParagraph: (paragraphId: string | null) => void;
+  togglePreview: () => void;
+  toggleParagraphSelection: (paragraphId: string) => void;
+  clearSelectedParagraphs: () => void;
+  selectAllParagraphs: (paragraphIds: string[]) => void;
+  resetEditorUIState: () => void;
+  resetEditorUIStateCompletely: () => void;
+}
 
 type EditorUIStore = EditorUIState & EditorUIGetters & EditorUISetters;
 
@@ -90,8 +122,60 @@ export const useEditorUIStore = create<EditorUIStore>()(
       selectAllParagraphs: (paragraphIds: string[]) =>
         set({ selectedParagraphIds: paragraphIds }),
 
-      resetEditorUIState: () => set(initialEditorUIState),
+      resetEditorUIState: () => {
+        console.log('🔄 [UI_STORE] UI 상태 초기화 시작');
+        set(initialEditorUIState);
+      },
+
+      resetEditorUIStateCompletely: () => {
+        console.log(
+          '🔥 [UI_STORE] UI 상태 완전 초기화 시작 - sessionStorage 포함'
+        );
+
+        try {
+          set(initialEditorUIState);
+
+          const persistKey = 'editor-ui-storage';
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            console.log(`🗑️ [UI_STORE] sessionStorage에서 ${persistKey} 삭제`);
+            window.sessionStorage.removeItem(persistKey);
+          }
+
+          setTimeout(() => {
+            set({
+              currentSubStep: 'structure',
+              isTransitioning: false,
+              activeParagraphId: null,
+              isPreviewOpen: true,
+              selectedParagraphIds: [],
+              targetContainerId: '',
+            });
+            console.log('✅ [UI_STORE] UI 상태 완전 초기화 완료');
+          }, 100);
+        } catch (error) {
+          console.error('❌ [UI_STORE] UI 완전 초기화 중 오류:', error);
+          set(initialEditorUIState);
+        }
+      },
     }),
     createPersistConfig('editor-ui-storage', 'session')
   )
 );
+
+export const resetEditorUIStoreCompletely = () => {
+  console.log('🔥 [UI_STORE_EXTERNAL] 외부에서 UI 완전 초기화 호출');
+
+  try {
+    const { resetEditorUIStateCompletely } = useEditorUIStore.getState();
+    resetEditorUIStateCompletely();
+
+    console.log('✅ [UI_STORE_EXTERNAL] 외부 UI 완전 초기화 완료');
+  } catch (error) {
+    console.error('❌ [UI_STORE_EXTERNAL] 외부 UI 초기화 중 오류:', error);
+
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem('editor-ui-storage');
+      console.log('🗑️ [UI_STORE_EXTERNAL] 직접 sessionStorage 삭제 완료');
+    }
+  }
+};

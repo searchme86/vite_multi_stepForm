@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ImageViewConfig,
   createDefaultImageViewConfig,
-} from '../../../types/galleryTypes';
+} from '../../../../types/galleryTypes.ts';
 
 export const useImageViewConfig = () => {
   const [imageViewConfig, setImageViewConfig] = React.useState<ImageViewConfig>(

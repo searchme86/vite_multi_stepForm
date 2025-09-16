@@ -1,327 +1,282 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { useFormContext, FieldPath, FieldPathValue } from 'react-hook-form';
-import { useMultiStepFormState } from '../../../../reactHookForm/useMultiStepFormState';
-import { FormValues } from '../../../../types/formTypes';
-import { createDebounce, isValidFormFieldName } from '../utils/userInfoHelpers';
-import {
-  ToastColor,
-  isStringValue,
-  debugTypeCheck,
-} from '../types/userInfoTypes';
+// src/components/multiStepForm/steps/stepsSections/userInfoStep/hooks/useUserInfoFormSync.ts
 
-type UserInfoFormFields = {
-  readonly nickname: string;
-  readonly emailPrefix: string;
-  readonly emailDomain: string;
-  readonly bio: string;
-  readonly userImage: string;
-};
+import { useCallback, useMemo } from 'react';
+import { useFormContext } from 'react-hook-form';
+import { useMultiStepFormStore } from '../../../../store/multiStepForm/multiStepFormStore';
 
-type UserInfoFieldKey = keyof UserInfoFormFields;
-
-interface UseUserInfoFormSyncReturn {
-  readonly updateFormValue: <K extends FieldPath<FormValues>>(
-    key: K,
-    value: FieldPathValue<FormValues, K>
-  ) => void;
-  readonly addToast: (options: {
-    title: string;
-    description: string;
-    color: string;
-  }) => void;
-  readonly formValues: FormValues;
-  readonly isFormValueChanged: (fieldName: string, newValue: string) => boolean;
+interface ToastMessage {
+  title: string;
+  description: string;
+  color: 'success' | 'danger' | 'warning' | 'info';
 }
 
-const isUserInfoField = (key: string): key is UserInfoFieldKey => {
-  const userInfoFields: readonly string[] = [
-    'nickname',
-    'emailPrefix',
-    'emailDomain',
-    'bio',
-    'userImage',
-  ];
-  return userInfoFields.includes(key);
-};
+interface FormValues {
+  userImage: string;
+  nickname: string;
+  emailPrefix: string;
+  emailDomain: string;
+  bio: string;
+}
 
-const isValidFormField = <T extends FormValues>(
-  key: string,
-  value: unknown
-): key is FieldPath<T> => {
-  return isValidFormFieldName(key) && value !== undefined;
-};
+interface UseUserInfoFormSyncReturn {
+  formValues: FormValues;
+  updateFormValue: (
+    fieldName: string,
+    value: string | string[] | boolean | null
+  ) => void;
+  addToast: (toast: ToastMessage) => void;
+}
 
-const ensureWatchValue = (value: unknown): string => {
-  if (isStringValue(value)) {
-    return value;
-  }
+export function useUserInfoFormSync(): UseUserInfoFormSyncReturn {
+  console.log('🔄 [USER_INFO_SYNC] 사용자 정보 동기화 훅 초기화');
 
-  if (value === null || value === undefined) {
-    return '';
-  }
+  // React Hook Form 컨텍스트
+  const { watch, setValue, getValues } = useFormContext();
 
-  if (typeof value === 'boolean') {
-    return value.toString();
-  }
+  // MultiStepForm 스토어
+  const multiStepFormStore = useMultiStepFormStore();
 
-  if (Array.isArray(value)) {
-    return value.join(',');
-  }
-
-  try {
-    return String(value);
-  } catch (error) {
-    console.warn('⚠️ ensureWatchValue: 문자열 변환 실패, 빈 문자열 반환', {
-      value,
-      error,
-    });
-    return '';
-  }
-};
-
-const isValidToastColorType = (color: string): color is ToastColor => {
-  const validColors: readonly string[] = [
-    'success',
-    'danger',
-    'warning',
-    'primary',
-    'default',
-  ];
-
-  return validColors.includes(color);
-};
-
-export const useUserInfoFormSync = (): UseUserInfoFormSyncReturn => {
-  console.log('🔄 useUserInfoFormSync: 폼 동기화 훅 초기화 시작');
-
-  const { watch, setValue } = useFormContext<FormValues>();
-
-  const {
-    updateFormValue: storeUpdateFormValue,
-    addToast: storeAddToast,
-    formValues: storeFormValues,
-  } = useMultiStepFormState();
-
-  const previousValuesRef = useRef<Record<UserInfoFieldKey, string>>({
-    nickname: '',
-    emailPrefix: '',
-    emailDomain: '',
-    bio: '',
-    userImage: '',
+  // 🔍 스토어 연결 확인
+  console.log('🔍 [USER_INFO_SYNC] 스토어 연결 상태:', {
+    hasStore: !!multiStepFormStore,
+    hasGetFormValues: !!multiStepFormStore?.getFormValues,
+    hasUpdateFormValue: !!multiStepFormStore?.updateFormValue,
+    hasAddToast: !!multiStepFormStore?.addToast,
+    timestamp: new Date().toISOString(),
   });
 
-  const watchedValues: UserInfoFormFields = {
-    nickname: ensureWatchValue(watch('nickname')),
-    emailPrefix: ensureWatchValue(watch('emailPrefix')),
-    emailDomain: ensureWatchValue(watch('emailDomain')),
-    bio: ensureWatchValue(watch('bio')),
-    userImage: ensureWatchValue(watch('userImage')),
-  };
+  // 현재 폼 값들 가져오기
+  const formValues = useMemo(() => {
+    try {
+      const storeValues = multiStepFormStore?.getFormValues?.() || {};
+      const reactHookFormValues = getValues();
 
-  console.log('👀 useUserInfoFormSync: 현재 감시중인 값들', watchedValues);
+      // 구조분해할당으로 안전한 값 추출
+      const {
+        userImage: storeUserImage,
+        nickname: storeNickname,
+        emailPrefix: storeEmailPrefix,
+        emailDomain: storeEmailDomain,
+        bio: storeBio,
+      } = storeValues;
 
-  Object.entries(watchedValues).forEach(([fieldName, value]) => {
-    if (!isStringValue(value)) {
-      console.warn(`⚠️ useUserInfoFormSync: ${fieldName} 값이 문자열이 아님`, {
-        fieldName,
-        value,
-        type: typeof value,
+      const {
+        userImage: formUserImage,
+        nickname: formNickname,
+        emailPrefix: formEmailPrefix,
+        emailDomain: formEmailDomain,
+        bio: formBio,
+      } = reactHookFormValues || {};
+
+      // 스토어 값 우선, 없으면 React Hook Form 값 사용
+      const currentValues = {
+        userImage: storeUserImage || formUserImage || '',
+        nickname: storeNickname || formNickname || '',
+        emailPrefix: storeEmailPrefix || formEmailPrefix || '',
+        emailDomain: storeEmailDomain || formEmailDomain || '',
+        bio: storeBio || formBio || '',
+      };
+
+      console.log('📊 [USER_INFO_SYNC] 현재 폼 값들:', {
+        userImage: currentValues.userImage
+          ? `있음(${currentValues.userImage.length}자)`
+          : '없음',
+        nickname: currentValues.nickname || '없음',
+        emailPrefix: currentValues.emailPrefix || '없음',
+        emailDomain: currentValues.emailDomain || '없음',
+        bio: currentValues.bio ? `있음(${currentValues.bio.length}자)` : '없음',
+        timestamp: new Date().toISOString(),
       });
+
+      return currentValues;
+    } catch (error) {
+      console.error('❌ [USER_INFO_SYNC] 폼 값 가져오기 오류:', error);
+
+      // 에러 발생 시 기본값 반환
+      return {
+        userImage: '',
+        nickname: '',
+        emailPrefix: '',
+        emailDomain: '',
+        bio: '',
+      };
     }
-  });
+  }, [multiStepFormStore, getValues]);
 
-  const isFormValueChanged = useCallback(
-    (fieldName: string, newValue: string): boolean => {
-      debugTypeCheck(fieldName, 'string');
-      debugTypeCheck(newValue, 'string');
-
-      if (!isStringValue(fieldName) || !isStringValue(newValue)) {
-        console.log('❌ isFormValueChanged: 입력 값이 문자열이 아님', {
-          fieldName,
-          newValue,
-          fieldNameType: typeof fieldName,
-          newValueType: typeof newValue,
-        });
-        return false;
-      }
-
-      if (!isValidFormFieldName(fieldName)) {
-        console.log('❌ isFormValueChanged: 유효하지 않은 필드명', fieldName);
-        return false;
-      }
-
-      if (!isUserInfoField(fieldName)) {
-        console.log('❌ isFormValueChanged: UserInfo 필드가 아님', fieldName);
-        return false;
-      }
-
-      const previousValue = previousValuesRef.current[fieldName];
-      const hasChanged = previousValue !== newValue;
-
-      console.log('🔍 isFormValueChanged: 값 변경 확인', {
+  // 📝 폼 값 업데이트 함수
+  const updateFormValue = useCallback(
+    (fieldName: string, value: string | string[] | boolean | null) => {
+      console.log('📝 [USER_INFO_SYNC] 폼 값 업데이트 요청:', {
         fieldName,
-        previousValue,
-        newValue,
-        hasChanged,
+        valueType: typeof value,
+        valueLength: typeof value === 'string' ? value.length : 0,
+        timestamp: new Date().toISOString(),
       });
-
-      return hasChanged;
-    },
-    []
-  );
-
-  const debouncedStoreUpdate = useCallback(
-    createDebounce((key: string, value: string) => {
-      console.log('💾 debouncedStoreUpdate: zustand 스토어 업데이트 실행', {
-        key,
-        value,
-      });
-      debugTypeCheck(key, 'string');
-      debugTypeCheck(value, 'string');
-
-      if (!isStringValue(key) || !isValidFormFieldName(key)) {
-        console.error('❌ debouncedStoreUpdate: 유효하지 않은 키', {
-          key,
-          keyType: typeof key,
-        });
-        return;
-      }
 
       try {
-        if (isUserInfoField(key)) {
-          const formValueKey: keyof FormValues = key;
-          const formValue: FormValues[typeof formValueKey] = value;
-          storeUpdateFormValue(formValueKey, formValue);
+        // 🚨 이미지 데이터 크기 체크 (localStorage 에러 방지)
+        if (fieldName === 'userImage' && typeof value === 'string') {
+          const { length: imageSizeInBytes } = value;
+          const imageSizeInMB = imageSizeInBytes / (1024 * 1024);
 
-          if (isStringValue(value)) {
-            previousValuesRef.current = {
-              ...previousValuesRef.current,
-              [key]: value,
-            };
+          console.log('🖼️ [USER_INFO_SYNC] 이미지 크기 확인:', {
+            sizeInBytes: imageSizeInBytes,
+            sizeInMB: imageSizeInMB.toFixed(2),
+            timestamp: new Date().toISOString(),
+          });
+
+          // 2MB 이상이면 localStorage 저장 건너뛰기
+          if (imageSizeInMB > 2) {
+            console.warn(
+              '⚠️ [USER_INFO_SYNC] 이미지 크기가 2MB를 초과, localStorage 저장 건너뛰기'
+            );
+
+            // 1. React Hook Form에만 저장
+            console.log('🔄 [USER_INFO_SYNC] React Hook Form 업데이트 시작');
+            setValue(fieldName, value, {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
+            console.log('✅ [USER_INFO_SYNC] React Hook Form 업데이트 완료');
+
+            // 2. 메모리에만 저장하고 localStorage는 건너뛰기
+            console.log(
+              '✅ [USER_INFO_SYNC] 이미지 메모리 저장 완료 (localStorage 건너뛰기)'
+            );
+            return;
           }
         }
 
-        console.log('✅ debouncedStoreUpdate: 업데이트 성공', { key, value });
-      } catch (error) {
-        console.error('❌ debouncedStoreUpdate: 업데이트 실패', error);
-
-        storeAddToast({
-          title: '상태 업데이트 오류',
-          description: '폼 값 저장 중 오류가 발생했습니다.',
-          color: 'danger' satisfies ToastColor,
+        // 🔄 1단계: React Hook Form 업데이트
+        console.log('🔄 [USER_INFO_SYNC] React Hook Form 업데이트 시작');
+        setValue(fieldName, value, {
+          shouldValidate: true,
+          shouldDirty: true,
         });
-      }
-    }, 300),
-    [storeUpdateFormValue, storeAddToast]
-  );
+        console.log('✅ [USER_INFO_SYNC] React Hook Form 업데이트 완료');
 
-  useEffect(() => {
-    console.log('🔄 useUserInfoFormSync: 실시간 동기화 실행');
+        // 🔄 2단계: Zustand 스토어 업데이트 (try-catch로 localStorage 에러 방지)
+        const { updateFormValue: storeUpdateFormValue } =
+          multiStepFormStore || {};
 
-    Object.entries(watchedValues).forEach(([fieldName, value]) => {
-      if (!isStringValue(fieldName) || !isStringValue(value)) {
-        console.warn('⚠️ useUserInfoFormSync: 필드명 또는 값이 문자열이 아님', {
-          fieldName,
-          value,
-          fieldNameType: typeof fieldName,
-          valueType: typeof value,
-        });
-        return;
-      }
+        if (storeUpdateFormValue) {
+          console.log('🔄 [USER_INFO_SYNC] Zustand 스토어 업데이트 시작');
 
-      if (
-        isValidFormField<FormValues>(fieldName, value) &&
-        isFormValueChanged(fieldName, value)
-      ) {
-        console.log(
-          `🔄 useUserInfoFormSync: ${fieldName} 필드 변경 감지`,
-          value
-        );
-        debouncedStoreUpdate(fieldName, value);
-      }
-    });
-  }, [watchedValues, isFormValueChanged, debouncedStoreUpdate]);
+          try {
+            storeUpdateFormValue(fieldName, value);
+            console.log('✅ [USER_INFO_SYNC] Zustand 스토어 업데이트 성공');
+            console.log('✅ [USER_INFO_SYNC] 이미지 메모리 저장 완료');
+          } catch (storeError) {
+            console.error('❌ [USER_INFO_SYNC] Zustand 스토어 업데이트 실패:', {
+              fieldName,
+              error: storeError,
+              errorName:
+                storeError instanceof Error ? storeError.name : 'Unknown',
+              errorMessage:
+                storeError instanceof Error
+                  ? storeError.message
+                  : 'Unknown error',
+              timestamp: new Date().toISOString(),
+            });
 
-  const updateFormValue = useCallback(
-    <K extends FieldPath<FormValues>>(
-      key: K,
-      value: FieldPathValue<FormValues, K>
-    ) => {
-      console.log('📝 updateFormValue: 직접 폼 값 업데이트', { key, value });
-      debugTypeCheck(key, 'string');
-      debugTypeCheck(value, typeof value);
+            // localStorage 에러인 경우 메모리에만 저장
+            if (
+              storeError instanceof Error &&
+              storeError.name === 'QuotaExceededError'
+            ) {
+              console.warn(
+                '⚠️ [USER_INFO_SYNC] localStorage 용량 초과, 메모리에만 저장'
+              );
+            }
 
-      if (!isStringValue(key) || !isValidFormFieldName(key)) {
-        console.error('❌ updateFormValue: 유효하지 않은 키', {
-          key,
-          keyType: typeof key,
-        });
-        storeAddToast({
-          title: '입력 오류',
-          description: '유효하지 않은 필드명입니다.',
-          color: 'danger' satisfies ToastColor,
-        });
-        return;
-      }
-
-      try {
-        setValue(key, value);
-
-        if (isUserInfoField(key) && isStringValue(value)) {
-          const formValueKey: keyof FormValues = key;
-          const formValue: FormValues[typeof formValueKey] = value;
-          storeUpdateFormValue(formValueKey, formValue);
-
-          previousValuesRef.current = {
-            ...previousValuesRef.current,
-            [key]: value,
-          };
+            // 에러 발생해도 React Hook Form에는 저장됨
+            console.log(
+              '✅ [USER_INFO_SYNC] 이미지 메모리 저장 완료 (localStorage 에러로 인한 메모리 전용)'
+            );
+          }
+        } else {
+          console.warn(
+            '⚠️ [USER_INFO_SYNC] Zustand 스토어 updateFormValue 함수 없음'
+          );
+          console.log(
+            '✅ [USER_INFO_SYNC] 이미지 메모리 저장 완료 (스토어 함수 없음)'
+          );
         }
 
-        console.log('✅ updateFormValue: 직접 업데이트 성공', { key, value });
+        console.log('✅ [USER_INFO_SYNC] 폼 값 업데이트 전체 완료:', {
+          fieldName,
+          timestamp: new Date().toISOString(),
+        });
       } catch (error) {
-        console.error('❌ updateFormValue: 직접 업데이트 실패', error);
-        storeAddToast({
-          title: '입력 오류',
-          description: '값 저장 중 오류가 발생했습니다.',
-          color: 'danger' satisfies ToastColor,
+        console.error('❌ [USER_INFO_SYNC] 폼 값 업데이트 실패:', {
+          fieldName,
+          error,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
         });
+
+        // 에러 발생해도 최소한 React Hook Form에는 저장
+        try {
+          setValue(fieldName, value, {
+            shouldValidate: true,
+            shouldDirty: true,
+          });
+          console.log(
+            '✅ [USER_INFO_SYNC] 에러 발생 시 React Hook Form 백업 저장 완료'
+          );
+        } catch (backupError) {
+          console.error(
+            '❌ [USER_INFO_SYNC] React Hook Form 백업 저장도 실패:',
+            backupError
+          );
+        }
       }
     },
-    [setValue, storeUpdateFormValue, storeAddToast]
+    [setValue, multiStepFormStore]
   );
 
+  // 🍞 토스트 메시지 추가 함수
   const addToast = useCallback(
-    (options: { title: string; description: string; color: string }) => {
-      console.log('🍞 addToast: 토스트 메시지 추가', options);
-      debugTypeCheck(options, 'object');
-
-      const validatedColor: ToastColor = isValidToastColorType(options.color)
-        ? options.color
-        : 'default';
-
-      if (options.color !== validatedColor) {
-        console.warn('⚠️ addToast: 유효하지 않은 색상 값, default로 fallback', {
-          providedColor: options.color,
-          fallbackColor: validatedColor,
-        });
-      }
-
-      storeAddToast({
-        title: options.title,
-        description: options.description,
-        color: validatedColor,
+    (toast: ToastMessage) => {
+      console.log('🍞 [USER_INFO_SYNC] 토스트 메시지 추가:', {
+        title: toast.title,
+        color: toast.color,
+        timestamp: new Date().toISOString(),
       });
-    },
-    [storeAddToast]
-  );
 
-  console.log('✅ useUserInfoFormSync: 폼 동기화 훅 초기화 완료');
+      try {
+        const { addToast: storeAddToast } = multiStepFormStore || {};
+
+        if (storeAddToast) {
+          storeAddToast(toast);
+          console.log('✅ [USER_INFO_SYNC] 토스트 메시지 추가 성공');
+        } else {
+          console.warn('⚠️ [USER_INFO_SYNC] 토스트 함수 없음, 콘솔에 표시');
+          console.log(`📢 [TOAST] ${toast.title}: ${toast.description}`);
+        }
+      } catch (error) {
+        console.error('❌ [USER_INFO_SYNC] 토스트 메시지 추가 실패:', {
+          error,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        });
+
+        // 실패해도 콘솔에 메시지 표시
+        console.log(`📢 [TOAST_FALLBACK] ${toast.title}: ${toast.description}`);
+      }
+    },
+    [multiStepFormStore]
+  );
 
   return {
+    formValues,
     updateFormValue,
     addToast,
-    formValues: storeFormValues,
-    isFormValueChanged,
   };
-};
+}
+
+console.log('📄 [USER_INFO_SYNC] useUserInfoFormSync 모듈 로드 완료');

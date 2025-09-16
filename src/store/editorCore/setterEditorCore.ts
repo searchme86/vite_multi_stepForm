@@ -1,3 +1,4 @@
+// 📁 store/editorCore/setterEditorCore.ts
 import type { Container, ParagraphBlock } from '../shared/commonTypes';
 import type { EditorCoreState } from './initialEditorCoreState';
 import {
@@ -26,6 +27,11 @@ export interface EditorCoreSetters
   ) => void;
   resetEditorState: () => void;
   generateCompletedContent: () => void;
+  setSectionInputs: (sectionInputs: string[]) => void;
+  updateSectionInput: (index: number, value: string) => void;
+  addSectionInput: () => void;
+  removeSectionInput: (index: number) => void;
+  resetSectionInputs: () => void;
 }
 
 export const createEditorCoreSetters = (): EditorCoreSetters => {
@@ -70,6 +76,21 @@ export const createEditorCoreSetters = (): EditorCoreSetters => {
     },
     generateCompletedContent: () => {
       throw new Error('generateCompletedContent must be implemented in store');
+    },
+    setSectionInputs: () => {
+      throw new Error('setSectionInputs must be implemented in store');
+    },
+    updateSectionInput: () => {
+      throw new Error('updateSectionInput must be implemented in store');
+    },
+    addSectionInput: () => {
+      throw new Error('addSectionInput must be implemented in store');
+    },
+    removeSectionInput: () => {
+      throw new Error('removeSectionInput must be implemented in store');
+    },
+    resetSectionInputs: () => {
+      throw new Error('resetSectionInputs must be implemented in store');
     },
   };
 };

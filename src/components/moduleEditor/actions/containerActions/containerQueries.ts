@@ -1,7 +1,7 @@
 // 📁 actions/containerActions/containerQueries.ts
 
 import { LocalParagraph } from '../../types/paragraph';
-import { useEditorCoreStore } from '../../store/editorCore/editorCoreStore';
+import { useEditorCoreStore } from '../../../../store/editorCore/editorCoreStore';
 import { convertFromZustandParagraph } from './containerTypeConverters';
 
 /**

@@ -2,14 +2,16 @@ import {
   EditorState,
   EditorContainer,
   EditorParagraph,
-} from '../../../types/editorTypes';
+} from '../../../../types/editorTypes';
 
 export const validateEditorCompletion = (editorState: EditorState): boolean => {
   console.log('📝 editorIntegrationActions: 에디터 완료 여부 검증');
 
-  const hasContent =
+  // 🔧 !! (더블 부정)으로 명시적으로 boolean 타입으로 변환
+  const hasContent = !!(
     editorState.completedContent &&
-    editorState.completedContent.trim().length > 0;
+    editorState.completedContent.trim().length > 0
+  );
   const isCompleted = editorState.isCompleted;
 
   console.log('📝 editorIntegrationActions: 검증 결과', {

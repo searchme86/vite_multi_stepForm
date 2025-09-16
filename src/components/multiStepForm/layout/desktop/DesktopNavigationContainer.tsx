@@ -20,7 +20,7 @@ function DesktopNavigationContainer({
 
   return (
     <div className="relative justify-between hidden mb-2 sm:flex">
-      <DesktopConnectionLine />
+      {/* <DesktopConnectionLine /> */}
       <DesktopStepButtons
         currentStep={currentStep}
         onStepChange={onStepChange}

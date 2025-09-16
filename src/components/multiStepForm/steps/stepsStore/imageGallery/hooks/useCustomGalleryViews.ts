@@ -1,5 +1,5 @@
 import React from 'react';
-import { CustomGalleryView } from '../../../types/galleryTypes';
+import { CustomGalleryView } from '../../../../types/galleryTypes';
 
 export const useCustomGalleryViews = () => {
   const [customGalleryViews, setCustomGalleryViews] = React.useState<

@@ -62,7 +62,7 @@ function PreviewPanel({
   return (
     <div
       className={`border border-gray-200 rounded-lg overflow-hidden transition-all duration-400 ${
-        internalState.isPreviewOpen ? 'max-h-96' : 'max-h-12'
+        internalState.isPreviewOpen ? 'w-auto' : 'w-full'
       }`}
     >
       <PreviewControls

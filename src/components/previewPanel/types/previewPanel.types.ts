@@ -93,4 +93,70 @@ export interface MobileTabState {
   selectedSize: string;
   hasChanged: boolean;
 }
+
+// 🎯 모바일 디바이스 사이즈 타입 정의 (새로 추가)
+export type MobileDeviceSize = '360' | '768';
+
+// 🎯 모바일 디바이스 설정 인터페이스 (새로 추가)
+export interface MobileDeviceConfig {
+  size: MobileDeviceSize;
+  width: number;
+  label: string;
+  description: string;
+}
+
+// 🎯 모바일 디바이스 설정 상수 (새로 추가)
+export const MOBILE_DEVICE_CONFIGS: Record<
+  MobileDeviceSize,
+  MobileDeviceConfig
+> = {
+  '360': {
+    size: '360',
+    width: 360,
+    label: '360px',
+    description: 'Small Mobile (iPhone SE, Android Compact)',
+  },
+  '768': {
+    size: '768',
+    width: 768,
+    label: '768px',
+    description: 'Tablet Portrait (iPad Mini, Android Tablet)',
+  },
+};
+
+// 🎯 모바일 사이즈 검증 함수 (새로 추가)
+export const validateMobileSize = (
+  requestedSize: string
+): {
+  isValid: boolean;
+  validatedSize: MobileDeviceSize;
+  errorMessage?: string;
+} => {
+  const validSizes = Object.keys(MOBILE_DEVICE_CONFIGS);
+  const isSizeValid = validSizes.includes(requestedSize);
+
+  if (isSizeValid) {
+    return {
+      isValid: true,
+      validatedSize: requestedSize as MobileDeviceSize,
+    };
+  }
+
+  return {
+    isValid: false,
+    validatedSize: '360', // 기본값
+    errorMessage: `Invalid mobile size: ${requestedSize}. Valid sizes: ${validSizes.join(
+      ', '
+    )}`,
+  };
+};
+
+// 🎯 모바일 사이즈 유틸리티 함수 (새로 추가)
+export const getMobileDeviceInfo = (
+  deviceSize: MobileDeviceSize
+): MobileDeviceConfig => {
+  const deviceConfig = MOBILE_DEVICE_CONFIGS[deviceSize];
+
+  return deviceConfig || MOBILE_DEVICE_CONFIGS['360'];
+};
 //====여기까지 수정됨====

@@ -3,7 +3,7 @@
 import { EditorInternalState } from '../../types/editor';
 
 // ✨ [ZUSTAND 추가] context 대신 zustand 스토어 import 추가
-import { useEditorUIStore } from '../../store/editorUI/editorUIStore';
+import { useEditorUIStore } from '../../../../store/editorUI/editorUIStore';
 
 // ✨ [ZUSTAND 추가] toggleParagraphSelection 함수 오버로드
 export function toggleParagraphSelection(targetParagraphId: string): void;

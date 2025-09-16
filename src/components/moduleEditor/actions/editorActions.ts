@@ -146,6 +146,8 @@ export const saveAllToContext = (
 ) => {
   console.log('💾 [SAVE] 전체 Context 저장 시작');
 
+  console.log('여기1<-------,localContainers', localContainers);
+
   updateEditorContainers(localContainers);
 
   const contextParagraphs = localParagraphs.map((p) => ({

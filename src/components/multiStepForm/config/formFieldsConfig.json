@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "formFields": {
+    "userImage": "",
+    "nickname": "",
+    "emailPrefix": "",
+    "emailDomain": "",
+    "bio": "",
+    "title": "",
+    "description": "",
+    "media": [],
+    "mainImage": null,
+    "sliderImages": [],
+    "editorCompletedContent": "",
+    "isEditorCompleted": false
+  },
+  "fieldTypes": {
+    "userImage": "string",
+    "nickname": "string",
+    "emailPrefix": "string",
+    "emailDomain": "string",
+    "bio": "string",
+    "title": "string",
+    "description": "string",
+    "media": "array",
+    "mainImage": "string|null",
+    "sliderImages": "array",
+    "editorCompletedContent": "string",
+    "isEditorCompleted": "boolean"
+  },
+  "emailFields": ["emailPrefix", "emailDomain"]
+}

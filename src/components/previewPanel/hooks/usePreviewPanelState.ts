@@ -1,77 +1,136 @@
-//====여기부터 수정됨====
-// 미리보기 패널 상태 관리 훅 - 무한 렌더링 방지
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+// src/components/previewPanel/hooks/usePreviewPanelState.ts
 
-// 모바일 디바이스 크기 타입 정의
-type MobileSize = 'sm' | 'md' | 'lg';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
+import { usePreviewPanelStore } from '../store/previewPanelStore';
+import type { MobileDeviceSize } from '../types/previewPanel.types';
 
 // Props 타입 정의
 interface UsePreviewPanelStateProps {
   isMobile: boolean;
   isPreviewPanelOpen: boolean;
-  setIsPreviewPanelOpen: (value: boolean) => void;
 }
 
 // 반환 타입 정의
 interface UsePreviewPanelStateReturn {
-  selectedMobileSize: MobileSize;
-  setSelectedMobileSize: (size: MobileSize) => void;
+  selectedMobileSize: MobileDeviceSize;
+  setSelectedMobileSize: (size: MobileDeviceSize) => void;
 }
 
+/**
+ * 미리보기 패널 상태 관리 훅 - PreviewPanelStore 통합 버전
+ *
+ * 수정사항:
+ * - 미사용 변수 제거 (setIsPreviewPanelOpen)
+ * - Props 타입 수정 (불필요한 함수 제거)
+ * - 타입 안전성 향상
+ *
+ * @param props - 훅 설정 props
+ * @returns 모바일 사이즈 관련 상태와 함수들
+ */
 export function usePreviewPanelState({
   isMobile,
   isPreviewPanelOpen,
-  setIsPreviewPanelOpen,
 }: UsePreviewPanelStateProps): UsePreviewPanelStateReturn {
-  // 모바일 크기 선택 상태 관리
-  // 모바일 미리보기에서 선택된 디바이스 크기를 관리합니다
-  const [selectedMobileSize, setSelectedMobileSizeState] =
-    useState<MobileSize>('md');
+  console.log(
+    '🔧 [PREVIEW_PANEL_STATE] 훅 초기화 (PreviewPanelStore 통합 버전)'
+  );
+
+  // 🎯 PreviewPanelStore에서 모바일 사이즈 상태 가져오기
+  const selectedMobileSize = usePreviewPanelStore(
+    (state) => state.selectedMobileSize
+  );
+
+  // 🎯 PreviewPanelStore에서 모바일 사이즈 설정 함수 가져오기
+  const storeSetSelectedMobileSize = usePreviewPanelStore(
+    (state) => state.setSelectedMobileSize
+  );
 
   // 이전 패널 상태를 추적하는 ref
-  // 패널 상태 변경을 감지하기 위해 사용합니다
   const prevPanelStateRef = useRef<boolean>(isPreviewPanelOpen);
 
-  // 모바일 크기 설정 핸들러 메모이제이션
-  // useCallback을 사용하여 함수의 참조 안정성을 보장합니다
-  const setSelectedMobileSize = useCallback((size: MobileSize) => {
-    console.log('📏 모바일 크기 변경:', size);
-    setSelectedMobileSizeState(size);
-  }, []);
+  console.log('🔧 [PREVIEW_PANEL_STATE] 현재 상태:', {
+    isMobile,
+    isPreviewPanelOpen,
+    selectedMobileSize,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 모바일 크기 설정 핸들러 - PreviewPanelStore 액션 사용
+  const setSelectedMobileSize = useCallback(
+    (requestedSize: MobileDeviceSize) => {
+      console.log('📏 [PREVIEW_PANEL_STATE] 모바일 크기 변경 요청:', {
+        currentSize: selectedMobileSize,
+        requestedSize,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 🎯 PreviewPanelStore의 액션 함수 호출
+      storeSetSelectedMobileSize(requestedSize);
+
+      console.log('✅ [PREVIEW_PANEL_STATE] 모바일 크기 변경 완료:', {
+        newSize: requestedSize,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [selectedMobileSize, storeSetSelectedMobileSize]
+  );
 
   // 패널 상태 변경 감지 및 로깅
-  // 패널이 열리거나 닫힐 때만 실행되어 과도한 로깅을 방지합니다
   useEffect(() => {
-    if (prevPanelStateRef.current !== isPreviewPanelOpen) {
-      console.log(
-        `🎯 미리보기 패널 상태 변경: ${isPreviewPanelOpen ? '열림' : '닫힘'} (${
-          isMobile ? '모바일' : '데스크톱'
-        })`
-      );
+    const hasStateChanged = prevPanelStateRef.current !== isPreviewPanelOpen;
+
+    if (hasStateChanged) {
+      console.log('🎯 [PREVIEW_PANEL_STATE] 패널 상태 변경 감지:', {
+        previousState: prevPanelStateRef.current,
+        currentState: isPreviewPanelOpen,
+        deviceType: isMobile ? 'mobile' : 'desktop',
+        action: isPreviewPanelOpen ? '열림' : '닫힘',
+        timestamp: new Date().toISOString(),
+      });
+
       prevPanelStateRef.current = isPreviewPanelOpen;
     }
   }, [isPreviewPanelOpen, isMobile]);
 
-  // 모바일 상태 변경 시 패널 상태 초기화
-  // 모바일↔데스크톱 전환 시 패널을 닫아 UX를 개선합니다
+  // 모바일 상태 변경 시 로깅
   useEffect(() => {
-    // 모바일에서 데스크톱으로 전환 시에만 패널 닫기
-    // 데스크톱에서는 패널이 항상 보이도록 하기 위함입니다
+    console.log('📱 [PREVIEW_PANEL_STATE] 디바이스 타입 변경 감지:', {
+      isMobile,
+      isPreviewPanelOpen,
+      selectedMobileSize,
+      deviceType: isMobile ? 'mobile' : 'desktop',
+      timestamp: new Date().toISOString(),
+    });
+
+    // 모바일에서 데스크톱으로 전환 시 로깅
     if (!isMobile && isPreviewPanelOpen) {
-      console.log('💻 데스크톱 모드로 전환 - 패널 상태 유지');
+      console.log(
+        '💻 [PREVIEW_PANEL_STATE] 데스크톱 모드로 전환 - 패널 상태 유지'
+      );
     } else if (isMobile && !isPreviewPanelOpen) {
-      console.log('📱 모바일 모드로 전환 - 패널 상태 유지');
+      console.log(
+        '📱 [PREVIEW_PANEL_STATE] 모바일 모드로 전환 - 패널 상태 유지'
+      );
     }
-  }, [isMobile, isPreviewPanelOpen, setIsPreviewPanelOpen]);
+  }, [isMobile, isPreviewPanelOpen, selectedMobileSize]);
 
   // 반환 객체 메모이제이션
-  // useMemo를 사용하여 의존성이 변경될 때만 새 객체를 생성합니다
-  return useMemo(
-    () => ({
+  const returnValue = useMemo((): UsePreviewPanelStateReturn => {
+    console.log('🔄 [PREVIEW_PANEL_STATE] 반환 객체 생성:', {
+      selectedMobileSize,
+      hasSetFunction: !!setSelectedMobileSize,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
       selectedMobileSize,
       setSelectedMobileSize,
-    }),
-    [selectedMobileSize, setSelectedMobileSize]
+    };
+  }, [selectedMobileSize, setSelectedMobileSize]);
+
+  console.log(
+    '✅ [PREVIEW_PANEL_STATE] 훅 초기화 완료 (PreviewPanelStore 통합)'
   );
+
+  return returnValue;
 }
-//====여기까지 수정됨====

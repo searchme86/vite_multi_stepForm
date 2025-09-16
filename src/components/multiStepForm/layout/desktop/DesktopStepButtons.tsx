@@ -1,5 +1,10 @@
+import React from 'react';
 import { Button } from '@heroui/react';
-import { StepNumber, STEP_NUMBERS, getStepTitle } from '../../types/stepTypes';
+import {
+  StepNumber,
+  getStepNumbers,
+  getStepTitle,
+} from '../../types/stepTypes';
 
 interface DesktopStepButtonsProps {
   currentStep: StepNumber;
@@ -10,9 +15,7 @@ function DesktopStepButtons({
   currentStep,
   onStepChange,
 }: DesktopStepButtonsProps) {
-  console.log('🖥️ DesktopStepButtons: 데스크탑 스텝 버튼들 렌더링', {
-    currentStep,
-  });
+  const stepNumbers = React.useMemo(() => getStepNumbers(), []);
 
   const handleStepChange = (step: StepNumber) => {
     console.log('🖥️ DesktopStepButtons: 스텝 변경 시도', {
@@ -24,13 +27,8 @@ function DesktopStepButtons({
 
   return (
     <>
-      {STEP_NUMBERS.map((step) => {
+      {stepNumbers.map((step) => {
         const isCurrentStep = currentStep === step;
-
-        console.log('🖥️ DesktopStepButtons: 버튼 렌더링', {
-          step,
-          isCurrentStep,
-        });
 
         return (
           <Button

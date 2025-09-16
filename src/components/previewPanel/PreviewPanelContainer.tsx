@@ -1,40 +1,289 @@
-//====여기부터 수정됨====
-// 미리보기 패널 메인 컨테이너 - 무한 렌더링 해결
-import { ReactNode } from 'react';
+// src/components/previewPanel/PreviewPanelContainer.tsx
+
+import { ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button, Modal, ModalContent, ModalBody } from '@heroui/react';
 import { Icon } from '@iconify/react';
-import { dispatchClosePreviewPanel } from './utils/eventHandlers';
 import { useMobileDetection } from './hooks/useMobileDetection';
 import { useStoreData } from './hooks/useStoreData';
 import { useDataTransformers } from './hooks/useDataTransformers';
-import { usePreviewPanelState } from './hooks/usePreviewPanelState';
 import { useTouchHandlers } from './hooks/useTouchHandlers';
-import { useModalHandlers } from './hooks/useModalHandlers';
-import { useLocalStorage } from './hooks/useLocalStorage';
-import { useAdditionalState } from './hooks/useAdditionalState';
 import StatusIndicatorComponent from './parts/StatusIndicatorComponent';
-import PreviewContentComponent from './parts/PreviewContentComponent';
 import MobileContentComponent from './parts/MobileContentComponent';
 import DesktopContentComponent from './parts/DesktopContentComponent';
 
-function PreviewPanelContainer(): ReactNode {
-  console.log('🎯 PreviewPanelContainer 렌더링 시작');
+// 🎯 모바일 사이즈 타입 및 검증 함수 import
+import {
+  validateMobileSize,
+  getMobileDeviceInfo,
+  type MobileDeviceSize,
+} from './types/previewPanel.types';
 
-  // 모바일 감지 훅 - 메모이제이션 적용
+// 🔄 Zustand 스토어 import - UI 상태 관리 전용
+import { usePreviewPanelStore } from './store/previewPanelStore';
+
+// 폼 데이터 타입 정의
+interface FormData {
+  userImage: string | undefined;
+  nickname: string;
+  emailPrefix: string;
+  emailDomain: string;
+  bio: string | undefined;
+  title: string;
+  description: string;
+  tags: string | undefined;
+  content: string;
+  mainImage: string | null | undefined;
+  media: string[] | undefined;
+  sliderImages: string[] | undefined;
+  editorCompletedContent: string;
+  isEditorCompleted: boolean;
+}
+
+// 현재 폼 값 타입 정의
+interface CurrentFormValues {
+  title: string;
+  description: string;
+  content: string;
+  nickname: string;
+  emailPrefix: string;
+  emailDomain: string;
+  bio: string;
+  userImage: string | null;
+  mainImage: string | null;
+  media: string[];
+  sliderImages: string[];
+  tags: string;
+  editorCompletedContent: string;
+  isEditorCompleted: boolean;
+}
+
+// 디스플레이 콘텐츠 타입 정의
+interface DisplayContent {
+  text: string;
+  source: 'editor' | 'basic';
+}
+
+// 에디터 상태 정보 타입 정의
+interface EditorStatusInfo {
+  isCompleted: boolean;
+  contentLength: number;
+  hasContainers: boolean;
+  hasParagraphs: boolean;
+  hasEditor: boolean;
+  containerCount: number;
+  paragraphCount: number;
+}
+
+// 아바타 속성 타입 정의
+interface AvatarProps {
+  src: string;
+  name: string;
+  fallback: string;
+  className: string;
+  showFallback: boolean;
+  isBordered: boolean;
+}
+
+// 커스텀 갤러리 뷰 타입 정의
+interface CustomGalleryView {
+  id: string;
+  name: string;
+  images: string[];
+}
+
+function PreviewPanelContainer(): ReactNode {
+  console.log('🎯 [PREVIEW_PANEL] 컴포넌트 렌더링 시작 (역할 분리 버전)');
+
+  // 패널 엘리먼트 참조
+  const panelElementRef = useRef<HTMLDivElement>(null);
+
+  // 📱 모바일 감지 훅
   const { isMobile } = useMobileDetection();
 
-  // 스토어 데이터 훅 - 메모이제이션 적용하여 무한 렌더링 방지
-  const storeData = useStoreData();
-
-  // 추가 상태 관리 - 메모이제이션 적용
-  const { hasTabChanged, setHasTabChanged, isMountedRef } =
-    useAdditionalState();
-
-  // 스토어 데이터 구조분해할당 - 이미 메모이제이션된 데이터 사용
+  // 🔄 터치 핸들러 훅 (모바일에서만)
   const {
-    formData,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    handleHeaderClick,
+  } = useTouchHandlers();
+
+  // 🎯 PreviewPanelStore에서 UI 상태들 가져오기
+  const isPreviewPanelOpen = usePreviewPanelStore(
+    (state) => state.isPreviewPanelOpen
+  );
+  const selectedMobileSize = usePreviewPanelStore(
+    (state) => state.selectedMobileSize
+  );
+  const hasTabChanged = usePreviewPanelStore((state) => state.hasTabChanged);
+  const isMobileModalOpen = usePreviewPanelStore(
+    (state) => state.isMobileModalOpen
+  );
+  const isDesktopModalOpen = usePreviewPanelStore(
+    (state) => state.isDesktopModalOpen
+  );
+  const deviceType = usePreviewPanelStore((state) => state.deviceType);
+
+  // 🎯 PreviewPanelStore에서 UI 액션들 가져오기
+  const setSelectedMobileSize = usePreviewPanelStore(
+    (state) => state.setSelectedMobileSize
+  );
+  const setHasTabChanged = usePreviewPanelStore(
+    (state) => state.setHasTabChanged
+  );
+  const setDeviceType = usePreviewPanelStore((state) => state.setDeviceType);
+  const openMobileModal = usePreviewPanelStore(
+    (state) => state.openMobileModal
+  );
+  const closeMobileModal = usePreviewPanelStore(
+    (state) => state.closeMobileModal
+  );
+  const openDesktopModal = usePreviewPanelStore(
+    (state) => state.openDesktopModal
+  );
+  const closeDesktopModal = usePreviewPanelStore(
+    (state) => state.closeDesktopModal
+  );
+  const handleCloseButtonClick = usePreviewPanelStore(
+    (state) => state.handleCloseButtonClick
+  );
+
+  console.log('🎯 [PREVIEW_PANEL] UI 상태 로드 완료:', {
     isPreviewPanelOpen,
-    setIsPreviewPanelOpen,
+    selectedMobileSize,
+    hasTabChanged,
+    isMobileModalOpen,
+    isDesktopModalOpen,
+    deviceType,
+    timestamp: new Date().toISOString(),
+  });
+
+  // 🎯 모바일에서만 배경 스크롤 차단
+  useEffect(() => {
+    const shouldBlockBackgroundScroll = isMobile && isPreviewPanelOpen;
+
+    if (shouldBlockBackgroundScroll) {
+      const currentScrollY = window.scrollY;
+
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${currentScrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+
+      console.log('🚫 [SCROLL_LOCK] 모바일 배경 스크롤 차단 활성화:', {
+        currentScrollY,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      const scrollYString = document.body.style.top || '0';
+      const scrollY = parseInt(scrollYString, 10);
+
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+
+      const shouldRestoreScroll = scrollY !== 0;
+      if (shouldRestoreScroll) {
+        window.scrollTo(0, Math.abs(scrollY));
+      }
+
+      console.log('✅ [SCROLL_LOCK] 배경 스크롤 차단 해제:', {
+        restoredScrollY: Math.abs(scrollY),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, [isMobile, isPreviewPanelOpen]);
+
+  // 🎯 MobileContentComponent를 위한 픽셀 기반 사이즈 검증 함수
+  const handleSelectedMobileSizeChange = useCallback(
+    (requestedSizeValue: string) => {
+      console.log('🔍 [MOBILE_TAB] 모바일 사이즈 변경 요청 시작:', {
+        requestedSize: requestedSizeValue,
+        currentSize: selectedMobileSize,
+        timestamp: new Date().toISOString(),
+      });
+
+      const validationResult = validateMobileSize(requestedSizeValue);
+      const { isValid, validatedSize, errorMessage } = validationResult;
+
+      if (!isValid) {
+        console.warn('⚠️ [MOBILE_TAB] 유효하지 않은 모바일 사이즈:', {
+          requestedSize: requestedSizeValue,
+          errorMessage,
+          fallbackSize: validatedSize,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const deviceConfigInfo = getMobileDeviceInfo(validatedSize);
+      const {
+        size: finalSize,
+        width: deviceWidth,
+        label: deviceLabel,
+        description: deviceDescription,
+      } = deviceConfigInfo;
+
+      console.log('📏 [MOBILE_TAB] 모바일 사이즈 설정 완료:', {
+        requestedSize: requestedSizeValue,
+        isValid,
+        finalSize,
+        deviceWidth,
+        deviceLabel,
+        deviceDescription,
+        timestamp: new Date().toISOString(),
+      });
+
+      const hasSizeChanged = selectedMobileSize !== finalSize;
+      if (hasSizeChanged) {
+        setHasTabChanged(true);
+        console.log('🔄 [MOBILE_TAB] 탭 변경 상태 업데이트:', {
+          previousSize: selectedMobileSize,
+          newSize: finalSize,
+          hasChanged: true,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      setSelectedMobileSize(finalSize);
+    },
+    [selectedMobileSize, setSelectedMobileSize, setHasTabChanged]
+  );
+
+  // 🎯 디바이스 타입 계산 및 자동 동기화
+  const calculatedDeviceType = useMemo(() => {
+    return isMobile ? 'mobile' : 'desktop';
+  }, [isMobile]);
+
+  useEffect(() => {
+    const isDeviceTypeOutOfSync = deviceType !== calculatedDeviceType;
+
+    if (isDeviceTypeOutOfSync) {
+      console.log('📱 [DEVICE_TYPE] 디바이스 타입 동기화:', {
+        from: deviceType,
+        to: calculatedDeviceType,
+        trigger: 'mobile_detection_change',
+        timestamp: new Date().toISOString(),
+      });
+
+      setDeviceType(calculatedDeviceType);
+    }
+  }, [calculatedDeviceType, deviceType, setDeviceType]);
+
+  // 📊 스토어 데이터 훅 - 콘텐츠 데이터만 제공
+  const storeData = useStoreData();
+  const {
+    formData: rawFormData,
     customGalleryViews,
     editorContainers,
     editorParagraphs,
@@ -42,14 +291,45 @@ function PreviewPanelContainer(): ReactNode {
     isEditorCompleted,
   } = storeData;
 
-  // localStorage 기능 - 메모이제이션된 함수들 사용하여 무한 렌더링 방지
-  useLocalStorage({
-    isMobile,
-    isPreviewPanelOpen,
-    setIsPreviewPanelOpen,
+  console.log('📊 [PREVIEW_PANEL] 스토어 데이터 로드 완료:', {
+    hasRawFormData: !!rawFormData,
+    customGalleryViewsCount: customGalleryViews.length,
+    editorContainersCount: editorContainers.length,
+    editorParagraphsCount: editorParagraphs.length,
+    editorContentLength: editorCompletedContent.length,
+    isEditorCompleted,
+    timestamp: new Date().toISOString(),
   });
 
-  // 데이터 변환 훅 - 메모이제이션 적용하여 불필요한 재계산 방지
+  // 🎯 formData fallback 처리
+  const formData = useMemo(() => {
+    const hasRawFormData = rawFormData !== undefined;
+
+    if (hasRawFormData) {
+      return rawFormData;
+    }
+
+    const fallbackFormData: FormData = {
+      userImage: undefined,
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: undefined,
+      title: '',
+      description: '',
+      tags: undefined,
+      content: '',
+      mainImage: undefined,
+      media: undefined,
+      sliderImages: undefined,
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+
+    return fallbackFormData;
+  }, [rawFormData]);
+
+  // 🔄 데이터 변환 훅
   const transformedData = useDataTransformers({
     formData,
     editorCompletedContent,
@@ -58,138 +338,219 @@ function PreviewPanelContainer(): ReactNode {
     editorParagraphs,
   });
 
-  // 변환된 데이터 구조분해할당 - 이미 메모이제이션된 데이터 사용
   const {
-    currentFormValues,
-    displayContent,
-    editorStatusInfo,
+    currentFormValues: rawCurrentFormValues,
+    displayContent: rawDisplayContent,
+    editorStatusInfo: rawEditorStatusInfo,
     heroImage,
     isUsingFallbackImage,
     tagArray,
-    avatarProps,
+    avatarProps: rawAvatarProps,
     swiperKey,
-    email,
-    currentDate,
   } = transformedData;
 
-  // 패널 상태 관리 훅 - 메모이제이션 적용
-  const { selectedMobileSize, setSelectedMobileSize } = usePreviewPanelState({
+  // 🎯 타입 안전성 처리
+  const currentFormValues = useMemo((): CurrentFormValues => {
+    const hasRawCurrentFormValues = rawCurrentFormValues !== undefined;
+
+    if (hasRawCurrentFormValues) {
+      return {
+        title: rawCurrentFormValues.title ?? '',
+        description: rawCurrentFormValues.description ?? '',
+        content: rawCurrentFormValues.content ?? '',
+        nickname: rawCurrentFormValues.nickname ?? '',
+        emailPrefix: rawCurrentFormValues.emailPrefix ?? '',
+        emailDomain: rawCurrentFormValues.emailDomain ?? '',
+        bio: rawCurrentFormValues.bio ?? '',
+        userImage: rawCurrentFormValues.userImage ?? null,
+        mainImage: rawCurrentFormValues.mainImage ?? null,
+        media: Array.isArray(rawCurrentFormValues.media)
+          ? rawCurrentFormValues.media.filter(
+              (item): item is string => typeof item === 'string'
+            )
+          : [],
+        sliderImages: Array.isArray(rawCurrentFormValues.sliderImages)
+          ? rawCurrentFormValues.sliderImages.filter(
+              (item): item is string => typeof item === 'string'
+            )
+          : [],
+        tags: rawCurrentFormValues.tags ?? '',
+        editorCompletedContent:
+          rawCurrentFormValues.editorCompletedContent ?? '',
+        isEditorCompleted: rawCurrentFormValues.isEditorCompleted ?? false,
+      };
+    }
+
+    return {
+      title: '',
+      description: '',
+      content: '',
+      nickname: '',
+      emailPrefix: '',
+      emailDomain: '',
+      bio: '',
+      userImage: null,
+      mainImage: null,
+      media: [],
+      sliderImages: [],
+      tags: '',
+      editorCompletedContent: '',
+      isEditorCompleted: false,
+    };
+  }, [rawCurrentFormValues]);
+
+  const displayContent = useMemo((): DisplayContent => {
+    const isStringContent = typeof rawDisplayContent === 'string';
+
+    if (isStringContent) {
+      return {
+        text: rawDisplayContent,
+        source: 'editor',
+      };
+    }
+
+    return (
+      rawDisplayContent ?? {
+        text: '',
+        source: 'basic',
+      }
+    );
+  }, [rawDisplayContent]);
+
+  const editorStatusInfo = useMemo((): EditorStatusInfo => {
+    const hasRawEditorStatusInfo = rawEditorStatusInfo !== undefined;
+
+    if (hasRawEditorStatusInfo) {
+      return {
+        isCompleted: rawEditorStatusInfo.isCompleted ?? false,
+        contentLength: rawEditorStatusInfo.contentLength ?? 0,
+        hasContainers: rawEditorStatusInfo.hasContainers ?? false,
+        hasParagraphs: rawEditorStatusInfo.hasParagraphs ?? false,
+        hasEditor: rawEditorStatusInfo.hasEditor ?? false,
+        containerCount: rawEditorStatusInfo.containerCount ?? 0,
+        paragraphCount: rawEditorStatusInfo.paragraphCount ?? 0,
+      };
+    }
+
+    return {
+      isCompleted: false,
+      contentLength: 0,
+      hasContainers: false,
+      hasParagraphs: false,
+      hasEditor: false,
+      containerCount: 0,
+      paragraphCount: 0,
+    };
+  }, [rawEditorStatusInfo]);
+
+  const avatarProps = useMemo((): AvatarProps => {
+    const hasRawAvatarProps = rawAvatarProps !== undefined;
+
+    if (hasRawAvatarProps) {
+      return {
+        src: rawAvatarProps.src ?? '',
+        name: rawAvatarProps.name ?? '',
+        fallback: rawAvatarProps.fallback ?? '',
+        className: rawAvatarProps.className ?? '',
+        showFallback: rawAvatarProps.showFallback ?? true,
+        isBordered: rawAvatarProps.isBordered ?? false,
+      };
+    }
+
+    return {
+      src: '',
+      name: '',
+      fallback: '',
+      className: '',
+      showFallback: true,
+      isBordered: false,
+    };
+  }, [rawAvatarProps]);
+
+  // 타입 안전한 배열 처리
+  const safeMedia = useMemo(() => {
+    const hasMainImage = currentFormValues.mainImage !== null;
+    const mediaArray = hasMainImage ? [currentFormValues.mainImage] : [];
+
+    return mediaArray.filter(
+      (mediaItem): mediaItem is string => typeof mediaItem === 'string'
+    );
+  }, [currentFormValues.mainImage]);
+
+  const safeSliderImages = useMemo(() => {
+    const isValidSliderImages = Array.isArray(formData.sliderImages);
+    return isValidSliderImages ? formData.sliderImages : [];
+  }, [formData.sliderImages]);
+
+  // 닫기 버튼 클릭 핸들러
+  const handleCloseButtonClickAction = useCallback(() => {
+    console.log('❌ [CLOSE_BUTTON] 닫기 버튼 클릭:', {
+      deviceType: isMobile ? 'mobile' : 'desktop',
+      currentState: isPreviewPanelOpen ? 'open' : 'closed',
+      action: 'CLOSE_PANEL',
+      timestamp: new Date().toISOString(),
+    });
+
+    handleCloseButtonClick();
+  }, [handleCloseButtonClick, isMobile, isPreviewPanelOpen]);
+
+  console.log('🎯 [PREVIEW_PANEL] 렌더링 완료, JSX 반환:', {
     isMobile,
     isPreviewPanelOpen,
-    setIsPreviewPanelOpen,
+    timestamp: new Date().toISOString(),
   });
 
-  // 터치 핸들러 훅 - 메모이제이션 적용하여 이벤트 핸들러 최적화
-  const {
-    handleTouchStart,
-    handleTouchMove,
-    handleTouchEnd,
-    handleHeaderClick,
-  } = useTouchHandlers();
-
-  // 모달 핸들러 훅 - 메모이제이션 적용하여 모달 상태 최적화
-  const {
-    isMobileModalOpen,
-    isDesktopModalOpen,
-    handleMobileModalOpen,
-    handleMobileModalClose,
-    handleDesktopModalOpen,
-    handleDesktopModalClose,
-  } = useModalHandlers();
-
-  console.log('🎯 PreviewPanelContainer 렌더링 완료, 반환 시작');
-
   return (
-    <>
-      {/* 모바일 배경 오버레이 */}
-      {isMobile && isPreviewPanelOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => {
-            console.log('🖱️ 배경 클릭 - 패널 닫기');
-            dispatchClosePreviewPanel();
-          }}
+    <div
+      ref={panelElementRef}
+      className="flex flex-col h-full bg-white rounded-tl-[50px] rounded-tr-[50px]"
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchMove={isMobile ? handleTouchMove : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+    >
+      {/* 🎯 헤더 - 모바일과 데스크탑 다르게 처리 */}
+      {isMobile ? (
+        <MobileHeader
+          onHeaderClick={handleHeaderClick}
+          onCloseClick={handleCloseButtonClickAction}
+          handleTouchStart={handleTouchStart}
+          handleTouchMove={handleTouchMove}
+          handleTouchEnd={handleTouchEnd}
         />
+      ) : (
+        <DesktopHeader onCloseClick={handleCloseButtonClickAction} />
       )}
 
-      {/* 메인 패널 */}
+      {/* 🎯 패널 내용 */}
       <div
-        className={`
-          ${
-            isMobile
-              ? 'fixed bottom-0 left-0 right-0 bg-white shadow-2xl z-50 overflow-y-auto transition-transform duration-300 ease-in-out preview-panel-bottom-sheet rounded-t-3xl'
-              : 'relative preview-panel-desktop'
-          }
-          ${
-            isMobile && !isPreviewPanelOpen
-              ? 'translate-y-full'
-              : 'translate-y-0'
-          }
-          ${isMobile ? 'h-[85vh] max-h-[85vh]' : ''}
-        `}
-        onTouchStart={isMobile ? handleTouchStart : undefined}
-        onTouchMove={isMobile ? handleTouchMove : undefined}
-        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+        className={`flex-1 ${
+          isMobile
+            ? 'preview-panel-mobile-content'
+            : 'preview-panel-desktop-content'
+        }`}
       >
-        {/* 모바일 헤더 */}
-        {isMobile && (
-          <div className="sticky top-0 z-10 bg-white rounded-t-3xl">
-            <div
-              className="flex justify-center pt-3 pb-2 cursor-pointer header-clickable"
-              onClick={handleHeaderClick}
-            >
-              <div className="w-12 h-1 transition-all bg-gray-300 rounded-full hover:bg-gray-400 active:bg-gray-500 active:scale-95 drag-handle"></div>
-            </div>
-
-            <div
-              className="flex items-center justify-between p-4 transition-colors border-b cursor-pointer header-clickable"
-              onClick={handleHeaderClick}
-            >
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold">미리보기</h2>
-                <span className="text-xs text-gray-400 opacity-75">
-                  탭하여 닫기
-                </span>
-              </div>
-
-              <Button
-                isIconOnly
-                size="sm"
-                variant="light"
-                onPress={() => {
-                  console.log('❌ 닫기 버튼 클릭');
-                  dispatchClosePreviewPanel();
-                }}
-                aria-label="패널 닫기"
-                type="button"
-              >
-                <Icon icon="lucide:x" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* 패널 내용 */}
-        <div className={isMobile ? 'p-4' : ''}>
+        <div className={isMobile ? 'p-4' : 'p-6'}>
           {/* 상태 표시기 */}
-          <StatusIndicatorComponent
-            mainImage={currentFormValues.mainImage}
-            media={currentFormValues.media}
-            sliderImages={currentFormValues.sliderImages}
-            customGalleryViews={customGalleryViews}
-            editorStatusInfo={editorStatusInfo}
-            displayContent={displayContent}
-            isUsingFallbackImage={isUsingFallbackImage}
-          />
+          <div className="preview-panel-status-indicator">
+            <StatusIndicatorComponent
+              mainImage={currentFormValues.mainImage}
+              media={safeMedia}
+              sliderImages={safeSliderImages}
+              customGalleryViews={customGalleryViews}
+              editorStatusInfo={editorStatusInfo}
+              displayContent={displayContent}
+              isUsingFallbackImage={isUsingFallbackImage}
+            />
+          </div>
 
-          {/* 데스크탑 모달 버튼 */}
+          {/* 🎯 데스크탑 뷰 전용 - 미리보기 섹션 상단 버튼들 */}
           {!isMobile && (
             <div className="flex justify-end gap-2 mb-4">
               <Button
                 color="secondary"
                 variant="flat"
                 size="sm"
-                onPress={handleMobileModalOpen}
+                onPress={openMobileModal}
                 startContent={<Icon icon="lucide:smartphone" />}
                 className="text-xs shadow-sm sm:text-sm"
                 type="button"
@@ -202,7 +563,7 @@ function PreviewPanelContainer(): ReactNode {
                 color="primary"
                 variant="flat"
                 size="sm"
-                onPress={handleDesktopModalOpen}
+                onPress={openDesktopModal}
                 startContent={<Icon icon="lucide:monitor" />}
                 className="text-xs shadow-sm sm:text-sm"
                 type="button"
@@ -213,109 +574,257 @@ function PreviewPanelContainer(): ReactNode {
             </div>
           )}
 
-          {/* 미리보기 콘텐츠 */}
-          <PreviewContentComponent
-            currentFormValues={currentFormValues}
-            displayContent={displayContent}
-            heroImage={heroImage}
-            tagArray={tagArray}
-            avatarProps={avatarProps}
-            swiperKey={swiperKey}
-            customGalleryViews={customGalleryViews}
-          />
-
-          {/* 모바일 모달 */}
-          {isMobileModalOpen && (
-            <Modal
-              isOpen={isMobileModalOpen}
-              onClose={handleMobileModalClose}
-              size="full"
-              scrollBehavior="inside"
-              hideCloseButton={false}
-              backdrop="blur"
-            >
-              <ModalContent>
-                {() => (
-                  <ModalBody className="p-0">
-                    <div className="relative h-full">
-                      <Button
-                        isIconOnly
-                        color="default"
-                        variant="flat"
-                        size="sm"
-                        className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                        onPress={handleMobileModalClose}
-                        type="button"
-                      >
-                        <Icon icon="lucide:x" />
-                      </Button>
-                      <MobileContentComponent
-                        currentFormValues={currentFormValues}
-                        displayContent={displayContent}
-                        heroImage={heroImage}
-                        tagArray={tagArray}
-                        avatarProps={avatarProps}
-                        swiperKey={swiperKey}
-                        customGalleryViews={customGalleryViews}
-                        selectedMobileSize={selectedMobileSize}
-                        setSelectedMobileSize={setSelectedMobileSize}
-                        hasTabChanged={hasTabChanged}
-                        setHasTabChanged={setHasTabChanged}
-                      />
-                    </div>
-                  </ModalBody>
-                )}
-              </ModalContent>
-            </Modal>
-          )}
-
-          {/* 데스크탑 모달 */}
-          {isDesktopModalOpen && (
-            <Modal
-              isOpen={isDesktopModalOpen}
-              onClose={handleDesktopModalClose}
-              size="full"
-              scrollBehavior="inside"
-              hideCloseButton={false}
-              backdrop="blur"
-            >
-              <ModalContent>
-                {() => (
-                  <ModalBody className="p-0">
-                    <div className="relative">
-                      <Button
-                        isIconOnly
-                        color="default"
-                        variant="flat"
-                        size="sm"
-                        className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
-                        onPress={handleDesktopModalClose}
-                        type="button"
-                      >
-                        <Icon icon="lucide:x" />
-                      </Button>
-                      <div className="max-w-4xl mx-auto">
-                        <DesktopContentComponent
-                          currentFormValues={currentFormValues}
-                          displayContent={displayContent}
-                          heroImage={heroImage}
-                          tagArray={tagArray}
-                          avatarProps={avatarProps}
-                          swiperKey={swiperKey}
-                          customGalleryViews={customGalleryViews}
-                        />
-                      </div>
-                    </div>
-                  </ModalBody>
-                )}
-              </ModalContent>
-            </Modal>
-          )}
+          {/* 🎯 메인 콘텐츠 */}
+          <div className="preview-panel-content-fade">
+            <DesktopContentComponent
+              currentFormValues={currentFormValues}
+              displayContent={displayContent}
+              heroImage={heroImage}
+              tagArray={tagArray}
+              avatarProps={avatarProps}
+              swiperKey={swiperKey}
+              customGalleryViews={customGalleryViews}
+            />
+          </div>
         </div>
       </div>
+
+      {/* 🎯 모달들 */}
+      <PreviewModals
+        isMobileModalOpen={isMobileModalOpen}
+        isDesktopModalOpen={isDesktopModalOpen}
+        closeMobileModal={closeMobileModal}
+        closeDesktopModal={closeDesktopModal}
+        currentFormValues={currentFormValues}
+        displayContent={displayContent}
+        heroImage={heroImage}
+        tagArray={tagArray}
+        avatarProps={avatarProps}
+        swiperKey={swiperKey}
+        customGalleryViews={customGalleryViews}
+        selectedMobileSize={selectedMobileSize}
+        setSelectedMobileSize={handleSelectedMobileSizeChange}
+        hasTabChanged={hasTabChanged}
+        setHasTabChanged={setHasTabChanged}
+      />
+    </div>
+  );
+}
+
+// 🎯 모바일 헤더 컴포넌트
+interface MobileHeaderProps {
+  onHeaderClick: () => void;
+  onCloseClick: () => void;
+  handleTouchStart: (e: React.TouchEvent) => void;
+  handleTouchMove: (e: React.TouchEvent) => void;
+  handleTouchEnd: (e: React.TouchEvent) => void;
+}
+
+function MobileHeader({
+  onHeaderClick,
+  onCloseClick,
+  handleTouchStart,
+  handleTouchMove,
+  handleTouchEnd,
+}: MobileHeaderProps): ReactNode {
+  return (
+    <div className="preview-panel-mobile-header">
+      {/* 드래그 핸들 */}
+      <div
+        className="preview-panel-drag-handle"
+        onClick={onHeaderClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      />
+
+      {/* 헤더 콘텐츠 */}
+      <div
+        className="flex items-center justify-between p-4 transition-colors duration-300 border-b cursor-pointer"
+        onClick={onHeaderClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">미리보기</h2>
+          <span className="text-xs text-gray-400 opacity-75">탭하여 닫기</span>
+        </div>
+
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          onPress={onCloseClick}
+          aria-label="패널 닫기"
+          type="button"
+        >
+          <Icon icon="lucide:x" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// 🎯 데스크탑 헤더 컴포넌트
+interface DesktopHeaderProps {
+  onCloseClick: () => void;
+}
+
+function DesktopHeader({ onCloseClick }: DesktopHeaderProps): ReactNode {
+  return (
+    <div className="preview-panel-desktop-header">
+      <div className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-semibold">미리보기</h2>
+          <span className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded-full">
+            실시간 동기화
+          </span>
+        </div>
+
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          onPress={onCloseClick}
+          aria-label="패널 닫기"
+          type="button"
+          className="hover:bg-gray-100"
+        >
+          <Icon icon="lucide:x" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// 🎯 미리보기 모달들 컴포넌트
+interface PreviewModalsProps {
+  isMobileModalOpen: boolean;
+  isDesktopModalOpen: boolean;
+  closeMobileModal: () => void;
+  closeDesktopModal: () => void;
+  currentFormValues: CurrentFormValues;
+  displayContent: DisplayContent;
+  heroImage: string;
+  tagArray: string[];
+  avatarProps: AvatarProps;
+  swiperKey: string;
+  customGalleryViews: CustomGalleryView[];
+  selectedMobileSize: string;
+  setSelectedMobileSize: (size: string) => void;
+  hasTabChanged: boolean;
+  setHasTabChanged: (changed: boolean) => void;
+}
+
+function PreviewModals({
+  isMobileModalOpen,
+  isDesktopModalOpen,
+  closeMobileModal,
+  closeDesktopModal,
+  currentFormValues,
+  displayContent,
+  heroImage,
+  tagArray,
+  avatarProps,
+  swiperKey,
+  customGalleryViews,
+  selectedMobileSize,
+  setSelectedMobileSize,
+  hasTabChanged,
+  setHasTabChanged,
+}: PreviewModalsProps): ReactNode {
+  return (
+    <>
+      {/* 모바일뷰 보기 모달 */}
+      {isMobileModalOpen ? (
+        <Modal
+          isOpen={isMobileModalOpen}
+          onClose={closeMobileModal}
+          size="full"
+          scrollBehavior="inside"
+          hideCloseButton={false}
+          backdrop="blur"
+        >
+          <ModalContent>
+            {() => (
+              <ModalBody className="p-0">
+                <div className="relative h-full">
+                  <Button
+                    isIconOnly
+                    color="default"
+                    variant="flat"
+                    size="sm"
+                    className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                    onPress={closeMobileModal}
+                    type="button"
+                  >
+                    <Icon icon="lucide:x" />
+                  </Button>
+                  <MobileContentComponent
+                    currentFormValues={currentFormValues}
+                    displayContent={displayContent}
+                    heroImage={heroImage}
+                    tagArray={tagArray}
+                    avatarProps={avatarProps}
+                    swiperKey={swiperKey}
+                    customGalleryViews={customGalleryViews}
+                    selectedMobileSize={selectedMobileSize}
+                    setSelectedMobileSize={setSelectedMobileSize}
+                    hasTabChanged={hasTabChanged}
+                    setHasTabChanged={setHasTabChanged}
+                  />
+                </div>
+              </ModalBody>
+            )}
+          </ModalContent>
+        </Modal>
+      ) : null}
+
+      {/* 데스크탑뷰 보기 모달 */}
+      {isDesktopModalOpen ? (
+        <Modal
+          isOpen={isDesktopModalOpen}
+          onClose={closeDesktopModal}
+          size="full"
+          scrollBehavior="inside"
+          hideCloseButton={false}
+          backdrop="blur"
+        >
+          <ModalContent>
+            {() => (
+              <ModalBody className="p-0">
+                <div className="relative">
+                  <Button
+                    isIconOnly
+                    color="default"
+                    variant="flat"
+                    size="sm"
+                    className="absolute z-50 top-4 right-4 bg-white/80 backdrop-blur-sm"
+                    onPress={closeDesktopModal}
+                    type="button"
+                  >
+                    <Icon icon="lucide:x" />
+                  </Button>
+                  <div className="max-w-4xl mx-auto">
+                    <DesktopContentComponent
+                      currentFormValues={currentFormValues}
+                      displayContent={displayContent}
+                      heroImage={heroImage}
+                      tagArray={tagArray}
+                      avatarProps={avatarProps}
+                      swiperKey={swiperKey}
+                      customGalleryViews={customGalleryViews}
+                    />
+                  </div>
+                </div>
+              </ModalBody>
+            )}
+          </ModalContent>
+        </Modal>
+      ) : null}
     </>
   );
 }
 
 export default PreviewPanelContainer;
-//====여기까지 수정됨====

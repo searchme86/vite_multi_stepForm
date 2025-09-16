@@ -6,7 +6,7 @@ import { Container } from '../../types/container';
 import {
   ParagraphBlock,
   Container as ZustandContainer,
-} from '../../store/shared/commonTypes';
+} from '../../../../store/shared/commonTypes.ts';
 
 /**
  * Zustand ParagraphBlock 타입을 LocalParagraph 타입으로 변환하는 함수

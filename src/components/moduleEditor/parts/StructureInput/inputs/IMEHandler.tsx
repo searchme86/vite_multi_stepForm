@@ -5,9 +5,9 @@ import InputField from './InputField';
 interface IMEHandlerProps {
   index: number;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (inputValue: string) => void;
   onCompositionStart: () => void;
-  onCompositionEnd: (value: string) => void;
+  onCompositionEnd: (finalValue: string) => void;
 }
 
 function IMEHandler({
@@ -17,41 +17,61 @@ function IMEHandler({
   onCompositionStart,
   onCompositionEnd,
 }: IMEHandlerProps) {
-  console.log('🎌 [IME_HANDLER] 처리:', { index, valueLength: value.length });
+  const validatedCurrentValue = typeof value === 'string' ? value : '';
+  const validatedInputIndex =
+    typeof index === 'number' && index >= 0 ? index : 0;
 
-  const handleChange = useCallback(
-    (newValue: string) => {
-      console.log('🚀 [IME_HANDLER] 모든 입력 처리:', {
-        index,
-        value: newValue,
+  const handleInputValueChange = useCallback(
+    (newInputValue: string) => {
+      const validatedValue =
+        typeof newInputValue === 'string' ? newInputValue : '';
+
+      console.log('🚀 [IME_HANDLER] 입력 처리:', {
+        index: validatedInputIndex,
+        value: validatedValue,
         timestamp: Date.now(),
       });
-      onChange(newValue);
+
+      if (typeof onChange === 'function') {
+        onChange(validatedValue);
+      }
     },
-    [index, onChange]
+    [validatedInputIndex, onChange]
   );
 
-  const handleCompositionStart = useCallback(() => {
-    console.log('🎌 [IME_HANDLER] IME 시작:', index);
-    onCompositionStart();
-  }, [index, onCompositionStart]);
+  const handleIMECompositionStart = useCallback(() => {
+    console.log('🎌 [IME_HANDLER] IME 시작:', validatedInputIndex);
 
-  const handleCompositionEnd = useCallback(
-    (newValue: string) => {
-      console.log('🏁 [IME_HANDLER] IME 완료:', { index, value: newValue });
-      onCompositionEnd(newValue);
+    if (typeof onCompositionStart === 'function') {
+      onCompositionStart();
+    }
+  }, [validatedInputIndex, onCompositionStart]);
+
+  const handleIMECompositionEnd = useCallback(
+    (finalCompositionValue: string) => {
+      const validatedValue =
+        typeof finalCompositionValue === 'string' ? finalCompositionValue : '';
+
+      console.log('🏁 [IME_HANDLER] IME 완료:', {
+        index: validatedInputIndex,
+        finalValue: validatedValue,
+      });
+
+      if (typeof onCompositionEnd === 'function') {
+        onCompositionEnd(validatedValue);
+      }
     },
-    [index, onCompositionEnd]
+    [validatedInputIndex, onCompositionEnd]
   );
 
   return (
     <InputField
-      id={`section-input-${index}`}
-      value={value}
-      placeholder={`섹션 ${index + 1} 이름을 입력하세요`}
-      onChange={handleChange}
-      onCompositionStart={handleCompositionStart}
-      onCompositionEnd={handleCompositionEnd}
+      id={`section-input-${validatedInputIndex}`}
+      value={validatedCurrentValue}
+      placeholder={`섹션 ${validatedInputIndex + 1} 이름을 입력하세요`}
+      onChange={handleInputValueChange}
+      onCompositionStart={handleIMECompositionStart}
+      onCompositionEnd={handleIMECompositionEnd}
     />
   );
 }

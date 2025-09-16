@@ -1,114 +1,389 @@
+/* src/index.css */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* globals.css 또는 해당 컴포넌트 스타일 파일에 추가 */
+/* 🎯 뷰포트 크기 정규화 - TailwindCSS Preflight 이후 즉시 적용 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-/* 모바일 bottom-sheet 패널 애니메이션 개선 */
+html {
+  width: 100vw;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 🎯 외부 스크립트 스타일 충돌 방지 */
+body * {
+  max-width: 100% !important;
+}
+
+.heroui-container,
+.heroui-wrapper,
+[data-heroui-chat],
+[data-select-edit] {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* 🎯 최신 뷰포트 단위 지원 */
+@supports (height: 100dvh) {
+  html {
+    height: 100dvh;
+  }
+
+  body {
+    min-height: 100dvh;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+}
+
+/* ============================================ */
+/* 🎯 데스크탑 오버레이 패널 스타일 (블러 제거 및 여백 추가) */
+/* ============================================ */
+
+@media (min-width: 768px) {
+  /* 🎯 데스크탑 배경 오버레이 - 블러 제거 및 투명도 대폭 감소 */
+  .preview-panel-desktop-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    /* 🎯 블러 제거 및 투명도 대폭 감소 - 왼쪽 콘텐츠가 잘 보이도록 */
+    background-color: rgba(0, 0, 0, 0.05);
+    backdrop-filter: none;
+    opacity: 0;
+    transition: opacity 800ms ease-out;
+    pointer-events: none;
+  }
+
+  .preview-panel-desktop-backdrop.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* 🎯 데스크탑 오버레이 패널 - 여백 추가 및 크기 조정 */
+  .preview-panel-desktop-overlay {
+    position: fixed;
+    /* 🎯 상단과 우측에 여백 추가 */
+    top: 20px;
+    right: 20px;
+    z-index: 50;
+    /* 🎯 높이도 여백을 고려해서 조정 */
+    width: 580px;
+    height: calc(100vh - 40px);
+    background-color: white;
+    border: 1px solid rgb(229, 231, 235);
+    border-radius: 12px;
+    /* 🎯 더 부드러운 그림자 효과 */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 8px 40px rgba(0, 0, 0, 0.12);
+
+    /* 🎯 매우 부드러운 스무스 애니메이션 */
+    transform: translateX(100%);
+    transition: transform 1200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    /* GPU 가속 최적화 */
+    will-change: transform;
+    backface-visibility: hidden;
+    overflow: hidden;
+  }
+
+  .preview-panel-desktop-overlay.is-open {
+    transform: translateX(0);
+  }
+
+  /* 데스크탑 패널 헤더 */
+  .preview-panel-desktop-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: white;
+    border-bottom: 1px solid rgb(229, 231, 235);
+    backdrop-filter: blur(8px);
+    background-color: rgba(255, 255, 255, 0.95);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+  }
+
+  /* 데스크탑 패널 콘텐츠 */
+  .preview-panel-desktop-content {
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(156, 163, 175) rgb(243, 244, 246);
+  }
+
+  .preview-panel-desktop-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .preview-panel-desktop-content::-webkit-scrollbar-track {
+    background: rgb(243, 244, 246);
+  }
+
+  .preview-panel-desktop-content::-webkit-scrollbar-thumb {
+    background: rgb(156, 163, 175);
+    border-radius: 4px;
+  }
+
+  .preview-panel-desktop-content::-webkit-scrollbar-thumb:hover {
+    background: rgb(107, 114, 128);
+  }
+}
+
+/* ============================================ */
+/* 🎯 모바일 bottom-sheet 패널 스타일 (기존 유지 + 개선) */
+/* ============================================ */
+
 @media (max-width: 767px) {
   /* 바디 스크롤 방지 (패널 열렸을 때) */
   body.preview-panel-open {
     overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
   }
 
-  /* bottom-sheet 그림자 효과 */
-  .preview-panel-bottom-sheet {
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
-  }
-
-  /* 드래그 핸들 호버 효과 */
-  .preview-panel-bottom-sheet .drag-handle:hover {
+  /* 🎯 모바일 배경 오버레이 - 블러 제거 및 투명도 감소 */
+  .preview-panel-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    /* 🎯 블러 제거 및 투명도 감소 - 모바일에서도 배경이 잘 보이도록 */
     background-color: rgba(0, 0, 0, 0.2);
+    backdrop-filter: none;
+    opacity: 0;
+    transition: opacity 900ms ease-out;
+    pointer-events: none;
   }
 
-  /* 모바일 패널 bottom-sheet 트랜지션 */
+  .preview-panel-mobile-backdrop.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* bottom-sheet 패널 - 🎯 매우 부드러운 스무스 애니메이션 */
   .preview-panel-bottom-sheet {
-    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
-      box-shadow 0.3s ease-in-out;
-    will-change: transform;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    height: 85vh;
+    background-color: white;
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+
+    /* 🎯 매우 부드러운 스무스 애니메이션 */
+    transform: translateY(100%);
+    transition: transform 1300ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    /* GPU 가속 최적화 */
+    will-change: transform;
+    backface-visibility: hidden;
   }
 
-  /* 모바일 오버레이 트랜지션 */
-  .preview-panel-overlay {
-    animation: fadeIn 0.3s ease-in-out;
+  .preview-panel-bottom-sheet.is-open {
+    transform: translateY(0);
   }
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  /* bottom-sheet 스와이프 힌트 (상단 드래그 바) */
-  .preview-panel-bottom-sheet::before {
-    content: '';
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
+  /* 드래그 핸들 스타일링 - 🎯 매우 부드러운 애니메이션 */
+  .preview-panel-drag-handle {
     width: 48px;
     height: 4px;
     background-color: rgba(0, 0, 0, 0.15);
     border-radius: 2px;
-    z-index: 1000;
+    margin: 12px auto 8px;
+    cursor: grab;
+    transition: all 600ms ease-out;
   }
 
-  /* bottom-sheet가 열렸을 때 추가 스타일링 */
-  .preview-panel-bottom-sheet.open {
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
+  .preview-panel-drag-handle:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+    transform: scaleX(1.1);
   }
 
-  /* 스와이프 저항감 추가 */
+  .preview-panel-drag-handle:active {
+    cursor: grabbing;
+    background-color: rgba(0, 0, 0, 0.3);
+    transform: scaleX(0.9) scaleY(1.2);
+  }
+
+  /* 모바일 패널 헤더 */
+  .preview-panel-mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: white;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    backdrop-filter: blur(10px);
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+
+  /* 모바일 패널 콘텐츠 */
+  .preview-panel-mobile-content {
+    height: calc(85vh - 80px); /* 헤더 높이 제외 */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .preview-panel-mobile-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .preview-panel-mobile-content::-webkit-scrollbar-track {
+    background: rgb(243, 244, 246);
+  }
+
+  .preview-panel-mobile-content::-webkit-scrollbar-thumb {
+    background: rgb(156, 163, 175);
+    border-radius: 3px;
+  }
+
+  .preview-panel-mobile-content::-webkit-scrollbar-thumb:hover {
+    background: rgb(107, 114, 128);
+  }
+
+  /* 스와이프 인터랙션 상태 - 🎯 매우 부드러운 스냅 백 */
   .preview-panel-bottom-sheet.swiping {
     transition: none;
   }
 
-  /* 스냅 애니메이션 */
   .preview-panel-bottom-sheet.snapping {
-    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: transform 600ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* 안전 영역 고려 (노치가 있는 디바이스) */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .preview-panel-bottom-sheet {
+      padding-bottom: env(safe-area-inset-bottom);
+      height: calc(85vh + env(safe-area-inset-bottom));
+    }
   }
 }
 
-/* 데스크탑에서 PreviewPanel 스티키 포지션 */
+/* ============================================ */
+/* 🎯 공통 애니메이션 및 트랜지션 */
+/* ============================================ */
+
+/* 상태 표시기 애니메이션 - 🎯 더욱 부드러운 진입 */
+.preview-panel-status-indicator {
+  animation: slideInFromTop 700ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 콘텐츠 페이드인 애니메이션 - 🎯 패널 열림 후 충분한 지연과 부드러운 등장 */
+.preview-panel-content-fade {
+  animation: fadeInUp 800ms cubic-bezier(0.23, 1, 0.32, 1) 600ms both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 부드러운 페이드 효과 - 🎯 매우 자연스러운 타이밍 */
+.preview-panel-content-smooth {
+  animation: slideUpIn 700ms ease-out 500ms both;
+}
+
+@keyframes slideUpIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================ */
+/* 🎯 기존 스타일 유지 (호환성) */
+/* ============================================ */
+
+/* 🎯 모바일 최적화 */
+@media (max-width: 768px) {
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    touch-action: pan-y;
+  }
+}
+
+/* 데스크탑에서 PreviewPanel 스티키 포지션 (기존 방식 - 현재는 사용 안함) */
 @media (min-width: 768px) {
   .preview-panel-desktop {
     position: sticky;
     top: 20px;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
-  }
-
-  /* 데스크탑 스크롤 성능 최적화 */
-  .preview-panel-desktop {
     will-change: scroll-position;
   }
-}
-
-/* 스크롤바 스타일링 (모바일 & 데스크탑) */
-.preview-panel-bottom-sheet::-webkit-scrollbar,
-.preview-panel-desktop::-webkit-scrollbar {
-  width: 6px;
-}
-
-.preview-panel-bottom-sheet::-webkit-scrollbar-track,
-.preview-panel-desktop::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.preview-panel-bottom-sheet::-webkit-scrollbar-thumb,
-.preview-panel-desktop::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 3px;
-}
-
-.preview-panel-bottom-sheet::-webkit-scrollbar-thumb:hover,
-.preview-panel-desktop::-webkit-scrollbar-thumb:hover {
-  background: #555;
 }
 
 /* 세로 쓰기 버튼 스타일 개선 (BlogMediaStep.tsx의 미리보기 버튼용) */
@@ -130,116 +405,103 @@ button[aria-label='미리보기 패널 토글']:active {
   transform: translateX(-2px) scale(0.98);
 }
 
-/* 모바일 헤더 고정 - bottom-sheet용 */
-@media (max-width: 767px) {
-  .preview-panel-bottom-sheet .sticky {
-    backdrop-filter: blur(10px);
-    background-color: rgba(255, 255, 255, 0.95);
-    border-top-left-radius: 24px;
-    border-top-right-radius: 24px;
-  }
-}
+/* ============================================ */
+/* 🎯 접근성 및 성능 최적화 */
+/* ============================================ */
 
-/* 부드러운 페이드 효과 */
-.preview-panel-content {
-  animation: slideUpIn 0.4s ease-out;
-}
-
-@keyframes slideUpIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* bottom-sheet 전용 키프레임 애니메이션 */
-@keyframes bottomSheetSlideUp {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes bottomSheetSlideDown {
-  from {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-}
-
-/* bottom-sheet 패널 진입/퇴장 애니메이션 */
-.preview-panel-bottom-sheet.entering {
-  animation: bottomSheetSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.preview-panel-bottom-sheet.leaving {
-  animation: bottomSheetSlideDown 0.25s cubic-bezier(0.55, 0.06, 0.68, 0.19);
-}
-
-/* 반응형 브레이크포인트 조정 */
-@media (min-width: 768px) and (max-width: 1023px) {
-  /* 태블릿 최적화 */
-  .preview-panel-desktop {
-    max-width: 450px;
-  }
-}
-
-/* 접근성 개선 */
+/* 성능 최적화를 위한 reduced-motion 지원 - 🎯 접근성 고려한 부드러운 단축 버전 */
 @media (prefers-reduced-motion: reduce) {
+  .preview-panel-desktop-overlay,
   .preview-panel-bottom-sheet,
-  .preview-panel-desktop,
-  .preview-panel-content {
-    animation: none;
-    transition: none;
+  .preview-panel-desktop-backdrop,
+  .preview-panel-mobile-backdrop,
+  .preview-panel-drag-handle,
+  .preview-panel-status-indicator,
+  .preview-panel-content-fade,
+  .preview-panel-content-smooth {
+    animation: none !important;
+    transition: transform 400ms ease-out, opacity 400ms ease-out !important;
   }
 
-  .preview-panel-bottom-sheet {
-    transition: transform 0.1s linear;
+  .preview-panel-desktop-overlay.is-open {
+    transform: translateX(0);
+  }
+
+  .preview-panel-bottom-sheet.is-open {
+    transform: translateY(0);
+  }
+
+  .preview-panel-desktop-backdrop.is-visible,
+  .preview-panel-mobile-backdrop.is-visible {
+    opacity: 1;
   }
 }
 
-/* 다크모드 지원 (선택사항) */
+/* ============================================ */
+/* 🎯 다크모드 지원 (선택사항) */
+/* ============================================ */
+
 @media (prefers-color-scheme: dark) {
-  .preview-panel-bottom-sheet {
-    background-color: #1a1a1a;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  /* 데스크탑 다크모드 */
+  @media (min-width: 768px) {
+    .preview-panel-desktop-content::-webkit-scrollbar-track {
+      background: rgb(64, 64, 64);
+    }
+
+    .preview-panel-desktop-content::-webkit-scrollbar-thumb {
+      background: rgb(156, 163, 175);
+    }
+
+    .preview-panel-desktop-content::-webkit-scrollbar-thumb:hover {
+      background: rgb(209, 213, 219);
+    }
   }
 
-  .preview-panel-bottom-sheet::before {
-    background-color: rgba(255, 255, 255, 0.2);
+  /* 모바일 다크모드 */
+  @media (max-width: 767px) {
+    .preview-panel-bottom-sheet {
+      background-color: rgb(26, 26, 26);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .preview-panel-drag-handle {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .preview-panel-drag-handle:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .preview-panel-drag-handle:active {
+      background-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .preview-panel-mobile-content::-webkit-scrollbar-track {
+      background: rgb(64, 64, 64);
+    }
+
+    .preview-panel-mobile-content::-webkit-scrollbar-thumb {
+      background: rgb(156, 163, 175);
+    }
+
+    .preview-panel-mobile-content::-webkit-scrollbar-thumb:hover {
+      background: rgb(209, 213, 219);
+    }
   }
 
-  .preview-panel-bottom-sheet::-webkit-scrollbar-track,
-  .preview-panel-desktop::-webkit-scrollbar-track {
-    background: #2a2a2a;
+  /* 🎯 다크모드 배경 오버레이 - 블러 제거 상태 유지 */
+  .preview-panel-desktop-backdrop {
+    background-color: rgba(0, 0, 0, 0.1);
   }
 
-  .preview-panel-bottom-sheet::-webkit-scrollbar-thumb,
-  .preview-panel-desktop::-webkit-scrollbar-thumb {
-    background: #666;
-  }
-
-  .preview-panel-bottom-sheet::-webkit-scrollbar-thumb:hover,
-  .preview-panel-desktop::-webkit-scrollbar-thumb:hover {
-    background: #888;
-  }
-
-  .preview-panel-bottom-sheet .sticky {
-    background-color: rgba(26, 26, 26, 0.95);
+  .preview-panel-mobile-backdrop {
+    background-color: rgba(0, 0, 0, 0.3);
   }
 }
+
+/* ============================================ */
+/* 🎯 유틸리티 클래스 */
+/* ============================================ */
 
 /* Tailwind 유틸리티 클래스 보완 */
 .hide-scrollbar {
@@ -251,41 +513,96 @@ button[aria-label='미리보기 패널 토글']:active {
   display: none;
 }
 
-/* bottom-sheet 특별 유틸리티 클래스 */
-.bottom-sheet-handle {
-  width: 48px;
-  height: 4px;
-  background-color: rgba(0, 0, 0, 0.15);
-  border-radius: 2px;
-  margin: 0 auto;
-  margin-top: 12px;
-  margin-bottom: 8px;
-  cursor: grab;
-  transition: background-color 0.2s ease;
-}
-
-.bottom-sheet-handle:hover {
-  background-color: rgba(0, 0, 0, 0.25);
-}
-
-.bottom-sheet-handle:active {
-  cursor: grabbing;
-  background-color: rgba(0, 0, 0, 0.3);
-}
-
-/* 모바일 뷰포트 높이 조정 */
-@media (max-width: 767px) {
-  .bottom-sheet-container {
-    height: 85vh;
-    max-height: 85vh;
-    min-height: 50vh;
+/* 고해상도 디스플레이 최적화 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .preview-panel-desktop-overlay {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08), 0 4px 20px rgba(0, 0, 0, 0.12);
   }
 
-  /* 안전 영역 고려 (노치가 있는 디바이스) */
-  @supports (padding-bottom: env(safe-area-inset-bottom)) {
-    .bottom-sheet-container {
-      padding-bottom: env(safe-area-inset-bottom);
-      height: calc(85vh - env(safe-area-inset-bottom));
-    }
+  .preview-panel-bottom-sheet {
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1), 0 -4px 20px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* 🎯 반응형 브레이크포인트 조정 - 여백 고려 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* 태블릿 최적화 */
+  .preview-panel-desktop-overlay {
+    width: 420px;
+    right: 16px;
+    top: 16px;
+    height: calc(100vh - 32px);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  /* 작은 데스크탑 최적화 */
+  .preview-panel-desktop-overlay {
+    width: 520px;
+    right: 18px;
+    top: 18px;
+    height: calc(100vh - 36px);
+  }
+}
+
+@media (min-width: 1280px) {
+  /* 큰 데스크탑 최적화 */
+  .preview-panel-desktop-overlay {
+    width: 620px;
+    right: 24px;
+    top: 24px;
+    height: calc(100vh - 48px);
+  }
+}
+
+/* ============================================ */
+/* 🎯 추가 개선사항 - 왼쪽 콘텐츠 작업 편의성 증대 */
+/* ============================================ */
+
+/* 🎯 패널이 열렸을 때 메인 콘텐츠 영역 여백 추가 (선택사항) */
+@media (min-width: 768px) {
+  .preview-panel-active-layout {
+    padding-right: 640px;
+    transition: padding-right 1200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .preview-panel-inactive-layout {
+    padding-right: 0;
+    transition: padding-right 1200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* 🎯 패널 그림자 효과 개선 - 더 자연스러운 깊이감 */
+@media (min-width: 768px) {
+  .preview-panel-desktop-overlay {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.08),
+      0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* 🎯 미리보기 패널 상태 표시 개선 */
+.preview-panel-status-active {
+  position: relative;
+}
+
+.preview-panel-status-active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }

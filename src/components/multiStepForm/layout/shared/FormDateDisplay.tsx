@@ -6,7 +6,7 @@ function FormDateDisplay() {
   const currentDate = getCurrentDateString();
 
   return (
-    <span className="hidden text-xs sm:text-sm text-default-500 sm:inline">
+    <span className="text-xs sm:text-sm text-default-500 sm:inline">
       작성 날짜: {currentDate}
     </span>
   );

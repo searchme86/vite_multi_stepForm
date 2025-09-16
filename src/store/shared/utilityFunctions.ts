@@ -336,3 +336,141 @@ export const createDefaultImageViewConfig = (): ImageViewConfig => {
     filter: 'all', // 기본적으로 모든 이미지를 표시
   };
 };
+
+//====여기부터 수정됨====
+/**
+ * 브라우저 저장소를 완전히 초기화하는 유틸리티 함수
+ * 1. localStorage에서 에디터 관련 모든 데이터 삭제
+ * 2. sessionStorage에서 에디터 관련 모든 데이터 삭제
+ * 3. 개발자 도구나 디버깅 목적으로 사용 가능
+ */
+export const clearAllEditorStorage = (): void => {
+  console.log('🧹 [UTILITY] 모든 에디터 저장소 완전 삭제 시작');
+
+  try {
+    // 1. localStorage 에디터 데이터 삭제
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const editorCoreKey = 'editor-core-storage';
+      window.localStorage.removeItem(editorCoreKey);
+      console.log(`🗑️ [UTILITY] localStorage ${editorCoreKey} 삭제 완료`);
+
+      // 추가로 다른 에디터 관련 키들도 삭제 (있다면)
+      const allKeys = Object.keys(window.localStorage);
+      const editorKeys = allKeys.filter((key) => key.startsWith('editor-'));
+      editorKeys.forEach((key) => {
+        window.localStorage.removeItem(key);
+        console.log(`🗑️ [UTILITY] localStorage ${key} 추가 삭제`);
+      });
+    }
+
+    // 2. sessionStorage 에디터 데이터 삭제
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const editorUIKey = 'editor-ui-storage';
+      window.sessionStorage.removeItem(editorUIKey);
+      console.log(`🗑️ [UTILITY] sessionStorage ${editorUIKey} 삭제 완료`);
+
+      // 추가로 다른 에디터 관련 키들도 삭제 (있다면)
+      const allKeys = Object.keys(window.sessionStorage);
+      const editorKeys = allKeys.filter((key) => key.startsWith('editor-'));
+      editorKeys.forEach((key) => {
+        window.sessionStorage.removeItem(key);
+        console.log(`🗑️ [UTILITY] sessionStorage ${key} 추가 삭제`);
+      });
+    }
+
+    console.log('✅ [UTILITY] 모든 에디터 저장소 완전 삭제 완료');
+
+    // 3. 페이지 새로고침 권장 알림 (선택적)
+    if (typeof window !== 'undefined' && window.confirm) {
+      const shouldReload = window.confirm(
+        '에디터 저장소가 완전히 초기화되었습니다. 페이지를 새로고침하시겠습니까?'
+      );
+      if (shouldReload && window.location) {
+        window.location.reload();
+      }
+    }
+  } catch (error) {
+    console.error('❌ [UTILITY] 저장소 삭제 중 오류:', error);
+  }
+};
+
+/**
+ * 개발자 도구용: 현재 저장소 상태를 확인하는 함수
+ * 1. localStorage에 저장된 에디터 데이터 출력
+ * 2. sessionStorage에 저장된 에디터 데이터 출력
+ * 3. 저장소 크기 및 키 목록 표시
+ */
+export const inspectEditorStorage = (): void => {
+  console.group('🔍 [UTILITY] 에디터 저장소 상태 검사');
+
+  try {
+    // 1. localStorage 검사
+    if (typeof window !== 'undefined' && window.localStorage) {
+      console.group('💾 localStorage 상태');
+
+      const editorCoreData = window.localStorage.getItem('editor-core-storage');
+      if (editorCoreData) {
+        console.log('📊 editor-core-storage:', JSON.parse(editorCoreData));
+        console.log('📏 크기:', new Blob([editorCoreData]).size, 'bytes');
+      } else {
+        console.log('❌ editor-core-storage: 데이터 없음');
+      }
+
+      // 다른 에디터 관련 키들 검사
+      const allLocalKeys = Object.keys(window.localStorage);
+      const editorLocalKeys = allLocalKeys.filter((key) =>
+        key.startsWith('editor-')
+      );
+      console.log('🔑 에디터 관련 키들:', editorLocalKeys);
+
+      console.groupEnd();
+    }
+
+    // 2. sessionStorage 검사
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      console.group('🗂️ sessionStorage 상태');
+
+      const editorUIData = window.sessionStorage.getItem('editor-ui-storage');
+      if (editorUIData) {
+        console.log('📊 editor-ui-storage:', JSON.parse(editorUIData));
+        console.log('📏 크기:', new Blob([editorUIData]).size, 'bytes');
+      } else {
+        console.log('❌ editor-ui-storage: 데이터 없음');
+      }
+
+      // 다른 에디터 관련 키들 검사
+      const allSessionKeys = Object.keys(window.sessionStorage);
+      const editorSessionKeys = allSessionKeys.filter((key) =>
+        key.startsWith('editor-')
+      );
+      console.log('🔑 에디터 관련 키들:', editorSessionKeys);
+
+      console.groupEnd();
+    }
+  } catch (error) {
+    console.error('❌ [UTILITY] 저장소 검사 중 오류:', error);
+  }
+
+  console.groupEnd();
+};
+
+/**
+ * 브라우저 콘솔에서 사용할 수 있는 전역 디버그 함수들을 등록
+ * 1. window.clearEditorStorage: 완전 초기화 함수
+ * 2. window.inspectEditorStorage: 저장소 상태 검사 함수
+ * 3. 개발 및 디버깅 목적으로 사용
+ */
+export const registerEditorDebugFunctions = (): void => {
+  if (typeof window !== 'undefined') {
+    // @ts-ignore - 전역 디버그 함수는 타입 체크 무시
+    window.clearEditorStorage = clearAllEditorStorage;
+    // @ts-ignore - 전역 디버그 함수는 타입 체크 무시
+    window.inspectEditorStorage = inspectEditorStorage;
+
+    console.log('🛠️ [UTILITY] 에디터 디버그 함수 등록 완료');
+    console.log('💡 [UTILITY] 사용법:');
+    console.log('   - window.clearEditorStorage(): 모든 에디터 데이터 삭제');
+    console.log('   - window.inspectEditorStorage(): 현재 저장소 상태 확인');
+  }
+};
+//====여기까지 수정됨====

@@ -1,5 +1,6 @@
+import React from 'react';
 import { Button } from '@heroui/react';
-import { StepNumber, STEP_NUMBERS } from '../../types/stepTypes';
+import { StepNumber, getStepNumbers } from '../../types/stepTypes';
 
 interface MobileStepButtonsProps {
   currentStep: StepNumber;
@@ -10,9 +11,7 @@ function MobileStepButtons({
   currentStep,
   onStepChange,
 }: MobileStepButtonsProps) {
-  console.log('📱 MobileStepButtons: 모바일 스텝 버튼들 렌더링', {
-    currentStep,
-  });
+  const stepNumbers = React.useMemo(() => getStepNumbers(), []);
 
   const handleStepChange = (step: StepNumber) => {
     console.log('📱 MobileStepButtons: 스텝 변경 시도', {
@@ -24,13 +23,8 @@ function MobileStepButtons({
 
   return (
     <div className="flex justify-between pb-2 mb-3 overflow-x-auto sm:hidden hide-scrollbar">
-      {STEP_NUMBERS.map((step) => {
+      {stepNumbers.map((step) => {
         const isCurrentStep = currentStep === step;
-
-        console.log('📱 MobileStepButtons: 버튼 렌더링', {
-          step,
-          isCurrentStep,
-        });
 
         return (
           <Button

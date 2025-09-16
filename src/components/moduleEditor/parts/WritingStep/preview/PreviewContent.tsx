@@ -50,7 +50,7 @@ function PreviewContent({
   );
 
   return (
-    <div className="p-4 overflow-y-auto max-h-80">
+    <div className="p-4 overflow-y-auto">
       <div className="max-w-4xl mx-auto space-y-6">
         {sortedContainers.map((container) => {
           const containerParagraphs = getLocalParagraphsByContainer(
@@ -84,7 +84,7 @@ function PreviewContent({
                     <span className="text-xs text-gray-400">
                       단락 {index + 1}
                     </span>
-                    <span className="text-xs text-blue-500 transition-opacity opacity-0 group-hover:opacity-100">
+                    <span className="text-xs text-blue-500">
                       클릭하여 Tiptap 에디터로 편집
                     </span>
                   </div>
